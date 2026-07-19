@@ -44,7 +44,7 @@ namespace LilithMod
                     LilithModPlugin.Logger.LogError($"[LilithMod] Unhandled exception during dump: {ex}");
                 }
                 _done = true;
-                Destroy(gameObject);
+                Destroy(this); // component only - the GameObject is BepInEx's shared manager
                 return;
             }
 
@@ -52,7 +52,7 @@ namespace LilithMod
             {
                 LilithModPlugin.Logger.LogWarning("[LilithMod] DialogueManager instance not found within timeout; aborting dump.");
                 _done = true;
-                Destroy(gameObject);
+                Destroy(this); // component only - the GameObject is BepInEx's shared manager
             }
         }
 

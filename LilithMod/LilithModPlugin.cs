@@ -18,11 +18,11 @@ namespace LilithMod
             Logger = Log;
             Log.LogInfo("[LilithMod] Loaded.");
 
-            ClassInjector.RegisterTypeInIl2Cpp<DumpDatabaseBehaviour>();
-
-            var go = new GameObject("LilithMod");
-            Object.DontDestroyOnLoad(go);
-            go.AddComponent<DumpDatabaseBehaviour>();
+            // Use BepInEx's own AddComponent rather than creating a GameObject here.
+            // Load() runs before the first scene exists, so a hand-made GameObject does
+            // not survive DontDestroyOnLoad and its Update() never ticks. BepInEx attaches
+            // to its persistent BepInEx_Manager object and registers the type for us.
+            AddComponent<DumpDatabaseBehaviour>();
         }
     }
 }
