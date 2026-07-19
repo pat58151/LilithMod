@@ -46,6 +46,8 @@ namespace LilithMod
         private const int VkReturn = 0x0D;
         private const int VkNumpadEnter = 0x0D; // Win32 does not separate numpad Enter
         private const float InitTimeoutSeconds = 60f;
+        private const float InputFontSize = 18f;
+        private const float TextPadding = 10f;
 
         private GameObject _canvas;
         private CanvasGroup _canvasGroup;
@@ -162,6 +164,20 @@ namespace LilithMod
                 HandleChatResult(result);
         }
 
+        // TMP inherits the font asset's own default point size unless told otherwise, which
+        // on the game's CJK asset is far too large for a 400x60 box - only a few characters
+        // fit before it overflows. Pin the size and keep the line on one row so long input
+        // scrolls horizontally instead of growing.
+        private static void ApplyTextMetrics(TextMeshProUGUI t)
+        {
+            if (t == null) return;
+            t.enableAutoSizing = false;
+            t.fontSize = InputFontSize;
+            t.enableWordWrapping = false;
+            t.overflowMode = TextOverflowModes.Overflow;
+            t.alignment = TextAlignmentOptions.MidlineLeft;
+        }
+
         // Waits for the game's scene to come up, then builds the UI once. Gives up after a
         // timeout so a broken scene does not mean polling forever.
         private void TryDeferredInit()
@@ -265,8 +281,15 @@ namespace LilithMod
             var textAreaRect = textArea.AddComponent<RectTransform>();
             textAreaRect.anchorMin = Vector2.zero;
             textAreaRect.anchorMax = Vector2.one;
-            textAreaRect.offsetMin = Vector2.zero;
-            textAreaRect.offsetMax = Vector2.zero;
+            // Inset so glyphs are not flush against the panel edges.
+            textAreaRect.offsetMin = new Vector2(TextPadding, TextPadding);
+            textAreaRect.offsetMax = new Vector2(-TextPadding, -TextPadding);
+
+            // Clip the text to the box. Without this the line simply draws past the panel
+            // border once it is too long. A real TMP_InputField prefab carries this on its
+            // Text Area; with it in place the field scrolls to keep the caret visible, so
+            // leading characters slide out of view instead of overflowing.
+            textArea.AddComponent<RectMask2D>();
 
             // Placeholder.
             var placeholderGo = new GameObject("Placeholder");
@@ -275,12 +298,14 @@ namespace LilithMod
             _placeholderText.text = "Type a message…";
             _placeholderText.fontStyle = FontStyles.Italic;
             _placeholderText.color = Color.grey;
+            ApplyTextMetrics(_placeholderText);
 
             // Text.
             var textGo = new GameObject("Text");
             textGo.transform.SetParent(textArea.transform, false);
             _inputText = textGo.AddComponent<TextMeshProUGUI>();
             _inputText.color = Color.white;
+            ApplyTextMetrics(_inputText);
 
             // Initially hidden.
             _canvasGroup.alpha = 0;
@@ -325,6 +350,11 @@ namespace LilithMod
 
             _placeholderText.font = chosen;
             _inputText.font = chosen;
+
+            // Re-apply after the font swap: assigning a TMP_FontAsset can pull in that
+            // asset's own default point size and undo the sizing set at construction.
+            ApplyTextMetrics(_placeholderText);
+            ApplyTextMetrics(_inputText);
 
             // Now add TMP_InputField and wire it up.
             var inputFieldGo = _placeholderText.transform.parent.parent.gameObject; // "Text Area" -> "InputField"
