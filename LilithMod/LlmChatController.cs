@@ -56,6 +56,7 @@ namespace LilithMod
         private RectTransform _textAreaRect;
         private RectTransform _inputTextRect;
         private RectTransform _panelRect;
+        private Image _panelImage;
 
         private GameObject _canvas;
         private CanvasGroup _canvasGroup;
@@ -194,7 +195,12 @@ namespace LilithMod
             float textWidth = _inputText.preferredWidth;
             float overrun = textWidth - viewportWidth;
 
-            float x = overrun > 0f ? -overrun : 0f;
+            // While the line still fits, keep it centred so short messages grow outward from
+            // the middle. Once it overruns, pin the right edge to the viewport and let the
+            // head slide out under the mask.
+            float x = overrun > 0f
+                ? -overrun
+                : (viewportWidth - textWidth) * 0.5f;
             var pos = _inputTextRect.anchoredPosition;
             if (!Mathf.Approximately(pos.x, x))
                 _inputTextRect.anchoredPosition = new Vector2(x, pos.y);
@@ -323,7 +329,8 @@ namespace LilithMod
             panelRect.anchoredPosition = new Vector2(0, 20);
             panelRect.sizeDelta = new Vector2(PanelWidth, PanelHeight);
             _panelRect = panelRect;
-            var panelImg = inputPanel.AddComponent<Image>();
+            _panelImage = inputPanel.AddComponent<Image>();
+            var panelImg = _panelImage;
             panelImg.color = new Color(0, 0, 0, 0.8f);
 
             // InputField GameObject (component added later after font).
@@ -459,6 +466,16 @@ namespace LilithMod
             // requires delegate marshalling that is fragile across interop regenerations;
             // polling a key we already read each frame avoids that entirely.
             _inputField = inputField;
+
+            // Adopt the look of one of the game's own input fields. Done last so it can see
+            // the finished field, and it deliberately leaves layout/scrolling settings alone.
+            GameStyle.Apply(_panelImage, _inputField, _inputText, _placeholderText,
+                            _canvas != null ? _canvas.transform : null);
+
+            // Layout metrics must win over anything the donor styling brought with it.
+            ApplyTextMetrics(_placeholderText, true);
+            ApplyTextMetrics(_inputText, false);
+
             LilithModPlugin.Logger.LogInfo("[LlmChat] Input field constructed and wired.");
         }
 
