@@ -47,7 +47,15 @@ namespace LilithMod
         private const int VkNumpadEnter = 0x0D; // Win32 does not separate numpad Enter
         private const float InitTimeoutSeconds = 60f;
         private const float InputFontSize = 18f;
-        private const float TextPadding = 10f;
+        private const float PanelWidth = 400f;
+        private const float PanelHeight = 60f;
+        private const float LeftMarginFraction = 0.02f;   // text starts here
+        private const float RightMarginFraction = 0.05f;  // text is cut off here
+        private const float VerticalPadding = 8f;
+
+        private RectTransform _textAreaRect;
+        private RectTransform _inputTextRect;
+        private RectTransform _panelRect;
 
         private GameObject _canvas;
         private CanvasGroup _canvasGroup;
@@ -159,23 +167,74 @@ namespace LilithMod
                 OnPlayerSubmit(_inputField != null ? _inputField.text : null);
             }
 
+            // Clicking the box re-focuses it. Detected through Win32 rather than uGUI
+            // pointer events, because once the window has lost focus Unity receives no
+            // input at all - the very situation this needs to recover from.
+            if (IsPanelVisible() && PointerFocus.ClickedInside(_panelRect))
+                FocusInputField();
+
+            if (IsPanelVisible())
+                ScrollInputText();
+
             // --- Drain reply queue (main thread only) ---
             while (_replyQueue.TryDequeue(out ChatResult result))
                 HandleChatResult(result);
+        }
+
+        // Keeps the END of the line visible. TMP_InputField's own horizontal scrolling does
+        // not engage on a hand-built hierarchy, so the line is slid left by however much it
+        // overruns the viewport: the head passes under the RectMask2D and out of sight while
+        // freshly typed text stays at the right edge.
+        private void ScrollInputText()
+        {
+            if (_inputText == null || _inputTextRect == null || _textAreaRect == null)
+                return;
+
+            float viewportWidth = _textAreaRect.rect.width;
+            float textWidth = _inputText.preferredWidth;
+            float overrun = textWidth - viewportWidth;
+
+            float x = overrun > 0f ? -overrun : 0f;
+            var pos = _inputTextRect.anchoredPosition;
+            if (!Mathf.Approximately(pos.x, x))
+                _inputTextRect.anchoredPosition = new Vector2(x, pos.y);
+
+            // Width must track the content, otherwise the glyphs beyond the original rect
+            // width are never laid out and the tail simply stops rendering.
+            float w = Mathf.Max(viewportWidth, textWidth);
+            if (!Mathf.Approximately(_inputTextRect.sizeDelta.x, w))
+                _inputTextRect.sizeDelta = new Vector2(w, _inputTextRect.sizeDelta.y);
         }
 
         // TMP inherits the font asset's own default point size unless told otherwise, which
         // on the game's CJK asset is far too large for a 400x60 box - only a few characters
         // fit before it overflows. Pin the size and keep the line on one row so long input
         // scrolls horizontally instead of growing.
-        private static void ApplyTextMetrics(TextMeshProUGUI t)
+        // TextMeshProUGUI supplies its own default RectTransform - small and centred, not
+        // filling its parent. Left that way the line sits inset from the left and the field
+        // cannot scroll properly, so long input clips its tail instead of sliding its head
+        // out of view.
+        private static void StretchToParent(GameObject go)
+        {
+            var rt = go.GetComponent<RectTransform>();
+            if (rt == null) rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+        }
+
+        private static void ApplyTextMetrics(TextMeshProUGUI t, bool centred)
         {
             if (t == null) return;
             t.enableAutoSizing = false;
             t.fontSize = InputFontSize;
             t.enableWordWrapping = false;
             t.overflowMode = TextOverflowModes.Overflow;
-            t.alignment = TextAlignmentOptions.MidlineLeft;
+            // The placeholder is centred as a prompt; the typed line is left-aligned so it
+            // grows rightwards and can be scrolled.
+            t.alignment = centred ? TextAlignmentOptions.Center : TextAlignmentOptions.MidlineLeft;
         }
 
         // Waits for the game's scene to come up, then builds the UI once. Gives up after a
@@ -262,7 +321,8 @@ namespace LilithMod
             panelRect.anchorMax = new Vector2(0.5f, 0f);
             panelRect.pivot = new Vector2(0.5f, 0f);
             panelRect.anchoredPosition = new Vector2(0, 20);
-            panelRect.sizeDelta = new Vector2(400, 60);
+            panelRect.sizeDelta = new Vector2(PanelWidth, PanelHeight);
+            _panelRect = panelRect;
             var panelImg = inputPanel.AddComponent<Image>();
             panelImg.color = new Color(0, 0, 0, 0.8f);
 
@@ -281,31 +341,47 @@ namespace LilithMod
             var textAreaRect = textArea.AddComponent<RectTransform>();
             textAreaRect.anchorMin = Vector2.zero;
             textAreaRect.anchorMax = Vector2.one;
-            // Inset so glyphs are not flush against the panel edges.
-            textAreaRect.offsetMin = new Vector2(TextPadding, TextPadding);
-            textAreaRect.offsetMax = new Vector2(-TextPadding, -TextPadding);
+            // Margins as a fraction of panel width so they hold if the panel is resized.
+            // The right margin is deliberately wider than the left: it is the point where
+            // text is cut off, and a 1% cut sits so close to the border it reads as the
+            // text touching the edge.
+            float leftInset = PanelWidth * LeftMarginFraction;
+            float rightInset = PanelWidth * RightMarginFraction;
+            textAreaRect.offsetMin = new Vector2(leftInset, VerticalPadding);
+            textAreaRect.offsetMax = new Vector2(-rightInset, -VerticalPadding);
 
             // Clip the text to the box. Without this the line simply draws past the panel
             // border once it is too long. A real TMP_InputField prefab carries this on its
             // Text Area; with it in place the field scrolls to keep the caret visible, so
             // leading characters slide out of view instead of overflowing.
             textArea.AddComponent<RectMask2D>();
+            _textAreaRect = textAreaRect;
 
             // Placeholder.
             var placeholderGo = new GameObject("Placeholder");
             placeholderGo.transform.SetParent(textArea.transform, false);
+            StretchToParent(placeholderGo);
             _placeholderText = placeholderGo.AddComponent<TextMeshProUGUI>();
             _placeholderText.text = "Type a message…";
             _placeholderText.fontStyle = FontStyles.Italic;
             _placeholderText.color = Color.grey;
-            ApplyTextMetrics(_placeholderText);
+            ApplyTextMetrics(_placeholderText, true);
 
             // Text.
+            // The input line is anchored to the LEFT edge with a left pivot, not stretched.
+            // A stretched rect cannot be slid sideways, and sliding it is how the head of a
+            // long line is moved out of view (see ScrollInputText).
             var textGo = new GameObject("Text");
             textGo.transform.SetParent(textArea.transform, false);
+            _inputTextRect = textGo.AddComponent<RectTransform>();
+            _inputTextRect.anchorMin = new Vector2(0f, 0f);
+            _inputTextRect.anchorMax = new Vector2(0f, 1f);
+            _inputTextRect.pivot = new Vector2(0f, 0.5f);
+            _inputTextRect.offsetMin = new Vector2(0f, 0f);
+            _inputTextRect.offsetMax = new Vector2(0f, 0f);
             _inputText = textGo.AddComponent<TextMeshProUGUI>();
             _inputText.color = Color.white;
-            ApplyTextMetrics(_inputText);
+            ApplyTextMetrics(_inputText, false);
 
             // Initially hidden.
             _canvasGroup.alpha = 0;
@@ -353,8 +429,8 @@ namespace LilithMod
 
             // Re-apply after the font swap: assigning a TMP_FontAsset can pull in that
             // asset's own default point size and undo the sizing set at construction.
-            ApplyTextMetrics(_placeholderText);
-            ApplyTextMetrics(_inputText);
+            ApplyTextMetrics(_placeholderText, true);
+            ApplyTextMetrics(_inputText, false);
 
             // Now add TMP_InputField and wire it up.
             var inputFieldGo = _placeholderText.transform.parent.parent.gameObject; // "Text Area" -> "InputField"
@@ -487,18 +563,31 @@ namespace LilithMod
         {
             if (_canvasGroup == null) return;
 
-            // Strip WS_EX_NOACTIVATE/TRANSPARENT and foreground the window so keystrokes
-            // (and IME composition) actually reach the input field. Reverted in HidePanel.
-            WindowFocus.EnableTyping();
-
             _canvasGroup.alpha = 1;
             _canvasGroup.interactable = true;
             _canvasGroup.blocksRaycasts = true;
             if (_inputField != null)
-            {
                 _inputField.text = "";
-                _inputField.ActivateInputField();
-            }
+
+            FocusInputField();
+        }
+
+        // Re-takes OS focus and re-arms the text field. Used both when opening the panel and
+        // when the user clicks back onto it after focus went elsewhere.
+        private void FocusInputField()
+        {
+            // Strip WS_EX_NOACTIVATE/TRANSPARENT and foreground the window so keystrokes
+            // (and IME composition) actually reach the input field. Reverted in HidePanel.
+            WindowFocus.EnableTyping();
+
+            if (_inputField == null) return;
+
+            var es = UnityEngine.EventSystems.EventSystem.current;
+            if (es != null)
+                es.SetSelectedGameObject(_inputField.gameObject);
+
+            _inputField.ActivateInputField();
+            _inputField.caretPosition = _inputField.text != null ? _inputField.text.Length : 0;
         }
 
         private void HidePanel()
