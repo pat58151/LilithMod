@@ -1,0 +1,91 @@
+[
+ {
+  "id": 700101,
+  "speaker": "lilith",
+  "baseWeight": 1,
+  "triggerTypes": [
+   13
+  ],
+  "lineId": 2000001,
+  "text": "不要这样说，你就是莉莉丝的意义。",
+  "emotion": "emoji_sad_1",
+  "duration": 3.5,
+  "actionType": -1,
+  "nextStateType": 0,
+  "nextStateDuration": 0.0,
+  "soundId": "2000001_cn",
+  "conditions": {
+   "timeRangeStart": "00:00",
+   "timeRangeEnd": "23:59",
+   "dateMMdd": ""
+  },
+  "options": [],
+  "nextId": -1,
+  "playerStates": [
+   "DC_Meaningless"
+  ],
+  "playerLineInteraction": "6101-700102,6102-700104",
+  "playerLineOptions": [
+   {
+    "playerLineId": 6101,
+    "nextId": 700102,
+    "nextIds": [
+     700102
+    ]
+   },
+   {
+    "playerLineId": 6102,
+    "nextId": 700104,
+    "nextIds": [
+     700104
+    ]
+   }
+  ]
+ },
+ {
+  "id": 700103,
+  "speaker": "lilith",
+  "baseWeight": 1,
+  "triggerTypes": [],
+  "lineId": 2000004,
+  "text": "那……莉莉丝可以成为你活着的意义吗？",
+  "emotion": "emoji_smile_4",
+  "duration": 3.5,
+  "actionType": -1,
+  "nextStateType": 0,
+  "nextStateDuration": 0.0,
+  "soundId": "2000004_cn",
+  "conditions": {
+   "timeRangeStart": "00:00",
+   "timeRangeEnd": "23:59",
+   "dateMMdd": ""
+  },
+  "options": [],
+  "nextId": -1,
+  "playerStates": [],
+  "playerLineInteraction": "6103-700106,6104-700107,6105-700105",
+  "playerLineOptions": [
+   {
+    "playerLineId": 6103,
+    "nextId": 700106,
+    "nextIds": [
+     700106
+    ]
+   },
+   {
+    "playerLineId": 6104,
+    "nextId": 700107,
+    "nextIds": [
+     700107
+    ]
+   },
+   {
+    "playerLineId": 6105,
+    "nextId": 700105,
+    "nextIds": [
+     700105
+    ]
+   }
+  ]
+ }
+]

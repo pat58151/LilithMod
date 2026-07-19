@@ -1,0 +1,44 @@
+[
+ {
+  "id": 6101,
+  "LineID": 6101,
+  "groupId": 9999,
+  "playerStates": [],
+  "text": "对。",
+  "viewLimit": 0
+ },
+ {
+  "id": 6102,
+  "LineID": 6102,
+  "groupId": 9999,
+  "playerStates": [],
+  "text": "不是。",
+  "viewLimit": 0
+ },
+ {
+  "id": 6103,
+  "LineID": 6103,
+  "groupId": 9999,
+  "playerStates": [
+   "s23_dissipate"
+  ],
+  "text": "没有意义。",
+  "viewLimit": 0
+ },
+ {
+  "id": 6104,
+  "LineID": 6104,
+  "groupId": 9999,
+  "playerStates": [],
+  "text": "有意义。",
+  "viewLimit": 0
+ },
+ {
+  "id": 6105,
+  "LineID": 6105,
+  "groupId": 9999,
+  "playerStates": [],
+  "text": "想听听莉莉丝怎么说。",
+  "viewLimit": 0
+ }
+]
