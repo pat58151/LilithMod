@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BepInEx.Configuration;
 using BepInEx.Unity.IL2CPP.Utils;
+using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.Attributes;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -43,6 +44,15 @@ namespace LilithMod
         private Key _inputSystemKey;
         private KeyCode _legacyKeyCode;
         private bool _hotkeyValid;
+        private bool _uiReady;
+        private float _initElapsed;
+        private float _probeElapsed;
+        private bool _sawAnyKey, _sawHotkey, _sawLegacyKey;
+        private int _vkHotkey = -1;
+        private const int VkEscape = 0x1B;
+        private const int VkReturn = 0x0D;
+        private const int VkNumpadEnter = 0x0D; // Win32 does not separate numpad Enter
+        private const float InitTimeoutSeconds = 60f;
 
         private GameObject _canvas;
         private CanvasGroup _canvasGroup;
@@ -112,14 +122,23 @@ namespace LilithMod
                 return;
             }
 
+            _vkHotkey = WindowFocus.VirtualKeyFromName(hotkeyName);
+            if (_vkHotkey <= 0)
+            {
+                LilithModPlugin.Logger.LogError(
+                    $"[LlmChat] Hotkey '{hotkeyName}' has no Win32 virtual-key mapping. "
+                    + "Use a letter, digit, or F1-F12. LLM chat disabled.");
+                _chatDisabled = true;
+                return;
+            }
+
             _hotkeyValid = true;
 
-            // Build UI (font is asynchronously assigned).
-            BuildChatUILayout();
-            MonoBehaviourExtensions.StartCoroutine(this, FinishUISetup());
-
-            // Dialogue node injection.
-            MonoBehaviourExtensions.StartCoroutine(this, EnsureDefaultNode());
+            // UI construction is deliberately NOT done here. Awake() runs when BepInEx
+            // attaches the component, which is before the game's first scene exists - so
+            // there is no EventSystem yet and building the UI now would disable chat
+            // permanently. Update() retries until the scene is up. Same failure mode as
+            // creating a GameObject in BasePlugin.Load().
 
             // HTTP client.
             _httpClient = new HttpClient();
@@ -137,38 +156,68 @@ namespace LilithMod
             if (_chatDisabled || !_hotkeyValid)
                 return;
 
-            // --- Hotkey toggle ---
-            bool toggle = false;
+            if (!_uiReady)
+            {
+                TryDeferredInit();
+                return;
+            }
+
+            // Focus/keyboard probe. A desktop pet runs as a transparent always-on-top
+            // window that may never take keyboard focus, in which case Unity receives no
+            // key events at all and no hotkey can ever fire.
+            // Sticky: sample every frame, report every few seconds. Sampling only at the
+            // report instant would almost never coincide with a keypress.
             try
             {
-                // New Input System (primary)
-                if (Keyboard.current != null)
-                {
-                    toggle = Keyboard.current[_inputSystemKey].wasPressedThisFrame;
-                }
+                if (Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame)
+                    _sawAnyKey = true;
+                if (Keyboard.current != null && Keyboard.current[_inputSystemKey].wasPressedThisFrame)
+                    _sawHotkey = true;
             }
-            catch { /* silent */ }
-
-            if (!toggle && _legacyInputAvailable)
+            catch { }
+            try
             {
-                try
-                {
-                    toggle = Input.GetKeyDown(_legacyKeyCode);
-                }
-                catch { /* silent */ }
+                if (_legacyInputAvailable && Input.anyKeyDown)
+                    _sawLegacyKey = true;
             }
+            catch { }
+
+            _probeElapsed += Time.deltaTime;
+            if (_probeElapsed >= 3f)
+            {
+                _probeElapsed = 0f;
+                LilithModPlugin.Logger.LogInfo(
+                    $"[LlmChat][probe] anyKey={_sawAnyKey} hotkey({_inputSystemKey})={_sawHotkey} "
+                    + $"legacyAnyKey={_sawLegacyKey} focused={Application.isFocused}");
+                _sawAnyKey = _sawHotkey = _sawLegacyKey = false;
+            }
+
+            // --- Hotkey toggle ---
+            // Polled through Win32 GetAsyncKeyState, NOT Unity. The pet window carries
+            // WS_EX_NOACTIVATE|WS_EX_TRANSPARENT, so Windows never delivers key messages
+            // to it and Unity's input (both new and legacy) is permanently silent here -
+            // verified by probe. Global key state is the only thing that sees the press.
+            bool toggle = _vkHotkey > 0 && WindowFocus.IsKeyDown(_vkHotkey);
 
             if (toggle)
+            {
+                LilithModPlugin.Logger.LogInfo(
+                    $"[LlmChat] Hotkey fired. canvas={( _canvas != null)} group={(_canvasGroup != null)} "
+                    + $"field={(_inputField != null)} visible={IsPanelVisible()}");
                 TogglePanel();
+                LilithModPlugin.Logger.LogInfo(
+                    $"[LlmChat] After toggle: visible={IsPanelVisible()} "
+                    + $"alpha={(_canvasGroup != null ? _canvasGroup.alpha : -1f)}");
+            }
 
-            // Escape to close panel.
-            if (IsPanelVisible() && Keyboard.current?.escapeKey.wasPressedThisFrame == true)
+            // Escape closes, Enter submits. Once the panel is open the window has been made
+            // focusable, so Unity input works again - but these are polled globally too so
+            // they behave identically whether or not focus actually landed.
+            if (IsPanelVisible() && WindowFocus.IsKeyDown(VkEscape))
                 HidePanel();
 
-            // Enter submits. Polled rather than bound to onSubmit - see BuildChatUILayout.
-            if (IsPanelVisible() && Keyboard.current != null
-                && (Keyboard.current.enterKey.wasPressedThisFrame
-                    || Keyboard.current.numpadEnterKey.wasPressedThisFrame))
+            if (IsPanelVisible()
+                && (WindowFocus.IsKeyDown(VkReturn) || WindowFocus.IsKeyDown(VkNumpadEnter)))
             {
                 OnPlayerSubmit(_inputField != null ? _inputField.text : null);
             }
@@ -178,10 +227,53 @@ namespace LilithMod
                 HandleChatResult(result);
         }
 
+        // Waits for the game's scene to come up, then builds the UI once. Gives up after a
+        // timeout so a broken scene does not mean polling forever.
+        private void TryDeferredInit()
+        {
+            _initElapsed += Time.deltaTime;
+
+            var eventSystem = UnityEngine.Object.FindObjectOfType<UnityEngine.EventSystems.EventSystem>();
+            if (eventSystem == null)
+            {
+                if (_initElapsed >= InitTimeoutSeconds)
+                {
+                    LilithModPlugin.Logger.LogError(
+                        "[LlmChat] No EventSystem appeared within "
+                        + InitTimeoutSeconds + "s. LLM chat disabled.");
+                    _chatDisabled = true;
+                }
+                return;
+            }
+
+            try
+            {
+                BuildChatUILayout();
+                if (_chatDisabled)
+                    return;
+
+                MonoBehaviourExtensions.StartCoroutine(this, FinishUISetup());
+                MonoBehaviourExtensions.StartCoroutine(this, EnsureDefaultNode());
+                _uiReady = true;
+                LilithModPlugin.Logger.LogInfo(
+                    $"[LlmChat] Ready after {_initElapsed:F1}s. Press '{Hotkey}' to chat.");
+            }
+            catch (Exception ex)
+            {
+                LilithModPlugin.Logger.LogError($"[LlmChat] Initialisation failed: {ex}");
+                _chatDisabled = true;
+            }
+        }
+
         private void OnDestroy()
         {
+            // Safety net: if the component dies while the panel is open, the window would
+            // otherwise be left non-click-through for the rest of the session.
+            WindowFocus.RestoreWindow();
             CancelCurrentRequest();
-            _cts?.Dispose();
+            // CancelCurrentRequest already nulled the field; this guard covers the case
+            // where the owning task disposed it first.
+            try { _cts?.Dispose(); } catch (ObjectDisposedException) { }
             _httpClient?.Dispose();
         }
 
@@ -265,12 +357,28 @@ namespace LilithMod
         {
             yield return null; // one frame to let game UI spawn
 
-            // Obtain font from a live game TextMeshProUGUI.
-            var gameText = UnityEngine.Object.FindObjectOfType<TextMeshProUGUI>();
-            if (gameText == null)
-                gameText = Resources.FindObjectsOfTypeAll<TextMeshProUGUI>()[0] as TextMeshProUGUI;
+            // Pick a font asset directly rather than via FindObjectOfType<TextMeshProUGUI>,
+            // which returns OUR OWN freshly-built text first and yields TMP's default
+            // LiberationSans - a Latin-only font that renders Chinese as blank boxes.
+            // The game ships CJK fonts (QingSongShouXieTi2-2, TEGUSE_Kanaka); prefer any
+            // non-Liberation asset and fall back to whatever exists.
+            TMP_FontAsset chosen = null;
+            TMP_FontAsset fallback = null;
+            var fonts = Resources.FindObjectsOfTypeAll(Il2CppType.Of<TMP_FontAsset>());
+            for (int i = 0; i < fonts.Length; i++)
+            {
+                var fa = fonts[i].TryCast<TMP_FontAsset>();
+                if (fa == null) continue;
+                if (fallback == null) fallback = fa;
+                if (fa.name != null && fa.name.IndexOf("Liberation", StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    chosen = fa;
+                    break;
+                }
+            }
+            if (chosen == null) chosen = fallback;
 
-            if (gameText == null || gameText.font == null)
+            if (chosen == null)
             {
                 LilithModPlugin.Logger.LogError("[LlmChat] Failed to obtain a game font. LLM chat disabled.");
                 Destroy(_canvas);
@@ -278,8 +386,10 @@ namespace LilithMod
                 yield break;
             }
 
-            _placeholderText.font = gameText.font;
-            _inputText.font = gameText.font;
+            LilithModPlugin.Logger.LogInfo($"[LlmChat] Font acquired: '{chosen.name}'.");
+
+            _placeholderText.font = chosen;
+            _inputText.font = chosen;
 
             // Now add TMP_InputField and wire it up.
             var inputFieldGo = _placeholderText.transform.parent.parent.gameObject; // "Text Area" -> "InputField"
@@ -308,6 +418,7 @@ namespace LilithMod
             // requires delegate marshalling that is fragile across interop regenerations;
             // polling a key we already read each frame avoids that entirely.
             _inputField = inputField;
+            LilithModPlugin.Logger.LogInfo("[LlmChat] Input field constructed and wired.");
         }
 
         // ========== Node injection ==========
@@ -410,6 +521,11 @@ namespace LilithMod
         private void ShowPanel()
         {
             if (_canvasGroup == null) return;
+
+            // Strip WS_EX_NOACTIVATE/TRANSPARENT and foreground the window so keystrokes
+            // (and IME composition) actually reach the input field. Reverted in HidePanel.
+            WindowFocus.EnableTyping();
+
             _canvasGroup.alpha = 1;
             _canvasGroup.interactable = true;
             _canvasGroup.blocksRaycasts = true;
@@ -428,6 +544,10 @@ namespace LilithMod
             _canvasGroup.blocksRaycasts = false;
             _inputField?.DeactivateInputField();
             if (_inputField != null) _inputField.text = "";
+
+            // Must always run: leaving the style modified permanently breaks the pet's
+            // click-through behaviour.
+            WindowFocus.RestoreWindow();
         }
 
         // ========== Input submit ==========
@@ -486,8 +606,22 @@ namespace LilithMod
 
         private void CancelCurrentRequest()
         {
-            _cts?.Cancel();
-            // Do not dispose here; disposed in task's finally.
+            // The owning task disposes its own CTS in a finally block, so by the time a
+            // second message is sent this field may reference an already-disposed source.
+            // Cancel() then throws ObjectDisposedException, which Il2CppInterop swallows at
+            // the trampoline - silently killing chat after exactly one exchange.
+            try
+            {
+                _cts?.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Already finished and cleaned up; nothing to cancel.
+            }
+            finally
+            {
+                _cts = null;
+            }
         }
 
         private async Task<string> RequestCompletionAsync(List<Message> messages, CancellationToken token)
