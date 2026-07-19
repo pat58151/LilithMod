@@ -1,0 +1,264 @@
+======== PlayerLineController (public members) ========
+  public Action<PlayerLineEntry> _entrySelectCallback
+  public Action<int> _customSelectCallback
+  public Action<int> onSelected
+  public BirthdayUtility(System.IntPtr pointer)
+  public CanvasGroup _canvasGroup
+  public CharacterController cc
+  public CooldownGate(System.IntPtr pointer)
+  public Coroutine _deferredOptionsRoutine
+  public Coroutine _popRoutine
+  public DateTime now
+  public DesktopIconCounter(System.IntPtr pointer)
+  public DesktopSnapshot()
+  public DesktopSnapshot(System.IntPtr pointer)
+  public DesktopSnapshot(int iconCount, Il2CppStructArray<long> positions, int screenWidth, int screenHeight)
+  public DialogueManager _dm_5__2
+  public DialogueNode FindMatchingDialogue(List<string> states)
+  public GiftView _giftView
+  public IEnumerator DisappearAfterDialogue()
+  public IEnumerator DissipateAfterDialogue()
+  public IEnumerator PopThenHideRoutine()
+  public IEnumerator ShowOptionsAfterLilithLine(IReadOnlyList<string> options, Action<int> onSelected)
+  public IReadOnlyList<string> options
+  public Il2CppStructArray<long> Positions
+  public List<Button> _buttons
+  public List<Button>.Enumerator __7__wrap2
+  public List<DateTime> times
+  public List<PlayerLineEntry> GetViewedOneTimeEntries()
+  public List<PlayerLineEntry> _currentEntries
+  public List<TextMeshProUGUI> _texts
+  public List<string> _musicTracks
+  public PlayerLineButtonAnimOrder GetActiveAnimOrder()
+  public PlayerLineController __4__this
+  public PlayerLineController()
+  public PlayerLineController(System.IntPtr pointer)
+  public PlayerLineDatabase _database
+  public PlayerLineLayoutType _currentLayoutType
+  public PomodoroSystem pomodoro
+  public RectTransform _rootRect
+  public System.IntPtr found
+  public Transform GetLayoutRoot(PlayerLineLayoutType layoutType)
+  public Transform _activeButtonRoot
+  public Transform _buttonRoot
+  public Transform _fiveToEightLineRoot
+  public Transform _singleLineRoot
+  public Transform _threeToFourLineRoot
+  public Transform _twoLineRoot
+  public bool AllOneTimeEntriesViewed()
+  public bool HasActiveOrPendingOptions
+  public bool HasAnyViewedOneTime()
+  public bool IsAwaitingDialogueResponse
+  public bool IsCakeRootEntry(PlayerLineEntry entry)
+  public bool IsPointerOverAnyOption()
+  public bool ShowCakeReplayMenu()
+  public bool StartMemoryDialogue(PlayerLineEntry entry)
+  public bool TryShowDirectChildren(PlayerLineEntry entry)
+  public bool _autoHideEnabled
+  public bool _isCustomMode
+  public bool _isEntrySelectMode
+  public bool _isPopping
+  public bool _isShowing
+  public bool _liftInited
+  public bool _optionAutoSideBySpace
+  public bool _pendingCancelSpeak
+  public bool _selectionMadeThisOpen
+  public bool hasAlarm
+  public bool hasPrev
+  public enum PlayerLineLayoutType
+  public float _autoHideTimer
+  public float _baseAnchoredY
+  public float _columnSpacing
+  public float _deadline_5__2
+  public float _fiveToEightExtraOffsetRatio
+  public float _lastPopDuration_5__2
+  public float _optionPanelOffsetX
+  public int IconCount
+  public int ScreenHeight
+  public int ScreenWidth
+  public int __1__state
+  public int _clickAnywhereIndex
+  public int _shownAtFrame
+  public int index
+  public int moreMusicIndex
+  public int nextButtonIndex
+  public int page
+  public int pinnedId
+  public int start
+  public int trackOffset
+  public static Action<PlayerLineEntry> __9__186_0
+  public static Action<int> __9__103_0
+  public static Action<int> __9__109_0
+  public static Action<int> __9__97_0
+  public static Comparison<PlayerLineEntry> __9__152_0
+  public static DialogueNode FindMatchingDialogueByStates(List<string> states)
+  public static Dictionary<string, ValueTuple<int, string, string>> QuietMenuReplies
+  public static Dictionary<string, float> _nextAllowedByKey
+  public static Func<bool> __9__104_0
+  public static HashSet<int> PinnedRootIdSet
+  public static Il2CppStructArray<int> PinnedRootIds
+  public static Il2CppStructArray<int> TimerPresetMinutes
+  public static PlayerLineEntry CreateClothingSwapEntry()
+  public static PlayerLineEntry CreateGiftEntry()
+  public static PlayerLineEntry CreateMemoriesEntry()
+  public static PlayerLineLayoutType GetLayoutType(int optionCount)
+  public static Predicate<PlayerLineEntry> __9__141_1
+  public static System.IntPtr FindDesktopListView()
+  public static bool DebugForceBirthdayToday
+  public static bool HasAnyMatchingState(IReadOnlyList<string> sourceStates, IReadOnlyList<string> targetStates)
+  public static bool HasCakeState(PlayerLineEntry entry)
+  public static bool HasOpenedThisSession
+  public static bool HasQuietMenuTag(List<string> states)
+  public static bool IsAnyOptionsShowing
+  public static bool IsBirthdayToday(string birthdayMMdd, DateTime now)
+  public static bool IsReady(string key)
+  public static bool IsViewExhausted(PlayerLineEntry entry)
+  public static bool ShouldWaitForLilithLine()
+  public static bool StartMatchingDialogue(PlayerLineEntry entry)
+  public static bool TryGetCount(out int count)
+  public static bool TryGetCountFromDesktopFolders(out int count)
+  public static bool TryGetCountFromDesktopListView(out int count)
+  public static bool TryGetQuietReply(List<string> states, out string line, out string emotion)
+  public static bool TryGetSnapshot(out DesktopSnapshot snapshot)
+  public static bool TryGetSnapshotFromDesktopListView(out DesktopSnapshot snapshot)
+  public static bool TryPass(string key, float cooldownSeconds)
+  public static bool TryPassRandom(string key, float minSeconds, float maxSeconds)
+  public static bool TryReadPositions(System.IntPtr listView, int count, out Il2CppStructArray<long> positions)
+  public static bool _DebugForceBirthdayToday_k__BackingField
+  public static bool _HasOpenedThisSession_k__BackingField
+  public static bool _IsAnyOptionsShowing_k__BackingField
+  public static float AutoHideDelay
+  public static float DefaultAnimInterval
+  public static float DeferOptionsTimeoutSeconds
+  public static float EntrySelectAutoHideDelay
+  public static float PickedCooldownMaxSeconds
+  public static float PickedCooldownMinSeconds
+  public static float PopInterval
+  public static int CakeAskLineId
+  public static int CakeMemoryEntryId
+  public static int CancelPromptLineId1
+  public static int CancelPromptLineId2
+  public static int CancelPromptLineId3
+  public static int CancelPromptLineId4
+  public static int CancelPromptLineId5
+  public static int ClickAnywhereLineId
+  public static int ClothingSwapEntryId
+  public static int DefaultBirthDay
+  public static int DefaultBirthMonth
+  public static int GetNightTalkMemorySegment(PlayerLineEntry entry)
+  public static int GiftEntryId
+  public static int MaxOptionCount
+  public static int MemoriesEntryId
+  public static int MoreMusicHintLineId
+  public static int MusicPageSize
+  public static int NightTalkMemoryFirstEntryId
+  public static int WeekendPajamasEntryId
+  public static int _cancelWithoutSelectCount
+  public static string AlarmCancelledLine
+  public static string AlarmEntryTag
+  public static string AlarmLabel
+  public static string AlarmSetLine(string dayTime)
+  public static string CakeAskLine()
+  public static string CakeMemoryTag
+  public static string CakeStatePrefix
+  public static string CancelAlarmLabel(string dayTime)
+  public static string ClothingSwapEntryTag
+  public static string DisappearStateTag
+  public static string DissipateStateTag
+  public static string FormatAlarmDayTime(DateTime now, DateTime time)
+  public static string FormatMinuteLabel(int minutes)
+  public static string GetPlayerLineText(PlayerLineEntry entry)
+  public static string GiftEntryTag
+  public static string LocKeyDeliverGift
+  public static string LocKeyOurMemories
+  public static string LocalizedLine(int lineId, string fallback)
+  public static string MainUiTable
+  public static string MemoriesEntryTag
+  public static string MoreMusicLabel()
+  public static string MorningLabel(bool tomorrow, int hour)
+  public static string MusicControlLabel(int index)
+  public static string MusicEntryTag
+  public static string MusicPageLabel(int index)
+  public static string NightTalkMemoryTagPrefix
+  public static string PickedCooldownKeyPrefix
+  public static string PomodoroEntryTag
+  public static string PomodoroMenuLabel(bool running)
+  public static string QuietMenuTagPrefix
+  public static string RelHoursLabel(int h)
+  public static string RelMinutesLabel(int m)
+  public static string TimerEntryTag
+  public static string TimerLabel
+  public static string TonightLabel(DateTime t)
+  public static string UiLang
+  public static void AddAlarmPreset(List<string> options, List<DateTime> times, string label, DateTime time)
+  public static void AddFolderEntries(string folder, ref int count, ref bool found)
+  public static void AddMorningAlarmPreset(List<string> options, List<DateTime> times, DateTime now, int hour)
+  public static void Arm(string key, float cooldownSeconds)
+  public static void ArmAtLeast(string key, float cooldownSeconds)
+  public static void ArmRandom(string key, float minSeconds, float maxSeconds)
+  public static void Clear(string key)
+  public static void EnterDisappearHide(CharacterController cc)
+  public static void EnterDissipateHide(CharacterController cc)
+  public static void MarkEntryPicked(PlayerLineEntry entry)
+  public static void MarkEntryViewed(PlayerLineEntry entry)
+  public static void SetCustomLayoutRootVisible(Transform root, bool visible)
+  public static void StartUserMusicWithReaction(string filePath)
+  public virtual Il2CppSystem.Object System.Collections.Generic.IEnumerator<System.Object>.Current
+  public void ApplyAdaptiveColumn(Transform root)
+  public void ApplyLayout(int optionCount)
+  public void ApplyPoseLift()
+  public void Awake()
+  public void BeginDissipateAfterDialogue()
+  public void CancelDeferredOptions()
+  public void CollectButtons(Transform root)
+  public void EnsureButtonAnims(Transform root)
+  public void HandleCancelWithoutSelect()
+  public void HandleOnSettingViewShown()
+  public void Hide()
+  public void HideWithPopAnim()
+  public void LateUpdate()
+  public void MarkCakeMemoryViewed()
+  public void MarkNightTalkMemoryViewed(int segment)
+  public void OnButtonClicked(int index)
+  public void OnDestroy()
+  public void OpenMusicFolderWithHint()
+  public void PlayButtonEnterAnims(int showCount)
+  public void RefreshEntries()
+  public void SetButtonContents(int showCount, Func<int, string> getText)
+  public void SetEntryContents(IReadOnlyList<PlayerLineEntry> entries)
+  public void Show()
+  public void ShowAlarmMenu()
+  public void ShowCanvas(float autoHideDelay)
+  public void ShowDebugOptions(int optionCount)
+  public void ShowEntryOptions(IReadOnlyList<PlayerLineEntry> entries, Action<PlayerLineEntry> onSelected)
+  public void ShowGiftMenu()
+  public void ShowMemoriesMenu()
+  public void ShowMusicControlMenu()
+  public void ShowMusicMenu()
+  public void ShowMusicPage(int page)
+  public void ShowOptions(IReadOnlyList<string> options, Action<int> onSelected)
+  public void ShowOptionsNow(IReadOnlyList<string> options, Action<int> onSelected)
+  public void ShowPomodoroMenu()
+  public void ShowReminderRootMenu()
+  public void ShowTimerMenu()
+  public void SortEntriesByTextLengthIfNeeded()
+  public void TrySayCakeAsk(PlayerLineEntry entry)
+  public void Update()
+  public void __m__Finally1()
+======== DialogueManager (key methods) ========
+  public IEnumerator BeginDialogueAfterEmotionFade(DialogueNode node, float fadeDuration)
+  public PlayerLineController GetPlayerLineController()
+  public _BeginDialogueAfterEmotionFade_d__81(System.IntPtr pointer)
+  public _BeginDialogueAfterEmotionFade_d__81(int <>1__state)
+  public bool StartDialogue(int nodeId)
+  public bool StartDialogueByTrigger(DialogueTriggerType triggerType, bool allowOverwrite = true)
+  public bool StartDialogueOneShot(int nodeId)
+  public bool TryGetNode(int id, out DialogueNode node)
+  public float GetNodeDuration(DialogueNode node)
+  public sealed class _BeginDialogueAfterEmotionFade_d__81 : Il2CppSystem.Object
+  public void AdvanceDialogue()
+  public void BeginDialogue(DialogueNode node)
+  public void BeginDialogueWithPreFade(DialogueNode node)
+  public void EnterDialogueState(DialogueNode node)
+  public void EnterDialogueState(DialogueStateType stateType)
+  public void StartDialogueNodeByInput()
