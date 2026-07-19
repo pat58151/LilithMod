@@ -1,6 +1,7 @@
 import os, subprocess, sys
 
-need = ["LilithMod/Message.cs", "LilithMod/ChatResult.cs", "LilithMod/LlmChatController.cs"]
+need = ["LilithMod/Message.cs", "LilithMod/ChatResult.cs", "LilithMod/LlmChatController.cs",
+        "LilithMod/WindowFocus.cs"]
 missing = [f for f in need if not os.path.exists(f)]
 if missing:
     print("VERIFY FAIL - required files not created yet: " + ", ".join(missing))
@@ -11,7 +12,10 @@ for f in need:
     src += open(f, encoding="utf-8", errors="ignore").read()
 
 marks = {
-    "Keyboard.current (new Input System hotkey)": "Keyboard.current",
+    # Unity input is dead in this game's window; the hotkey MUST go through Win32.
+    "GetAsyncKeyState (global hotkey, not Unity input)": "GetAsyncKeyState",
+    "window focus toggle for typing": "EnableTyping",
+    "window style restored": "RestoreWindow",
     "ConcurrentQueue (thread handoff)": "ConcurrentQueue",
     "textComponent wiring": "textComponent",
     "textViewport wiring": "textViewport",

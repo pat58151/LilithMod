@@ -23,6 +23,7 @@ namespace LilithMod
         internal static ConfigEntry<int> CfgMaxHistoryTurns;
         internal static ConfigEntry<int> CfgTimeoutSeconds;
         internal static ConfigEntry<string> CfgHotkey;
+        internal static ConfigEntry<bool> CfgLogDiagnostics;
 
         private const string DefaultSystemPrompt =
             "You are Lilith, a shy but affectionate desktop companion who lives on the "
@@ -46,8 +47,14 @@ namespace LilithMod
             CfgMaxHistoryTurns = Config.Bind("LLM", "MaxHistoryTurns", 8,
                 "How many past exchanges to keep as context.");
             CfgTimeoutSeconds = Config.Bind("LLM", "TimeoutSeconds", 30, "Request timeout.");
-            CfgHotkey = Config.Bind("LLM", "Hotkey", "T",
-                "Key that opens the chat box. UnityEngine.KeyCode name, e.g. T, BackQuote, F8.");
+            CfgHotkey = Config.Bind("LLM", "Hotkey", "F11",
+                "Key that opens the chat box. A letter (A-Z), digit (0-9), or F1-F12. "
+                + "Polled globally via Win32, so it works even though the pet window "
+                + "never takes keyboard focus.");
+
+            CfgLogDiagnostics = Config.Bind("Debug", "LogDiagnostics", false,
+                "Verbose per-frame input and window-focus logging. Only needed when "
+                + "diagnosing why a hotkey or the chat box is not responding.");
 
             // Use BepInEx's own AddComponent rather than creating a GameObject here.
             // Load() runs before the first scene exists, so a hand-made GameObject does

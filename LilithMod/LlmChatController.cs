@@ -14,9 +14,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TMPro;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UI;
-using Input = UnityEngine.Input;
 
 namespace LilithMod
 {
@@ -40,14 +38,9 @@ namespace LilithMod
 
         // ========== Internal state ==========
         private bool _chatDisabled;
-        private bool _legacyInputAvailable;
-        private Key _inputSystemKey;
-        private KeyCode _legacyKeyCode;
         private bool _hotkeyValid;
         private bool _uiReady;
         private float _initElapsed;
-        private float _probeElapsed;
-        private bool _sawAnyKey, _sawHotkey, _sawLegacyKey;
         private int _vkHotkey = -1;
         private const int VkEscape = 0x1B;
         private const int VkReturn = 0x0D;
@@ -92,36 +85,8 @@ namespace LilithMod
                 return;
             }
 
-            if (!Enum.TryParse(hotkeyName, true, out _inputSystemKey))
-            {
-                LilithModPlugin.Logger.LogError($"[LlmChat] Invalid hotkey '{hotkeyName}' for Input System. LLM chat disabled.");
-                _chatDisabled = true;
-                return;
-            }
-
-            // Legacy is only a fallback, and its KeyCode names do not all match the Input
-            // System's Key names. Failing to parse here must not disable chat.
-            bool legacyKeyParsed = Enum.TryParse(hotkeyName, true, out _legacyKeyCode);
-
-            try
-            {
-                Input.GetKeyDown(KeyCode.None);
-                _legacyInputAvailable = legacyKeyParsed;
-            }
-            catch
-            {
-                _legacyInputAvailable = false;
-            }
-
-            // If both new Input System and legacy are unavailable, disable.
-            // Keyboard.current may be null in some stripped builds; we'll try to fetch it.
-            if (Keyboard.current == null && !_legacyInputAvailable)
-            {
-                LilithModPlugin.Logger.LogError("[LlmChat] No usable input system found. LLM chat disabled.");
-                _chatDisabled = true;
-                return;
-            }
-
+            // Unity's input is never consulted for the hotkey - this window receives no
+            // key messages at all - so only the Win32 virtual-key mapping matters.
             _vkHotkey = WindowFocus.VirtualKeyFromName(hotkeyName);
             if (_vkHotkey <= 0)
             {
@@ -162,36 +127,6 @@ namespace LilithMod
                 return;
             }
 
-            // Focus/keyboard probe. A desktop pet runs as a transparent always-on-top
-            // window that may never take keyboard focus, in which case Unity receives no
-            // key events at all and no hotkey can ever fire.
-            // Sticky: sample every frame, report every few seconds. Sampling only at the
-            // report instant would almost never coincide with a keypress.
-            try
-            {
-                if (Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame)
-                    _sawAnyKey = true;
-                if (Keyboard.current != null && Keyboard.current[_inputSystemKey].wasPressedThisFrame)
-                    _sawHotkey = true;
-            }
-            catch { }
-            try
-            {
-                if (_legacyInputAvailable && Input.anyKeyDown)
-                    _sawLegacyKey = true;
-            }
-            catch { }
-
-            _probeElapsed += Time.deltaTime;
-            if (_probeElapsed >= 3f)
-            {
-                _probeElapsed = 0f;
-                LilithModPlugin.Logger.LogInfo(
-                    $"[LlmChat][probe] anyKey={_sawAnyKey} hotkey({_inputSystemKey})={_sawHotkey} "
-                    + $"legacyAnyKey={_sawLegacyKey} focused={Application.isFocused}");
-                _sawAnyKey = _sawHotkey = _sawLegacyKey = false;
-            }
-
             // --- Hotkey toggle ---
             // Polled through Win32 GetAsyncKeyState, NOT Unity. The pet window carries
             // WS_EX_NOACTIVATE|WS_EX_TRANSPARENT, so Windows never delivers key messages
@@ -201,13 +136,13 @@ namespace LilithMod
 
             if (toggle)
             {
-                LilithModPlugin.Logger.LogInfo(
-                    $"[LlmChat] Hotkey fired. canvas={( _canvas != null)} group={(_canvasGroup != null)} "
-                    + $"field={(_inputField != null)} visible={IsPanelVisible()}");
                 TogglePanel();
-                LilithModPlugin.Logger.LogInfo(
-                    $"[LlmChat] After toggle: visible={IsPanelVisible()} "
-                    + $"alpha={(_canvasGroup != null ? _canvasGroup.alpha : -1f)}");
+                if (LilithModPlugin.CfgLogDiagnostics.Value)
+                {
+                    LilithModPlugin.Logger.LogInfo(
+                        $"[LlmChat] Toggled. visible={IsPanelVisible()} "
+                        + $"canvas={(_canvas != null)} field={(_inputField != null)}");
+                }
             }
 
             // Escape closes, Enter submits. Once the panel is open the window has been made

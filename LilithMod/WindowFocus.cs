@@ -133,13 +133,21 @@ namespace LilithMod
                     fg = WindowsNativeAPI.SetForegroundWindow(hWnd);
                 }
 
-                long applied = (long)WindowsNativeAPI.GetWindowLongPtrSafe(hWnd, GWL_EXSTYLE);
-                long fgWnd = (long)WindowsNativeAPI.GetForegroundWindow();
-                LilithModPlugin.Logger.LogInfo(
-                    $"[WindowFocus] hWnd=0x{(long)hWnd:X} old=0x{current:X} want=0x{newStyle:X} "
-                    + $"applied=0x{applied:X} setFg={fg} fgWnd=0x{fgWnd:X} "
-                    + $"noactivate={(applied & (long)WS_EX_NOACTIVATE) != 0} "
-                    + $"transparent={(applied & (long)WS_EX_TRANSPARENT) != 0}");
+                if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                {
+                    long applied = (long)WindowsNativeAPI.GetWindowLongPtrSafe(hWnd, GWL_EXSTYLE);
+                    long fgWnd = (long)WindowsNativeAPI.GetForegroundWindow();
+                    LilithModPlugin.Logger.LogInfo(
+                        $"[WindowFocus] hWnd=0x{(long)hWnd:X} old=0x{current:X} want=0x{newStyle:X} "
+                        + $"applied=0x{applied:X} setFg={fg} fgWnd=0x{fgWnd:X} "
+                        + $"noactivate={(applied & (long)WS_EX_NOACTIVATE) != 0} "
+                        + $"transparent={(applied & (long)WS_EX_TRANSPARENT) != 0}");
+                }
+                else if (!fg)
+                {
+                    LilithModPlugin.Logger.LogWarning(
+                        "[WindowFocus] Could not bring the window to the foreground; typing may not work.");
+                }
             }
             catch (Exception ex)
             {
