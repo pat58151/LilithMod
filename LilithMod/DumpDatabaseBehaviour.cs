@@ -840,6 +840,7 @@ namespace LilithMod
             if (nodesToInject.Count > 0)
             {
                 int sampleNodeId = nodesToInject[0].id;
+                DebugProbe.FirstInjectedNodeId = sampleNodeId;
                 bool found = DialogueManager.s_instance.TryGetNode(sampleNodeId, out _);
                 LilithModPlugin.Logger.LogInfo($"[LilithMod] Self-check: node {sampleNodeId} reachable = {found}");
                 if (!found)
