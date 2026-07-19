@@ -1,0 +1,596 @@
+======== DialogueManager ========
+public class DialogueManager : ACSingletonBehaviour<DialogueManager>
+	public sealed class _BeginDialogueAfterEmotionFade_d__81 : Il2CppSystem.Object
+		public int __1__state
+		public Il2CppSystem.Object __2__current
+		public DialogueManager __4__this
+		public float fadeDuration
+		public DialogueNode node
+		public float _timer_5__2
+		public virtual Il2CppSystem.Object System.Collections.Generic.IEnumerator<System.Object>.Current
+		public virtual Il2CppSystem.Object System.Collections.IEnumerator.Current
+		public _BeginDialogueAfterEmotionFade_d__81(int <>1__state)
+		public virtual void System_IDisposable_Dispose()
+		public virtual bool MoveNext()
+		public virtual void System_Collections_IEnumerator_Reset()
+	public sealed class _TransitionToNodeAfterEmotionFade_d__83 : Il2CppSystem.Object
+		public int __1__state
+		public Il2CppSystem.Object __2__current
+		public DialogueManager __4__this
+		public float fadeDuration
+		public DialogueNode node
+		public float _timer_5__2
+		public virtual Il2CppSystem.Object System.Collections.Generic.IEnumerator<System.Object>.Current
+		public virtual Il2CppSystem.Object System.Collections.IEnumerator.Current
+		public _TransitionToNodeAfterEmotionFade_d__83(int <>1__state)
+		public virtual void System_IDisposable_Dispose()
+		public virtual bool MoveNext()
+		public virtual void System_Collections_IEnumerator_Reset()
+	public sealed class __c__DisplayClass88_0 : Il2CppSystem.Object
+		public DialogueManager __4__this
+		public Dictionary<int, IReadOnlyList<int>> nextIdsByPlayerLineId
+		public __c__DisplayClass88_0()
+		public void _TryShowPlayerLineInteraction_b__0(PlayerLineEntry selectedEntry)
+	public sealed class _RunPostStateThenComplete_d__102 : Il2CppSystem.Object
+		public int __1__state
+		public Il2CppSystem.Object __2__current
+		public DialogueManager __4__this
+		public DialogueNode node
+		public virtual Il2CppSystem.Object System.Collections.Generic.IEnumerator<System.Object>.Current
+		public virtual Il2CppSystem.Object System.Collections.IEnumerator.Current
+		public _RunPostStateThenComplete_d__102(int <>1__state)
+		public virtual void System_IDisposable_Dispose()
+		public virtual bool MoveNext()
+		public virtual void System_Collections_IEnumerator_Reset()
+	public sealed class _WaitForDialogueState_d__103 : Il2CppSystem.Object
+		public int __1__state
+		public Il2CppSystem.Object __2__current
+		public DialogueStateType stateType
+		public float stateDuration
+		public float _switchTimeout_5__2
+		public float _enterTimeout_5__3
+		public float _walkTimer_5__4
+		public virtual Il2CppSystem.Object System.Collections.Generic.IEnumerator<System.Object>.Current
+		public virtual Il2CppSystem.Object System.Collections.IEnumerator.Current
+		public _WaitForDialogueState_d__103(int <>1__state)
+		public virtual void System_IDisposable_Dispose()
+		public virtual bool MoveNext()
+		public virtual void System_Collections_IEnumerator_Reset()
+	public Il2CppReferenceArray<DialogueDatabase> _databases
+	public float _autoDismissTime
+	public float _autoDismissTimeLong
+	public bool _enableTimeAutoTrigger
+	public static string TimeTriggerKeyPrefix
+	public static HashSet<DialogueTriggerType> QuietMutedTriggers
+	public static int AnniversaryEggNodeId
+	public static HashSet<DialogueTriggerType> AnniversaryEggForceTriggers
+	public Dictionary<int, DialogueNode> _nodeIndex
+	public Dictionary<DialogueTriggerType, List<DialogueNode>> _triggerIndex
+	public Dictionary<int, int> _currentWeightByNodeId
+	public DialogueNode _currentNode
+	public PlayerLineController _playerLineController
+	public PlayerLineDatabase _playerLineDatabase
+	public bool _isActive
+	public float _autoDismissTimer
+	public float _nodeProtectTimer
+	public static float NodeEndHoldMaxSeconds
+	public float _nodeEndHoldTimer
+	public static int GazeHoldNodeId
+	public bool _isEmotionFadeOutReserved
+	public bool _isNodeTransitioning
+	public bool _isPostStateRunning
+	public Coroutine _nodeTransitionCoroutine
+	public Coroutine _postStateCoroutine
+	public Action<DialogueNode> OnDialogueStart
+	public Action<DialogueNode> OnDialogueAdvance
+	public Action OnDialogueBubbleHideRequested
+	public Action OnDialogueEnd
+	public Action<DialogueOption> OnOptionSelected
+	public static float PostTypingHoldSeconds
+	public static int TalkExpressionLongTextThreshold
+	public static Dictionary<LilithActionType, string> FallbackEmotionByAction
+	public static int MorningGreetStartHour
+	public static int MorningGreetEndHour
+	public static int NightHeartTalkFirstOpenerNodeId
+	public static int NightHeartTalkOpenerStride
+	public static int NightHeartTalkSegmentCount
+	public static string NightHeartTalkSegKey
+	public static string NightHeartTalkNightKey
+	public static int NightHeartTalkStartHour
+	public static float DoctorReminderDelaySeconds
+	public static string SeeingDoctorFlag
+	public static int DoctorReminderNodeId
+	public static string DoctorReminderKey
+	public static double HardCooldownHours
+	public bool IsDialogueActive
+	public bool IsBusy
+	public bool IsBusyOrAwaitingResponse
+	public DialogueNode CurrentNode
+	public bool TryGetNode(int id, out DialogueNode node)
+	public static bool IsGazeHoldNode(DialogueNode node)
+	public void add_OnDialogueStart(Action<DialogueNode> value)
+	public void remove_OnDialogueStart(Action<DialogueNode> value)
+	public void add_OnDialogueAdvance(Action<DialogueNode> value)
+	public void remove_OnDialogueAdvance(Action<DialogueNode> value)
+	public void add_OnDialogueBubbleHideRequested(Action value)
+	public void remove_OnDialogueBubbleHideRequested(Action value)
+	public void add_OnDialogueEnd(Action value)
+	public void remove_OnDialogueEnd(Action value)
+	public void add_OnOptionSelected(Action<DialogueOption> value)
+	public void remove_OnOptionSelected(Action<DialogueOption> value)
+	public override void Awake()
+	public void Update()
+	public void ResetAutoDismissTimer()
+	public static bool IsBubbleTyping()
+	public static bool IsNodeActionAnimPlaying()
+	public void UpdateAutoDismiss()
+	public bool StartDialogueByTrigger(DialogueTriggerType triggerType, bool allowOverwrite = true)
+	public bool TryForceAnniversaryEgg(Nullable<DialogueTriggerType> triggerType)
+	public static string ResolveNoteText(DialogueNode node)
+	public bool StartDialogue(int nodeId)
+	public DialogueNode SelectWeightedDialogueNode(IReadOnlyList<DialogueNode> candidates)
+	public string GetRandomLineByActionType(LilithActionType actionType)
+	public bool Say(string text, LilithActionType actionType, string emotion = "", float duration = 3f)
+	public bool Say(string text, string emotion = "", float duration = 3f)
+	public List<int> GetTriggerSequence(DialogueTriggerType triggerType)
+	public bool StartDialogueOneShot(int nodeId)
+	public void AdvanceDialogue()
+	public void SelectOption(int optionIndex)
+	public void SkipDialogue()
+	public void ForceEndDialogue()
+	public bool ForceSay(string text, string emotion = "", float duration = 3f)
+	public void PreemptForReminder()
+	public void CompleteCurrentNode()
+	public void CompleteCurrentNodeAfterState()
+	public void BuildIndex()
+	public DialogueNode FindMatchingNodeByWeight(DialogueTriggerType triggerType)
+	public void AddNodeToTriggerIndex(DialogueNode node)
+	public bool IsNodeAvailable(DialogueNode node)
+	public void BeginDialogue(DialogueNode node)
+	public void BeginDialogueWithPreFade(DialogueNode node)
+	public IEnumerator BeginDialogueAfterEmotionFade(DialogueNode node, float fadeDuration)
+	public void TransitionToNode(DialogueNode node)
+	public IEnumerator TransitionToNodeAfterEmotionFade(DialogueNode node, float fadeDuration)
+	public void ApplyAdvancedNode(DialogueNode node)
+	public static void PlayNodeVoice(DialogueNode node)
+	public void EndDialogue(bool naturalEnd = false)
+	public DialogueNode CreateRuntimeNode(DialogueNode source)
+	public bool TryShowPlayerLineInteraction(DialogueNode node)
+	public void StartPlayerLineNextDialogue(IReadOnlyDictionary<int, IReadOnlyList<int>> nextIdsByPlayerLineId, PlayerLineEntry selectedEntry)
+	public IReadOnlyList<int> GetPlayerLineNextIds(DialoguePlayerLineOption option)
+	public PlayerLineController GetPlayerLineController()
+	public PlayerLineDatabase GetPlayerLineDatabase()
+	public void PlayEmotion(DialogueNode node)
+	public void PlayTalkExpression(DialogueNode node)
+	public static bool IsSadEmotion(string emotion)
+	public static bool WillNodeActionPlay(DialogueNode node)
+	public void PlayAction(DialogueNode node)
+	public void EnterDialogueState(DialogueNode node)
+	public bool ShouldRunPostState(DialogueNode node)
+	public IEnumerator RunPostStateThenComplete(DialogueNode node)
+	public IEnumerator WaitForDialogueState(DialogueStateType stateType, float stateDuration)
+	public bool IsNodeProtected()
+	public void ClearEmotion()
+	public void ReserveEmotionFadeOutIfNeeded()
+	public bool ShouldPreFadeBeforeNextNode()
+	public float GetEmotionFadeDuration()
+	public float GetNodeDuration(DialogueNode node)
+	public bool HasPendingTimeDialogue()
+	public bool TryTriggerTimeDialogue()
+	public bool TryTriggerMorningGreetingByInteraction()
+	public bool TryGetCurrentTimeTrigger(out DialogueTriggerType triggerType)
+	public bool HasTriggeredTimeDialogueToday(DialogueTriggerType triggerType)
+	public void MarkTimeDialogueTriggered(DialogueTriggerType triggerType)
+	public string GetTimeTriggerKey(DialogueTriggerType triggerType)
+	public bool TryStartNightHeartTalk()
+	public static string GetNightDateKey(DateTime now)
+	public bool ReplayNightHeartTalk(int segment)
+	public void BackfillNightHeartTalkMemories()
+	public bool TryTriggerDoctorReminderByInteraction()
+	public bool HasTriggeredDoctorReminderToday()
+	public void MarkDoctorReminderTriggered()
+	public bool IsWithinHardCooldown(DialogueNode node)
+	public DialogueNode SelectLeastRecentlyPlayed(List<DialogueNode> candidates)
+	public void LoadPersistedWeightState()
+	public void RegisterNodeWeight(DialogueNode node)
+	public int GetCurrentWeight(DialogueNode node)
+	public int SelectCandidateIndexByWeight(List<DialogueNode> candidates)
+	public void ApplyWeightChangeAfterTrigger(DialogueNode selectedNode)
+	public void PersistCooldownWeights()
+	public DialogueManager()
+======== DialogueDatabase ========
+public class DialogueDatabase : ScriptableObject
+	public string databaseName
+	public List<DialogueNode> nodes
+	public Dictionary<int, DialogueNode> _nodeIndex
+	public DialogueNode GetNodeById(int id)
+	public List<DialogueNode> GetAvailableNodes(DialogueTriggerType triggerType)
+	public void BuildIndex()
+	public void OnEnable()
+	public DialogueDatabase()
+======== DialogueNode ========
+public class DialogueNode : Object
+	public int id
+	public string speaker
+	public int baseWeight
+	public List<DialogueTriggerType> triggerTypes
+	public int lineId
+	public string text
+	public string emotion
+	public float duration
+	public LilithActionType actionType
+	public DialogueStateType nextStateType
+	public float nextStateDuration
+	public string soundId
+	public DialogueCondition conditions
+	public List<DialogueOption> options
+	public int nextId
+	public List<string> playerStates
+	public string playerLineInteraction
+	public List<DialoguePlayerLineOption> playerLineOptions
+	public bool HasOptions
+	public bool HasPlayerLineOptions
+	public DialogueNode()
+======== DialogueLineDatabase ========
+public class DialogueLineDatabase : ScriptableObject
+	public List<DialogueLineEntry> entries
+	public Dictionary<int, DialogueLineEntry> _index
+	public bool TryGetEntry(int id, out DialogueLineEntry entry)
+	public void BuildIndex()
+	public void OnEnable()
+	public DialogueLineDatabase()
+======== DialogueLineEntry ========
+public class DialogueLineEntry : Object
+	public int id
+	public string text
+	public string soundId
+	public DialogueLineEntry()
+======== PlayerLineDatabase ========
+public class PlayerLineDatabase : ScriptableObject
+	public sealed class __c__DisplayClass7_0 : Il2CppSystem.Object
+		public string normalizedState
+		public Predicate<string> __9__0
+		public __c__DisplayClass7_0()
+		public bool _GetEntriesByState_b__0(string s)
+	public List<PlayerLineEntry> entries
+	public Dictionary<int, PlayerLineEntry> _index
+	public Dictionary<int, List<PlayerLineEntry>> _childrenByGroupId
+	public PlayerLineEntry GetEntryById(int id)
+	public bool HasChildren(int id)
+	public List<PlayerLineEntry> GetDirectChildren(int id)
+	public List<PlayerLineEntry> GetRootEntries()
+	public List<PlayerLineEntry> GetEntriesByState(string state)
+	public void BuildIndex()
+	public void OnEnable()
+	public PlayerLineDatabase()
+======== PlayerLineEntry ========
+public class PlayerLineEntry : Object
+	public int id
+	public int LineID
+	public int groupId
+	public List<string> playerStates
+	public string text
+	public int viewLimit
+	public PlayerLineEntry()
+======== DialoguePlayerLineOption ========
+public class DialoguePlayerLineOption : Object
+	public int playerLineId
+	public int nextId
+	public List<int> nextIds
+	public DialoguePlayerLineOption()
+======== DialogueCondition ========
+public class DialogueCondition : Object
+	public string timeRangeStart
+	public string timeRangeEnd
+	public string dateMMdd
+	public static string DebugDateOverride
+	public bool Evaluate()
+	public bool IsDateSatisfied()
+	public DialogueCondition()
+======== DialogueOption ========
+public class DialogueOption : Object
+	public string text
+	public int nextId
+	public DialogueOption()
+======== PlayerLineController ========
+public class PlayerLineController : MonoBehaviour
+	public enum PlayerLineLayoutType
+	public sealed class __c__DisplayClass92_0 : Il2CppSystem.Object
+		public IReadOnlyList<string> options
+		public __c__DisplayClass92_0()
+		public string _ShowOptionsNow_b__0(int index)
+	public sealed class _ShowOptionsAfterLilithLine_d__94 : Il2CppSystem.Object
+		public int __1__state
+		public Il2CppSystem.Object __2__current
+		public PlayerLineController __4__this
+		public IReadOnlyList<string> options
+		public Action<int> onSelected
+		public float _deadline_5__2
+		public virtual Il2CppSystem.Object System.Collections.Generic.IEnumerator<System.Object>.Current
+		public virtual Il2CppSystem.Object System.Collections.IEnumerator.Current
+		public _ShowOptionsAfterLilithLine_d__94(int <>1__state)
+		public virtual void System_IDisposable_Dispose()
+		public virtual bool MoveNext()
+		public virtual void System_Collections_IEnumerator_Reset()
+	public sealed class __c : Il2CppSystem.Object
+		public static __c __9
+		public static Action<int> __9__97_0
+		public static Action<int> __9__103_0
+		public static Func<bool> __9__104_0
+		public static Action<int> __9__109_0
+		public static Predicate<PlayerLineEntry> __9__141_1
+		public static Comparison<PlayerLineEntry> __9__152_0
+		public static Action<PlayerLineEntry> __9__186_0
+		public __c()
+		public void _ShowDebugOptions_b__97_0(int index)
+		public void _ShowMusicControlMenu_b__103_0(int index)
+		public bool _StartUserMusicWithReaction_b__104_0()
+		public void _ShowTimerMenu_b__109_0(int index)
+		public bool _RefreshEntries_b__141_1(PlayerLineEntry e)
+		public int _SortEntriesByTextLengthIfNeeded_b__152_0(PlayerLineEntry a, PlayerLineEntry b)
+		public void _ShowCakeReplayMenu_b__186_0(PlayerLineEntry child)
+	public sealed class __c__DisplayClass99_0 : Il2CppSystem.Object
+		public PlayerLineController __4__this
+		public bool hasPrev
+		public int page
+		public int moreMusicIndex
+		public int nextButtonIndex
+		public int start
+		public int trackOffset
+		public __c__DisplayClass99_0()
+		public void _ShowMusicPage_b__0(int _)
+		public void _ShowMusicPage_b__1(int index)
+	public sealed class __c__DisplayClass112_0 : Il2CppSystem.Object
+		public PomodoroSystem pomodoro
+		public __c__DisplayClass112_0()
+		public void _ShowPomodoroMenu_b__0(int _)
+		public void _ShowPomodoroMenu_b__1(int _)
+	public sealed class __c__DisplayClass113_0 : Il2CppSystem.Object
+		public bool hasAlarm
+		public List<DateTime> times
+		public DateTime now
+		public __c__DisplayClass113_0()
+		public void _ShowAlarmMenu_b__0(int index)
+	public sealed class _PopThenHideRoutine_d__136 : Il2CppSystem.Object
+		public int __1__state
+		public Il2CppSystem.Object __2__current
+		public PlayerLineController __4__this
+		public float _lastPopDuration_5__2
+		public List<Button>.Enumerator __7__wrap2
+		public virtual Il2CppSystem.Object System.Collections.Generic.IEnumerator<System.Object>.Current
+		public virtual Il2CppSystem.Object System.Collections.IEnumerator.Current
+		public _PopThenHideRoutine_d__136(int <>1__state)
+		public virtual void System_IDisposable_Dispose()
+		public virtual bool MoveNext()
+		public void __m__Finally1()
+		public virtual void System_Collections_IEnumerator_Reset()
+	public sealed class __c__DisplayClass140_0 : Il2CppSystem.Object
+		public int index
+		public PlayerLineController __4__this
+		public __c__DisplayClass140_0()
+		public void _CollectButtons_b__0()
+	public sealed class __c__DisplayClass141_0 : Il2CppSystem.Object
+		public int pinnedId
+		public __c__DisplayClass141_0()
+		public bool _RefreshEntries_b__3(PlayerLineEntry e)
+	public sealed class __c__DisplayClass159_0 : Il2CppSystem.Object
+		public CharacterController cc
+		public __c__DisplayClass159_0()
+		public void _DisappearAfterDialogue_b__0()
+	public sealed class _DisappearAfterDialogue_d__159 : Il2CppSystem.Object
+		public int __1__state
+		public Il2CppSystem.Object __2__current
+		public __c__DisplayClass159_0 __8__1
+		public DialogueManager _dm_5__2
+		public virtual Il2CppSystem.Object System.Collections.Generic.IEnumerator<System.Object>.Current
+		public virtual Il2CppSystem.Object System.Collections.IEnumerator.Current
+		public _DisappearAfterDialogue_d__159(int <>1__state)
+		public virtual void System_IDisposable_Dispose()
+		public virtual bool MoveNext()
+		public virtual void System_Collections_IEnumerator_Reset()
+	public sealed class __c__DisplayClass162_0 : Il2CppSystem.Object
+		public CharacterController cc
+		public __c__DisplayClass162_0()
+		public void _DissipateAfterDialogue_b__0()
+	public sealed class _DissipateAfterDialogue_d__162 : Il2CppSystem.Object
+		public int __1__state
+		public Il2CppSystem.Object __2__current
+		public __c__DisplayClass162_0 __8__1
+		public DialogueManager _dm_5__2
+		public virtual Il2CppSystem.Object System.Collections.Generic.IEnumerator<System.Object>.Current
+		public virtual Il2CppSystem.Object System.Collections.IEnumerator.Current
+		public _DissipateAfterDialogue_d__162(int <>1__state)
+		public virtual void System_IDisposable_Dispose()
+		public virtual bool MoveNext()
+		public virtual void System_Collections_IEnumerator_Reset()
+	public CanvasGroup _canvasGroup
+	public PlayerLineDatabase _database
+	public Transform _buttonRoot
+	public Transform _singleLineRoot
+	public Transform _twoLineRoot
+	public Transform _threeToFourLineRoot
+	public Transform _fiveToEightLineRoot
+	public static float AutoHideDelay
+	public static float EntrySelectAutoHideDelay
+	public static int MaxOptionCount
+	public static float DeferOptionsTimeoutSeconds
+	public static float DefaultAnimInterval
+	public static float PopInterval
+	public float _columnSpacing
+	public float _optionPanelOffsetX
+	public bool _optionAutoSideBySpace
+	public float _fiveToEightExtraOffsetRatio
+	public static string MusicEntryTag
+	public static int MusicPageSize
+	public List<string> _musicTracks
+	public static string TimerEntryTag
+	public static Il2CppStructArray<int> TimerPresetMinutes
+	public static string PomodoroEntryTag
+	public static string AlarmEntryTag
+	public static string GiftEntryTag
+	public static int GiftEntryId
+	public static string LocKeyDeliverGift
+	public static string MemoriesEntryTag
+	public static int MemoriesEntryId
+	public static string LocKeyOurMemories
+	public static string MainUiTable
+	public static string ClothingSwapEntryTag
+	public static int ClothingSwapEntryId
+	public static Dictionary<string, ValueTuple<int, string, string>> QuietMenuReplies
+	public static float PickedCooldownMinSeconds
+	public static float PickedCooldownMaxSeconds
+	public static string PickedCooldownKeyPrefix
+	public static Il2CppStructArray<int> PinnedRootIds
+	public static HashSet<int> PinnedRootIdSet
+	public static string DisappearStateTag
+	public static int WeekendPajamasEntryId
+	public static string DissipateStateTag
+	public GiftView _giftView
+	public List<Button> _buttons
+	public List<TextMeshProUGUI> _texts
+	public List<PlayerLineEntry> _currentEntries
+	public static int ClickAnywhereLineId
+	public int _clickAnywhereIndex
+	public Action<int> _customSelectCallback
+	public Action<PlayerLineEntry> _entrySelectCallback
+	public Transform _activeButtonRoot
+	public float _autoHideTimer
+	public Coroutine _popRoutine
+	public Coroutine _deferredOptionsRoutine
+	public bool _isShowing
+	public bool _isCustomMode
+	public bool _isEntrySelectMode
+	public bool _autoHideEnabled
+	public bool _isPopping
+	public PlayerLineLayoutType _currentLayoutType
+	public static int _cancelWithoutSelectCount
+	public bool _selectionMadeThisOpen
+	public bool _pendingCancelSpeak
+	public int _shownAtFrame
+	public static int CancelPromptLineId1
+	public static int CancelPromptLineId2
+	public static int CancelPromptLineId3
+	public static int CancelPromptLineId4
+	public static int CancelPromptLineId5
+	public RectTransform _rootRect
+	public float _baseAnchoredY
+	public bool _liftInited
+	public static bool _IsAnyOptionsShowing_k__BackingField
+	public static bool _HasOpenedThisSession_k__BackingField
+	public static int MoreMusicHintLineId
+	public static string QuietMenuTagPrefix
+	public static int CakeAskLineId
+	public static int NightTalkMemoryFirstEntryId
+	public static string NightTalkMemoryTagPrefix
+	public static int CakeMemoryEntryId
+	public static string CakeMemoryTag
+	public static string CakeStatePrefix
+	public bool IsAwaitingDialogueResponse
+	public bool HasActiveOrPendingOptions
+	public static bool IsAnyOptionsShowing
+	public static bool HasOpenedThisSession
+	public static string UiLang
+	public static string TimerLabel
+	public static string AlarmLabel
+	public static string AlarmCancelledLine
+	public void Awake()
+	public void Update()
+	public void LateUpdate()
+	public void ApplyPoseLift()
+	public void OnDestroy()
+	public void Show()
+	public void ShowOptions(IReadOnlyList<string> options, Action<int> onSelected)
+	public void ShowOptionsNow(IReadOnlyList<string> options, Action<int> onSelected)
+	public static bool ShouldWaitForLilithLine()
+	public IEnumerator ShowOptionsAfterLilithLine(IReadOnlyList<string> options, Action<int> onSelected)
+	public void CancelDeferredOptions()
+	public void ShowEntryOptions(IReadOnlyList<PlayerLineEntry> entries, Action<PlayerLineEntry> onSelected)
+	public void ShowDebugOptions(int optionCount)
+	public void ShowMusicMenu()
+	public void ShowMusicPage(int page)
+	public static string MoreMusicLabel()
+	public void OpenMusicFolderWithHint()
+	public void ShowMusicControlMenu()
+	public static void StartUserMusicWithReaction(string filePath)
+	public static string LocalizedLine(int lineId, string fallback)
+	public static string MusicPageLabel(int index)
+	public static string PomodoroMenuLabel(bool running)
+	public static string MusicControlLabel(int index)
+	public void ShowTimerMenu()
+	public static string FormatMinuteLabel(int minutes)
+	public void ShowReminderRootMenu()
+	public void ShowPomodoroMenu()
+	public void ShowAlarmMenu()
+	public void ShowGiftMenu()
+	public void ShowMemoriesMenu()
+	public static void AddAlarmPreset(List<string> options, List<DateTime> times, string label, DateTime time)
+	public static void AddMorningAlarmPreset(List<string> options, List<DateTime> times, DateTime now, int hour)
+	public static string FormatAlarmDayTime(DateTime now, DateTime time)
+	public static string RelMinutesLabel(int m)
+	public static string RelHoursLabel(int h)
+	public static string TonightLabel(DateTime t)
+	public static string MorningLabel(bool tomorrow, int hour)
+	public static string CancelAlarmLabel(string dayTime)
+	public static string AlarmSetLine(string dayTime)
+	public void Hide()
+	public void HandleOnSettingViewShown()
+	public void HideWithPopAnim()
+	public IEnumerator PopThenHideRoutine()
+	public void HandleCancelWithoutSelect()
+	public bool IsPointerOverAnyOption()
+	public void EnsureButtonAnims(Transform root)
+	public void CollectButtons(Transform root)
+	public void RefreshEntries()
+	public static PlayerLineEntry CreateGiftEntry()
+	public static PlayerLineEntry CreateMemoriesEntry()
+	public static PlayerLineEntry CreateClothingSwapEntry()
+	public static bool HasQuietMenuTag(List<string> states)
+	public static bool TryGetQuietReply(List<string> states, out string line, out string emotion)
+	public void SetEntryContents(IReadOnlyList<PlayerLineEntry> entries)
+	public void SetButtonContents(int showCount, Func<int, string> getText)
+	public void PlayButtonEnterAnims(int showCount)
+	public PlayerLineButtonAnimOrder GetActiveAnimOrder()
+	public void SortEntriesByTextLengthIfNeeded()
+	public void ApplyLayout(int optionCount)
+	public void ApplyAdaptiveColumn(Transform root)
+	public static void SetCustomLayoutRootVisible(Transform root, bool visible)
+	public Transform GetLayoutRoot(PlayerLineLayoutType layoutType)
+	public static PlayerLineLayoutType GetLayoutType(int optionCount)
+	public void OnButtonClicked(int index)
+	public IEnumerator DisappearAfterDialogue()
+	public static void EnterDisappearHide(CharacterController cc)
+	public void BeginDissipateAfterDialogue()
+	public IEnumerator DissipateAfterDialogue()
+	public static void EnterDissipateHide(CharacterController cc)
+	public static void MarkEntryPicked(PlayerLineEntry entry)
+	public static bool IsViewExhausted(PlayerLineEntry entry)
+	public bool HasAnyViewedOneTime()
+	public bool AllOneTimeEntriesViewed()
+	public List<PlayerLineEntry> GetViewedOneTimeEntries()
+	public static void MarkEntryViewed(PlayerLineEntry entry)
+	public void TrySayCakeAsk(PlayerLineEntry entry)
+	public static string CakeAskLine()
+	public bool TryShowDirectChildren(PlayerLineEntry entry)
+	public static bool StartMatchingDialogue(PlayerLineEntry entry)
+	public void MarkNightTalkMemoryViewed(int segment)
+	public bool StartMemoryDialogue(PlayerLineEntry entry)
+	public static int GetNightTalkMemorySegment(PlayerLineEntry entry)
+	public static bool HasCakeState(PlayerLineEntry entry)
+	public bool IsCakeRootEntry(PlayerLineEntry entry)
+	public void MarkCakeMemoryViewed()
+	public bool ShowCakeReplayMenu()
+	public void ShowCanvas(float autoHideDelay)
+	public DialogueNode FindMatchingDialogue(List<string> states)
+	public static DialogueNode FindMatchingDialogueByStates(List<string> states)
+	public static bool HasAnyMatchingState(IReadOnlyList<string> sourceStates, IReadOnlyList<string> targetStates)
+	public static string GetPlayerLineText(PlayerLineEntry entry)
+	public PlayerLineController()
+	public void _ShowReminderRootMenu_b__111_0(int index)
+	public void _ShowMemoriesMenu_b__115_0(PlayerLineEntry entry)
+	public string _RefreshEntries_b__141_0(int index)
+	public string _RefreshEntries_b__141_2(int index)
+	public string _SetEntryContents_b__148_0(int index)
+======== DialogueTriggerType ========
+public enum DialogueTriggerType
+======== DialogueStateType ========
+public enum DialogueStateType
