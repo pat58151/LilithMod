@@ -41,7 +41,7 @@ namespace LilithMod
                 }
                 catch (Exception ex)
                 {
-                    Log.LogError($"[LilithMod] Unhandled exception during dump: {ex}");
+                    LilithModPlugin.Logger.LogError($"[LilithMod] Unhandled exception during dump: {ex}");
                 }
                 _done = true;
                 Destroy(gameObject);
@@ -50,7 +50,7 @@ namespace LilithMod
 
             if (_elapsed >= _timeout)
             {
-                Log.LogWarning("[LilithMod] DialogueManager instance not found within timeout; aborting dump.");
+                LilithModPlugin.Logger.LogWarning("[LilithMod] DialogueManager instance not found within timeout; aborting dump.");
                 _done = true;
                 Destroy(gameObject);
             }
@@ -73,7 +73,7 @@ namespace LilithMod
                 var databases = DialogueManager.s_instance._databases;
                 if (databases == null)
                 {
-                    Log.LogWarning("[LilithMod] _databases is null; skipping dialogue node dump.");
+                    LilithModPlugin.Logger.LogWarning("[LilithMod] _databases is null; skipping dialogue node dump.");
                 }
                 else
                 {
@@ -126,13 +126,13 @@ namespace LilithMod
                         string safeName = SanitizeFileName(db.databaseName ?? "unknown");
                         string filePath = Path.Combine(dumpDir, $"dialogue_nodes_{safeName}.json");
                         File.WriteAllText(filePath, json);
-                        Log.LogInfo($"[LilithMod] Wrote {nodeDtos.Count} nodes to {Path.GetFileName(filePath)}");
+                        LilithModPlugin.Logger.LogInfo($"[LilithMod] Wrote {nodeDtos.Count} nodes to {Path.GetFileName(filePath)}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                Log.LogError($"[LilithMod] Error dumping dialogue nodes: {ex}");
+                LilithModPlugin.Logger.LogError($"[LilithMod] Error dumping dialogue nodes: {ex}");
             }
 
             // --- Player Line Database ---
@@ -141,7 +141,7 @@ namespace LilithMod
                 var playerDb = DialogueManager.s_instance.GetPlayerLineDatabase();
                 if (playerDb == null)
                 {
-                    Log.LogWarning("[LilithMod] GetPlayerLineDatabase() returned null; skipping player lines dump.");
+                    LilithModPlugin.Logger.LogWarning("[LilithMod] GetPlayerLineDatabase() returned null; skipping player lines dump.");
                 }
                 else
                 {
@@ -172,12 +172,12 @@ namespace LilithMod
                     string json = JsonConvert.SerializeObject(entryDtos, Formatting.Indented);
                     string filePath = Path.Combine(dumpDir, "player_lines.json");
                     File.WriteAllText(filePath, json);
-                    Log.LogInfo($"[LilithMod] Wrote {entryDtos.Count} player line entries to player_lines.json");
+                    LilithModPlugin.Logger.LogInfo($"[LilithMod] Wrote {entryDtos.Count} player line entries to player_lines.json");
                 }
             }
             catch (Exception ex)
             {
-                Log.LogError($"[LilithMod] Error dumping player lines: {ex}");
+                LilithModPlugin.Logger.LogError($"[LilithMod] Error dumping player lines: {ex}");
             }
 
             // --- Dialogue Line Database ---
@@ -200,7 +200,7 @@ namespace LilithMod
 
                 if (dialogueLineDb == null)
                 {
-                    Log.LogInfo("[LilithMod] No DialogueLineDatabase found in memory – skipping dump.");
+                    LilithModPlugin.Logger.LogInfo("[LilithMod] No DialogueLineDatabase found in memory – skipping dump.");
                 }
                 else
                 {
@@ -228,15 +228,15 @@ namespace LilithMod
                     string json = JsonConvert.SerializeObject(entryDtos, Formatting.Indented);
                     string filePath = Path.Combine(dumpDir, "dialogue_lines.json");
                     File.WriteAllText(filePath, json);
-                    Log.LogInfo($"[LilithMod] Wrote {entryDtos.Count} dialogue line entries to dialogue_lines.json");
+                    LilithModPlugin.Logger.LogInfo($"[LilithMod] Wrote {entryDtos.Count} dialogue line entries to dialogue_lines.json");
                 }
             }
             catch (Exception ex)
             {
-                Log.LogError($"[LilithMod] Error dumping dialogue lines: {ex}");
+                LilithModPlugin.Logger.LogError($"[LilithMod] Error dumping dialogue lines: {ex}");
             }
 
-            Log.LogInfo($"[LilithMod] Dump complete. Nodes: {totalNodes}, PlayerLines: {totalPlayerLines}, DialogueLines: {totalDialogueLines}");
+            LilithModPlugin.Logger.LogInfo($"[LilithMod] Dump complete. Nodes: {totalNodes}, PlayerLines: {totalPlayerLines}, DialogueLines: {totalDialogueLines}");
         }
 
         #region Conversion Helpers

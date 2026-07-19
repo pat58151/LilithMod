@@ -8,6 +8,7 @@
     <OutputPath>D:\SteamLibrary\steamapps\common\The NOexistenceN of Lilith\BepInEx\plugins\LilithMod\</OutputPath>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
