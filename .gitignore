@@ -3,3 +3,6 @@ decomp/
 bin/
 obj/
 *.zip
+
+# Holds a copy of LilithMod.cfg, which carries the API key.
+backup/
