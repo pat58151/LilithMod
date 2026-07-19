@@ -47,11 +47,12 @@ namespace LilithMod
         private const int VkNumpadEnter = 0x0D; // Win32 does not separate numpad Enter
         private const float InitTimeoutSeconds = 60f;
         private const float InputFontSize = 18f;
-        private const float PanelWidth = 400f;
-        private const float PanelHeight = 60f;
+        // Proportions of the game's dialogue bar: wide and thin, not a chat rectangle.
+        private const float PanelWidth = 640f;
+        private const float PanelHeight = 44f;
         private const float LeftMarginFraction = 0.02f;   // text starts here
         private const float RightMarginFraction = 0.05f;  // text is cut off here
-        private const float VerticalPadding = 8f;
+        private const float VerticalPadding = 4f;
 
         private RectTransform _textAreaRect;
         private RectTransform _inputTextRect;
@@ -469,7 +470,7 @@ namespace LilithMod
 
             // Adopt the look of one of the game's own input fields. Done last so it can see
             // the finished field, and it deliberately leaves layout/scrolling settings alone.
-            GameStyle.Apply(_panelImage, _inputField, _inputText, _placeholderText,
+            GameStyle.Apply(_panelImage, _inputText, _placeholderText,
                             _canvas != null ? _canvas.transform : null);
 
             // Layout metrics must win over anything the donor styling brought with it.
