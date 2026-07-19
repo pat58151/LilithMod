@@ -833,19 +833,18 @@ namespace LilithMod
 
             LilithModPlugin.Logger.LogInfo($"[LilithMod] Injected {totalInjectedNodes} dialogue nodes, {totalInjectedPlayerLines} player line entries.");
 
-            // Self-check
-            if (allSimplifiedNodes.Count > 0 && simplifiedNodeToId.Count > 0)
+            // Self-check. Must sample a node that was actually injected, not merely
+            // allocated an id: ids are assigned in a first pass before validation, so a
+            // node rejected later (unknown trigger, etc.) burns its id and would report
+            // unreachable even though injection succeeded.
+            if (nodesToInject.Count > 0)
             {
-                int firstNodeId = -1;
-                foreach (var kvp in simplifiedNodeToId)
+                int sampleNodeId = nodesToInject[0].id;
+                bool found = DialogueManager.s_instance.TryGetNode(sampleNodeId, out _);
+                LilithModPlugin.Logger.LogInfo($"[LilithMod] Self-check: node {sampleNodeId} reachable = {found}");
+                if (!found)
                 {
-                    firstNodeId = kvp.Value;
-                    break;
-                }
-                if (firstNodeId > 0)
-                {
-                    bool found = DialogueManager.s_instance.TryGetNode(firstNodeId, out _);
-                    LilithModPlugin.Logger.LogInfo($"[LilithMod] Self-check: node {firstNodeId} reachable = {found}");
+                    LilithModPlugin.Logger.LogWarning("[LilithMod] Self-check FAILED - injected nodes are not in the live index.");
                 }
             }
         }

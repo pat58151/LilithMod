@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    {
+      "key": "modtest_hand",
+      "trigger": "TouchHand",
+      "say": "[MOD] Testing custom dialogue. Can you hear me?",
+      "emotion": "emoji_smile_4",
+      "duration": 4.0,
+      "weight": 999,
+      "choices": [
+        { "text": "[MOD] Yes, loud and clear.", "reply": "[MOD] Reply A reached." },
+        { "text": "[MOD] Branch me elsewhere.", "goto": "modtest_branch" }
+      ]
+    },
+    {
+      "key": "modtest_branch",
+      "say": "[MOD] Goto branch reached."
+    }
+  ]
+}
