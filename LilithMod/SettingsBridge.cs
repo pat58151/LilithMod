@@ -109,7 +109,14 @@ namespace LilithMod
             _pushToTalkKeyField = view.CloneInputRow(inputRow, "LilithPushToTalkKey",
                 out TMP_Text pushToTalkKeyLabel);
             Transform pushToTalkRow = view.GetRowOf(_pushToTalkKeyField.transform);
-            if (pushToTalkRow != null) pushToTalkRow.gameObject.SetActive(true);
+            if (pushToTalkRow != null)
+            {
+                pushToTalkRow.gameObject.SetActive(true);
+                // Clone order does not match reading order: put the chat key first,
+                // since F7 before F8 is what the defaults imply.
+                if (hotkeyRow != null && pushToTalkRow.parent == hotkeyRow.parent)
+                    pushToTalkRow.SetSiblingIndex(hotkeyRow.GetSiblingIndex() + 1);
+            }
             _ambient = view.CloneToggleRow(toggleRow, "LilithAmbient", out TMP_Text ambientLabel);
             Transform sliderRow = view.GetRowOf(view._voiceVolumeSlider.transform);
             _opacity = TraySettingView.CloneVolumeRow(
@@ -133,10 +140,10 @@ namespace LilithMod
             }
 
             SetWrappedLabel(deepSeekLabel, "DeepSeek API Key");
-            SetWrappedLabel(hotkeyLabel, "Open chat key");
+            SetWrappedLabel(hotkeyLabel, "Open chat");
             SetSingleLineLabel(_voiceFolderLabel, "Vocal Synthesis Folder");
             SetWrappedLabel(pushToTalkLabel, "Push to talk");
-            SetWrappedLabel(pushToTalkKeyLabel, "Push-to-talk key");
+            SetWrappedLabel(pushToTalkKeyLabel, "Push-to-talk");
             SetWrappedLabel(ambientLabel, "Ambient remarks");
             SetWrappedLabel(_opacityLabel, "Opacity");
 

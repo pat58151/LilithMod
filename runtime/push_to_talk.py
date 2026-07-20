@@ -34,16 +34,22 @@ import numpy as np
 import sounddevice as sd
 
 RATE = 16_000
-FRAME = 1_280                    # 80 ms
+FRAME = 512                      # 32 ms; Silero requires exactly this at 16 kHz
 FRAME_SECONDS = FRAME / RATE
 PARTIAL_INTERVAL = 0.55          # seconds between interim decodes
 SILENCE_SECONDS = 2.5            # trailing silence that ends an utterance
-ENERGY_FLOOR = 90.0              # RMS over int16; never go below this
-NOISE_MARGIN = 2.0               # voiced must exceed the measured room by this factor
-CALIBRATION_SECONDS = 1.5
 MAX_SECONDS = 60.0               # hard cap, so a stuck trigger cannot grow without bound
 MIN_SPEECH_SECONDS = 0.45        # total voiced audio required before decoding at all
-SPEECH_PAD_FRAMES = 4            # keep ~0.3 s either side of the voiced region
+SPEECH_PAD_SECONDS = 0.3         # keep this much either side of the voiced region
+SPEECH_PAD_FRAMES = int(SPEECH_PAD_SECONDS / FRAME_SECONDS)
+
+# Energy fallback only. These exist for a machine that cannot load Silero, and
+# they are the reason Silero is the default: an RMS threshold is meaningless
+# across different microphones and rooms, so any constant shipped here is wrong
+# for somebody. Measured on one machine, the room varied 20x between runs.
+ENERGY_FLOOR = 90.0
+NOISE_MARGIN = 2.0
+CALIBRATION_SECONDS = 1.5
 PARTIAL_MARKER = "__LILITH_PTT_PARTIAL__"
 SUPPORTED_LANGUAGES = {"en", "ja", "zh"}
 
@@ -67,6 +73,55 @@ HALLUCINATIONS = {
 # is a mismatch whatever its length - real speech of that duration produces more
 # words than that. The cost is that a bare "okay" as an entire message is never
 # heard, which is a fair trade for never inventing one.
+
+
+class SileroDetector:
+    """Neural speech/non-speech classifier.
+
+    The point of this over an energy threshold is that it needs no per-machine
+    tuning: it judges whether a frame contains speech, not whether it is louder
+    than some constant. A quiet speaker on a low-gain laptop microphone and a
+    loud one in a noisy room both work, which an RMS threshold cannot deliver
+    because the right constant differs per microphone and per room.
+    """
+
+    def __init__(self, threshold: float):
+        import torch
+        from silero_vad import load_silero_vad
+
+        self._torch = torch
+        self._model = load_silero_vad()
+        self._threshold = threshold
+
+    def describe(self) -> str:
+        return f"silero(threshold={self._threshold})"
+
+    def reset(self) -> None:
+        # The model is recurrent, so state from the previous utterance would
+        # otherwise leak into the next one.
+        self._model.reset_states()
+
+    def is_speech(self, frame: np.ndarray) -> bool:
+        audio = self._torch.from_numpy(frame.astype(np.float32) / 32768.0)
+        with self._torch.inference_mode():
+            probability = float(self._model(audio, RATE).item())
+        return probability >= self._threshold
+
+
+class EnergyDetector:
+    """Fallback: louder than the room counts as speech."""
+
+    def __init__(self, threshold: float):
+        self._threshold = threshold
+
+    def describe(self) -> str:
+        return f"energy(threshold={self._threshold:.0f})"
+
+    def reset(self) -> None:
+        pass
+
+    def is_speech(self, frame: np.ndarray) -> bool:
+        return float(np.sqrt(np.mean(frame.astype(np.float32) ** 2))) > self._threshold
 
 
 def measure_noise_floor(seconds: float = CALIBRATION_SECONDS) -> float:
@@ -288,9 +343,14 @@ def main() -> None:
                         help="Words to bias recognition toward - names and terms the "
                              "model would otherwise mangle. Keep it short: the model "
                              "can also emit these spontaneously on unclear audio.")
+    parser.add_argument("--vad", default="silero", choices=["silero", "energy"],
+                        help="Speech detector. Silero needs no per-machine tuning and "
+                             "is the only one fit to ship; energy is a fallback.")
+    parser.add_argument("--vad-threshold", type=float, default=0.5,
+                        help="Silero speech probability above which a frame counts.")
     parser.add_argument("--energy-threshold", type=float, default=0.0,
-                        help="Fixed RMS threshold for voiced audio. 0 measures the "
-                             "room at startup instead, which is usually better.")
+                        help="Energy fallback only. Fixed RMS threshold; 0 measures "
+                             "the room at startup instead.")
     parser.add_argument("--save-last", default="",
                         help="Optional WAV path; the last utterance is written there "
                              "for offline comparison.")
@@ -308,7 +368,8 @@ def main() -> None:
         asr = FasterWhisperBackend(args.whisper_model, language,
                                    args.compute_type, args.cpu_threads)
 
-    audio_queue: queue.Queue[np.ndarray] = queue.Queue(maxsize=64)
+    # Frames are 32 ms now, so hold the same few seconds of slack as before.
+    audio_queue: queue.Queue[np.ndarray] = queue.Queue(maxsize=256)
 
     def callback(indata, frames, timing, status):
         del frames, timing, status
@@ -364,7 +425,7 @@ def main() -> None:
             return "no audio"
         array = np.array(energies)
         return (f"rms median={np.median(array):.0f} p90={np.percentile(array, 90):.0f} "
-                f"max={array.max():.0f} threshold={energy_threshold:.0f}")
+                f"max={array.max():.0f} vad={detector.describe()}")
 
     def finalise(frames: list[np.ndarray], flags: list[bool],
                  energies: list[float], reason: str) -> None:
@@ -403,19 +464,28 @@ def main() -> None:
     # repair the mishearings the bias alone does not catch.
     canonical_name = args.vocabulary.split(",")[0].strip()
 
-    if args.energy_threshold > 0:
-        energy_threshold = args.energy_threshold
-        print(f"Voice threshold fixed at {energy_threshold:.0f} RMS.", flush=True)
-    else:
-        noise_floor = measure_noise_floor()
-        energy_threshold = max(ENERGY_FLOOR, noise_floor * NOISE_MARGIN)
-        print(f"Room measured at {noise_floor:.0f} RMS; voice threshold "
-              f"{energy_threshold:.0f}.", flush=True)
+    detector = None
+    if args.vad == "silero":
+        try:
+            detector = SileroDetector(args.vad_threshold)
+        except Exception as error:  # missing package, bad torch, anything
+            print(f"Silero unavailable ({error}); falling back to energy.", flush=True)
+
+    if detector is None:
+        if args.energy_threshold > 0:
+            energy_threshold = args.energy_threshold
+            print(f"Voice threshold fixed at {energy_threshold:.0f} RMS.", flush=True)
+        else:
+            noise_floor = measure_noise_floor()
+            energy_threshold = max(ENERGY_FLOOR, noise_floor * NOISE_MARGIN)
+            print(f"Room measured at {noise_floor:.0f} RMS; voice threshold "
+                  f"{energy_threshold:.0f}.", flush=True)
+        detector = EnergyDetector(energy_threshold)
 
     # Whisper pads every input to the same 30 s window, so one warm-up decode
     # covers the sequence length every later call will use.
     asr.transcribe(np.zeros(RATE, dtype=np.int16))
-    print(f"Speech listener ready. backend={asr.describe()} "
+    print(f"Speech listener ready. vad={detector.describe()} backend={asr.describe()} "
           f"model={args.whisper_model} language={language or 'auto'} "
           f"beam={args.beam_size} vocabulary={args.vocabulary or 'none'} "
           f"silence={silence_limit}s "
@@ -446,6 +516,7 @@ def main() -> None:
                 next_partial_at = now + PARTIAL_INTERVAL
                 current_language = read_trigger_language()
                 asr.set_language(current_language)
+                detector.reset()
                 print(f"Listening. language={current_language}", flush=True)
 
             if not listening:
@@ -465,9 +536,8 @@ def main() -> None:
 
             active.append(frame)
 
-            energy = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))
-            energies.append(energy)
-            speaking = energy > energy_threshold
+            energies.append(float(np.sqrt(np.mean(frame.astype(np.float32) ** 2))))
+            speaking = detector.is_speech(frame)
             voiced.append(speaking)
             if speaking:
                 had_speech = True

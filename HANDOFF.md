@@ -361,15 +361,25 @@ without the third:
    (`measure_noise_floor`, `NOISE_MARGIN`). Defences 1 and 2 both key off which
    frames are "voiced", so with a wrong threshold they filter nothing.
 
-**Startup calibration is not trustworthy on its own.** Two runs minutes apart on
-the same microphone measured **823** and **42** RMS - a 20x spread depending on
-whether the 1.5 s sample caught game audio or Lilith's own playback. The 823 run
-produced a threshold of 3290 and went deaf to normal speech. `ENERGY_FLOOR`
-bounds the low side and `--energy-threshold` overrides calibration entirely, but
-if this misbehaves again the durable fix is a real speech/non-speech classifier
-(Silero VAD, which the ROCm torch can already run) rather than a louder-than-the-
-room comparison. Every utterance logs `rms median/p90/max` against the threshold,
-on success and on cancel, so the numbers are there rather than guessed at.
+**Speech detection is Silero VAD, and energy is only the fallback.** Energy
+thresholding was tried first and is kept solely for a machine that cannot load
+Silero. It was abandoned for a reason worth not rediscovering: four calibration
+runs on the *same* microphone in the *same* room measured **823, 42, 64 and 164**
+RMS, depending on what happened to be audible during the 1.5 s startup sample.
+The 823 run derived a threshold of 3290 and went deaf to normal speech. Worse for
+anyone but this machine, microphone gain varies by orders of magnitude between a
+USB condenser and a laptop array, so no constant shipped here can be right for
+someone else - the fix is not a better constant, it is not using one.
+
+Silero classifies speech rather than measuring loudness, so it needs no
+per-machine tuning, and the model ships inside the `silero-vad` package (no
+runtime download). Two things it constrains: frames must be **exactly 512
+samples** at 16 kHz - `FRAME` and the padding and queue sizes all derive from
+that - and the model is recurrent, so `detector.reset()` runs per utterance or
+the tail of one biases the start of the next.
+
+Every utterance still logs `rms median/p90/max` alongside the detector, on
+success and on cancel, so there are numbers to look at rather than guesses.
 
 **Recognition is biased toward her name** via `--vocabulary`, default
 `Lilith, リリス, 莉莉丝, 莉莉絲`. This is Whisper's decoder prompt (`prompt_ids`;

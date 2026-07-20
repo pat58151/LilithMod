@@ -194,7 +194,7 @@ check("_speechCommandQueue" in chat and "Directory.GetFiles" in chat and
 check("attempt < 3" in chat and "Empty API content on attempt" in chat and
       "requestPayload.Remove(\"response_format\")" in chat,
       "An empty transient completion must use corrective retries instead of dropping a command")
-check("ApplyConfiguredHotkey" in chat and "Open chat key" in settings and
+check("ApplyConfiguredHotkey" in chat and '"Open chat"' in settings and
       "TabControls" in settings and "CaptureChatKey" in settings and
       '"Hotkey", "F7"' in plugin,
       "The F7 chat key must be press-to-rebind in the Controls settings")
@@ -215,8 +215,16 @@ check("WindowFocus.IsKeyDown(_vkPushToTalk)" in chat and "StartListening" in cha
 check("SILENCE_SECONDS = 2.5" in ptt and "silent_for >= silence_limit" in ptt and
       "energy_threshold" in ptt,
       "An utterance must end after a fixed run of trailing silence")
-check("measure_noise_floor" in ptt and "NOISE_MARGIN" in ptt,
-      "The voice threshold must be measured against the room, not hardcoded")
+check("SileroDetector" in ptt and '"--vad"' in ptt and
+      "silero-vad" in requirements,
+      "Speech detection must default to Silero, which needs no per-machine tuning "
+      "- a shipped RMS threshold is wrong for somebody else's microphone and room")
+check("FRAME = 512" in ptt,
+      "Silero requires exactly 512-sample frames at 16 kHz")
+check("EnergyDetector" in ptt and "falling back to energy" in ptt,
+      "A machine that cannot load Silero must still work")
+check("detector.reset()" in ptt,
+      "The recurrent VAD must be reset per utterance or state leaks between them")
 check("HALLUCINATIONS" in ptt and "MIN_SPEECH_SECONDS" in ptt and
       "speech_region" in ptt,
       "Near-silent audio must be trimmed and stock caption phrases rejected, or "
