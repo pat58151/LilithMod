@@ -19,9 +19,15 @@ training/
 # ~2 GB of pretrained models. Runs the voice; never ours to commit.
 voice-runtime/
 
+# Local wake-word Python environment and downloaded speech models.
+.wake-runtime/
+
 # Pre-reinstall snapshots of game-folder state (configs, dumps, reference clips).
 backup-preinstall-*/
 
 # The pre-clean-slate BepInEx tree, moved out of the game folder rather than
 # deleted. Contains their mod's 2 GB voice-runtime and a copy of LilithMod.cfg.
 _dirty-bepinex-*/
+
+# Local secrets: DeepSeek API key. Never commit.
+.env
