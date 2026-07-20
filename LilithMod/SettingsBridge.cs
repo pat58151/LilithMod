@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using TMPro;
 using UI.Common;
 using UI.TraySetting;
@@ -19,11 +20,14 @@ namespace LilithMod
         private TMP_InputField _hotkeyField;
         private Toggle _deepSeekEye;
         private TMP_Text _voiceFolderLabel;
+        private TMP_Text _speechFolderLabel;
+        private TMP_Text _hotkeyLabel;
+        private bool _lastChatAvailability = true;
+        private static readonly Color DisabledColor = new Color(0.45f, 0.45f, 0.45f, 1f);
         private ButtonToggle _pushToTalk;
         private TMP_Text _pushToTalkLabel;
         private bool _lastSpeechAvailability = true;
         private TMP_InputField _pushToTalkKeyField;
-        private ButtonToggle _ambient;
         private Slider _opacity;
         private TMP_Text _opacityLabel;
         private float _nextSync;
@@ -56,6 +60,7 @@ namespace LilithMod
                 ApplyLilithOpacity(LilithModPlugin.CfgLilithOpacity.Value);
                 RefreshSynthesisAvailability();
                 RefreshSpeechAvailability();
+                RefreshChatAvailability();
             }
 
             bool settingsVisible = _view != null && _view.IsVisible;
@@ -108,6 +113,12 @@ namespace LilithMod
                 actionRow, "LilithVoiceFolder",
                 Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
                     new System.Action(OpenVoiceFolder)));
+            _speechFolderLabel = view.CloneActionRow(
+                actionRow, "LilithSpeechFolder",
+                Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
+                    new System.Action(OpenSpeechFolder)));
+            Transform speechFolderRow = view.GetRowOf(_speechFolderLabel.transform);
+            if (speechFolderRow != null) speechFolderRow.gameObject.SetActive(true);
             Transform voiceFolderRow = view.GetRowOf(_voiceFolderLabel.transform);
             if (voiceFolderRow != null) voiceFolderRow.gameObject.SetActive(true);
             _pushToTalk = view.CloneToggleRow(toggleRow, "LilithPushToTalk", out TMP_Text pushToTalkLabel);
@@ -122,7 +133,6 @@ namespace LilithMod
                 if (hotkeyRow != null && pushToTalkRow.parent == hotkeyRow.parent)
                     pushToTalkRow.SetSiblingIndex(hotkeyRow.GetSiblingIndex() + 1);
             }
-            _ambient = view.CloneToggleRow(toggleRow, "LilithAmbient", out TMP_Text ambientLabel);
             Transform sliderRow = view.GetRowOf(view._voiceVolumeSlider.transform);
             _opacity = TraySettingView.CloneVolumeRow(
                 sliderRow, "LilithOpacity", "LilithOpacity", "Lilith opacity", 100);
@@ -145,13 +155,14 @@ namespace LilithMod
             }
 
             SetWrappedLabel(deepSeekLabel, "DeepSeek\nAPI Key");
+            _hotkeyLabel = hotkeyLabel;
             SetWrappedLabel(hotkeyLabel, "Open chat");
+            SetWrappedLabel(_speechFolderLabel, "Open Speech\nInput Folder");
             // Two lines: the row is narrow, so this sits better than one long label.
             SetWrappedLabel(_voiceFolderLabel, "Open Synth\nVoice Folder");
             _pushToTalkLabel = pushToTalkLabel;
             SetWrappedLabel(pushToTalkLabel, "Push to talk");
             SetWrappedLabel(pushToTalkKeyLabel, "Push-to-talk");
-            SetWrappedLabel(ambientLabel, "Ambient remarks");
             SetWrappedLabel(_opacityLabel, "Opacity");
 
             _deepSeekKey.text = LilithModPlugin.CfgApiKey.Value ?? string.Empty;
@@ -170,15 +181,14 @@ namespace LilithMod
                 pushToTalkPlaceholder.text = "F1-F12, A-Z, or 0-9";
                 pushToTalkPlaceholder.overflowMode = TextOverflowModes.Overflow;
             }
-            _ambient.SetValue(LilithModPlugin.CfgAmbientEnabled.Value, false);
 
             view.MapRow(_deepSeekKey, TraySettingView.TabMe);
+            if (_speechFolderLabel != null) view.MapRow(_speechFolderLabel, TraySettingView.TabMe);
             view.MapRow(_hotkeyField, TraySettingView.TabControls);
             if (_voiceFolderLabel != null) view.MapRow(_voiceFolderLabel, TraySettingView.TabSound);
             view.MapRow(_pushToTalk, TraySettingView.TabSound);
             view.MapRow(_pushToTalkKeyField, TraySettingView.TabControls);
             if (_opacity != null) view.MapRow(_opacity, TraySettingView.TabLilith);
-            view.MapRow(_ambient, TraySettingView.TabLilith);
 
             ConfigureNativeVoiceSelector(view);
 
@@ -223,7 +233,6 @@ namespace LilithMod
                     LilithModPlugin.CfgPushToTalkKey.Value = pushToTalkKey.ToUpperInvariant();
                 }
             }
-            if (_ambient != null) LilithModPlugin.CfgAmbientEnabled.Value = _ambient.IsOn;
 
             if (_opacity != null)
             {
@@ -486,14 +495,33 @@ namespace LilithMod
         /// is left untouched, so it comes back on by itself once the listener
         /// returns rather than needing to be re-enabled by hand.
         /// </summary>
+        /// <summary>Chat is useless without a key, so the binding reflects that.</summary>
+        private static bool HasApiKey =>
+            !string.IsNullOrWhiteSpace(LilithModPlugin.CfgApiKey.Value);
+
+        private void RefreshChatAvailability()
+        {
+            if (_hotkeyField == null) return;
+            bool available = HasApiKey;
+            if (_lastChatAvailability == available) return;
+            _lastChatAvailability = available;
+
+            Color color = available ? Color.white : DisabledColor;
+            _hotkeyField.interactable = available;
+            if (_hotkeyField.textComponent != null) _hotkeyField.textComponent.color = color;
+            if (_hotkeyLabel != null) _hotkeyLabel.color = color;
+        }
+
         private void RefreshSpeechAvailability()
         {
             if (_pushToTalk == null) return;
-            bool available = SpeechInputService.IsAvailable;
+            // Both are required: the listener turns speech into text, and the key
+            // turns that text into a reply. Either missing makes the row a lie.
+            bool available = SpeechInputService.IsAvailable && HasApiKey;
             if (_lastSpeechAvailability == available) return;
             _lastSpeechAvailability = available;
 
-            Color color = available ? Color.white : new Color(0.45f, 0.45f, 0.45f, 1f);
+            Color color = available ? Color.white : DisabledColor;
             if (_pushToTalk._button != null) _pushToTalk._button.interactable = available;
             if (_pushToTalk._buttonImage != null) _pushToTalk._buttonImage.color = color;
             if (_pushToTalkLabel != null) _pushToTalkLabel.color = color;
@@ -515,7 +543,7 @@ namespace LilithMod
 
             buttons._jp.enabled = available;
             buttons._jp._allowClickWhenDisabled = false;
-            Color color = available ? Color.white : new Color(0.45f, 0.45f, 0.45f, 1f);
+            Color color = available ? Color.white : DisabledColor;
             if (buttons._jp._targetImage != null) buttons._jp._targetImage.color = color;
             foreach (TMP_Text label in buttons._jp.GetComponentsInChildren<TMP_Text>(true))
                 if (label != null) label.color = color;
@@ -535,6 +563,31 @@ namespace LilithMod
                 labels[i].enableWordWrapping = false;
                 labels[i].enableAutoSizing = false;
                 labels[i].overflowMode = TextOverflowModes.Overflow;
+            }
+        }
+
+        /// <summary>
+        /// Opens the speech input instructions. Deliberately never greyed out: it is
+        /// how you find out why speech is unavailable, so it has to work when
+        /// everything else is disabled.
+        /// </summary>
+        private static void OpenSpeechFolder()
+        {
+            try
+            {
+                string root = Path.GetDirectoryName(
+                    System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".";
+                string folder = Path.Combine(root, "speech-setup");
+                Directory.CreateDirectory(folder);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = folder,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                LilithModPlugin.Logger.LogWarning("[Settings] Could not open speech input folder: " + ex.Message);
             }
         }
 

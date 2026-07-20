@@ -19,8 +19,8 @@ training/
 # ~2 GB of pretrained models. Runs the voice; never ours to commit.
 voice-runtime/
 
-# Local wake-word Python environment and downloaded speech models.
-.wake-runtime/
+# Local speech-input Python environment and downloaded models.
+.speech-runtime/
 
 # Pre-reinstall snapshots of game-folder state (configs, dumps, reference clips).
 backup-preinstall-*/

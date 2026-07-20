@@ -63,7 +63,7 @@ note_journal = read(MOD_DIR, "NoteJournal.cs")
 speech_input = read(MOD_DIR, "SpeechInputService.cs")
 voice_monitor = read(MOD_DIR, "VoiceServiceMonitor.cs")
 ptt = read(ROOT, "runtime", "push_to_talk.py")
-requirements = read(ROOT, "runtime", "wake-listener-requirements.txt")
+requirements = read(ROOT, "runtime", "speech-input-requirements.txt")
 window_focus = read(MOD_DIR, "WindowFocus.cs")
 launcher = read(ROOT, "runtime", "start-lilith.ps1")
 
@@ -319,6 +319,12 @@ check("SpeechInputService" in speech_input and "push-to-talk.alive" in speech_in
       "a bar that waits forever for a transcript nobody is writing")
 check("!SpeechInputService.IsAvailable" in chat,
       "The key must not start listening while the listener is down")
+check("SpeechInputService.IsAvailable && HasApiKey" in settings and
+      "RefreshChatAvailability" in settings,
+      "Push-to-talk needs both the listener and an API key; the chat binding needs "
+      "the key, since neither does anything without it")
+check("OpenSpeechFolder" in settings and 'MapRow(_speechFolderLabel, TraySettingView.TabMe)' in settings,
+      "The speech setup folder must be reachable from the Me tab")
 check("QualifyingUtc" in note_journal and "WindowHours" in plugin and
       "Prune(windowHours)" in note_journal,
       "Qualifying conversations must fall inside one window, not accumulate forever")
@@ -336,6 +342,10 @@ check(any("NAudio" in n for n in (os.listdir(out_dir) if os.path.isdir(out_dir) 
       "No NAudio assembly beside the plugin - playback would fail at runtime")
 check(os.path.exists(os.path.join(out_dir, "SmartReader.dll")),
       "SmartReader.dll not found beside the plugin")
+check(os.path.exists(os.path.join(out_dir, "speech-setup", "README.txt")) and
+      "push_to_talk" not in read(MOD_DIR, "voice-setup", "README.txt"),
+      "Speech input must be documented in its own folder, not inside the voice "
+      "synthesis one that the settings button opens")
 check(os.path.exists(os.path.join(out_dir, "voice-setup", "README.txt")) and
       os.path.exists(os.path.join(out_dir, "voice-setup", "voice-config.example.ini")),
       "Voice setup README/config were not deployed")

@@ -162,8 +162,21 @@ namespace LilithMod
             // WS_EX_NOACTIVATE|WS_EX_TRANSPARENT, so Windows never delivers key messages
             // to it and Unity's input (both new and legacy) is permanently silent here -
             // verified by probe. Global key state is the only thing that sees the press.
-            bool toggle = !SettingsBridge.CapturingChatKey &&
-                          _vkHotkey > 0 && WindowFocus.IsKeyDown(_vkHotkey);
+            // Polled exactly once: IsKeyDown consumes the up-to-down transition, so a
+            // second call in the same frame always reports false.
+            bool hotkeyPressed = !SettingsBridge.CapturingChatKey &&
+                                 _vkHotkey > 0 && WindowFocus.IsKeyDown(_vkHotkey);
+
+            // No key, no chat. The box would open and every send would fail, so the
+            // hotkey is inert rather than misleading - the greyed settings row and
+            // this warning say why.
+            if (hotkeyPressed && !HasApiKey)
+            {
+                WarnMissingApiKey();
+                hotkeyPressed = false;
+            }
+
+            bool toggle = hotkeyPressed;
 
             if (toggle)
             {
@@ -1680,11 +1693,15 @@ namespace LilithMod
         {
             SpeechInputService.Refresh(Time.unscaledTime);
 
-            // Without the listener running the key would open the bar, show
-            // "Listening~", and wait forever for a transcript nobody is writing.
-            if (!LilithModPlugin.CfgPushToTalkEnabled.Value || !SpeechInputService.IsAvailable)
+            // Without the listener the key would open the bar, show "Listening~", and
+            // wait forever for a transcript nobody is writing. Without an API key the
+            // transcript would arrive and then fail to send. Both make the key inert.
+            if (!LilithModPlugin.CfgPushToTalkEnabled.Value ||
+                !SpeechInputService.IsAvailable || !HasApiKey)
             {
                 if (_speechListening) StopListening(true);
+                if (_vkPushToTalk > 0 && !HasApiKey && WindowFocus.IsKeyDown(_vkPushToTalk))
+                    WarnMissingApiKey();
                 return;
             }
 
@@ -1697,6 +1714,21 @@ namespace LilithMod
 
             if (_speechListening) StopListening(true);
             else StartListening();
+        }
+
+        private static bool HasApiKey =>
+            !string.IsNullOrWhiteSpace(LilithModPlugin.CfgApiKey.Value);
+
+        private static float _nextApiKeyWarning;
+
+        /// <summary>Explains an inert key once a minute rather than on every press.</summary>
+        private static void WarnMissingApiKey()
+        {
+            if (Time.unscaledTime < _nextApiKeyWarning) return;
+            _nextApiKeyWarning = Time.unscaledTime + 60f;
+            LilithModPlugin.Logger.LogWarning(
+                "[LlmChat] No DeepSeek API key set; chat keys are disabled. "
+                + "Add one under Settings / Me.");
         }
 
         private void StartListening()

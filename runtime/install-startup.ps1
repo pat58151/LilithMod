@@ -1,5 +1,6 @@
 [CmdletBinding()]
-param([string]$ProjectFolder = "D:\Lilith")
+# Defaults to the repository this script lives in, so it works from any checkout.
+param([string]$ProjectFolder = (Split-Path -Parent $PSScriptRoot))
 
 $ErrorActionPreference = "Stop"
 $launcher = Join-Path $ProjectFolder "runtime\start-lilith.ps1"

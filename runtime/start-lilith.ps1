@@ -1,11 +1,56 @@
 [CmdletBinding()]
 param(
-    [string]$GameFolder = "D:\SteamLibrary\steamapps\common\The NOexistenceN of Lilith",
-    [string]$ProjectFolder = "D:\Lilith",
+    # Empty means "find it": Steam can install to any drive, so the library list
+    # is asked rather than a path assumed.
+    [string]$GameFolder = "",
+    # The repository this script lives in.
+    [string]$ProjectFolder = (Split-Path -Parent $PSScriptRoot),
     [switch]$ServicesOnly
 )
 
 $ErrorActionPreference = "Stop"
+
+function Find-GameFolder {
+    $relative = "steamapps\common\The NOexistenceN of Lilith"
+
+    $steam = $null
+    foreach ($key in @("HKCU:\Software\Valve\Steam", "HKLM:\SOFTWARE\WOW6432Node\Valve\Steam")) {
+        try {
+            $value = (Get-ItemProperty -Path $key -ErrorAction Stop)
+            if ($value.SteamPath) { $steam = $value.SteamPath.Replace("/", "\"); break }
+            if ($value.InstallPath) { $steam = $value.InstallPath; break }
+        }
+        catch { }
+    }
+
+    $roots = New-Object System.Collections.Generic.List[string]
+    if ($steam) { $roots.Add($steam) }
+
+    # Additional libraries are listed in libraryfolders.vdf as "path" entries.
+    if ($steam) {
+        $vdf = Join-Path $steam "steamapps\libraryfolders.vdf"
+        if (Test-Path $vdf) {
+            foreach ($line in Get-Content $vdf) {
+                if ($line -match '"path"\s+"(.+?)"') {
+                    $roots.Add($Matches[1].Replace("\\", "\"))
+                }
+            }
+        }
+    }
+
+    foreach ($root in $roots) {
+        $candidate = Join-Path $root $relative
+        if (Test-Path (Join-Path $candidate "Lilith.exe")) { return $candidate }
+    }
+    return $null
+}
+
+if (-not $GameFolder) {
+    $GameFolder = Find-GameFolder
+    if (-not $GameFolder) {
+        throw "Could not find the game. Pass -GameFolder ""<path to The NOexistenceN of Lilith>""."
+    }
+}
 $configPath = Join-Path $GameFolder "BepInEx\config\LilithMod.cfg"
 $pluginFolder = Join-Path $GameFolder "BepInEx\plugins\LilithMod"
 $voiceFolder = Join-Path $pluginFolder "voice-setup"
@@ -137,9 +182,9 @@ catch {
 try {
     $speechEnabled = Read-LegacySetting "PushToTalkEnabled" "true"
     # Prefer the ROCm runtime: transformers runs Whisper on the Radeon, while the
-    # .wake-runtime venv is CPU-only (CTranslate2 has no ROCm backend).
+    # .speech-runtime venv is CPU-only (CTranslate2 has no ROCm backend).
     $rocmPython = Join-Path $ProjectFolder "voice-runtime\python\Scripts\python.exe"
-    $cpuPython = Join-Path $ProjectFolder ".wake-runtime\Scripts\python.exe"
+    $cpuPython = Join-Path $ProjectFolder ".speech-runtime\Scripts\python.exe"
     if (Test-Path $rocmPython) {
         $speechPython = $rocmPython
         $backendArgs = "--backend transformers --whisper-model openai/whisper-large-v3-turbo"

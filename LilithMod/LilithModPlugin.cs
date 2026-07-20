@@ -168,7 +168,9 @@ namespace LilithMod
                 "Verbose per-frame input and window-focus logging. Only needed when "
                 + "diagnosing why a hotkey or the chat box is not responding.");
 
-            CfgAmbientEnabled = Config.Bind("Companion", "AmbientConversation", true,
+            // Not exposed in settings and not meant to be switched off: spontaneous
+            // remarks are most of what makes her feel present rather than summoned.
+            CfgAmbientEnabled = Config.Bind("Companion", "AmbientAlwaysOn", true,
                 "Allow occasional generated remarks and responses to physical interactions.");
             CfgAmbientMinMinutes = Config.Bind("Companion", "AmbientMinMinutes", 12,
                 "Minimum interval between spontaneous remarks.");

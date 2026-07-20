@@ -102,6 +102,7 @@
     <EmbeddedResource Include="dialogue\zh.tsv" LogicalName="LilithMod.Dialogue.zh.tsv" />
     <None Include="voice-setup\README.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="voice-setup\voice-config.example.ini" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="speech-setup\README.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

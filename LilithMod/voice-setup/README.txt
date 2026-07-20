@@ -1,26 +1,18 @@
 LILITH VOCAL SYNTHESIS SETUP
 ============================
 
-This mod can speak with a synthesised voice and can listen to you. Both are
-OPTIONAL. With neither installed, Lilith still chats normally in text.
+This is about LILITH'S VOICE - making her speak aloud. For talking to her, see
+the speech-setup folder next to this one. The two are independent and either
+works without the other. With neither installed she still chats in text.
 
 Nothing about the voice ships with the mod, and that is deliberate: a voice
 model trained on the game's own audio is the developers' work, so it is not
 mine to distribute. You supply a voice. Instructions below.
 
+You need GPT-SoVITS and a voice model, about 2 GB. It runs entirely on your
+computer and nothing is uploaded. A GPU makes it much faster but is not
+required.
 
-WHAT YOU NEED
--------------
-  Voice output (Lilith speaks)   GPT-SoVITS + a voice model. ~2 GB.
-  Voice input  (you speak)       Python + Whisper. ~2 GB.
-
-Both run entirely on your computer. Nothing is uploaded. A GPU makes both far
-faster but neither requires one.
-
-
--------------------------------------------------------------------------
-PART 1 - VOICE OUTPUT
--------------------------------------------------------------------------
 
 STEP 1. Install GPT-SoVITS
   Download the Windows integrated package from the GPT-SoVITS project
@@ -88,47 +80,6 @@ STEP 6. Turn it on in game
 
 
 -------------------------------------------------------------------------
-PART 2 - VOICE INPUT (OPTIONAL)
--------------------------------------------------------------------------
-
-Press F8, speak, stop. After 2.5 seconds of silence what you said is
-transcribed and sent. Press F8 again to cancel. F7 opens the same bar to type.
-Both keys are rebindable under Settings -> Controls.
-
-INSTALL
-  Needs Python 3.10 or newer, then:
-
-      pip install faster-whisper sounddevice numpy silero-vad
-
-  Run runtime\push_to_talk.py, pointing it at the mod's plugin folder:
-
-      python runtime\push_to_talk.py ^
-        --output  "<plugin folder>\speech-command.txt" ^
-        --trigger "<plugin folder>\push-to-talk.active"
-
-  <plugin folder> is BepInEx\plugins\LilithMod inside the game directory.
-
-  The first run downloads a speech model (~1.5 GB) and takes a few minutes.
-
-GPU
-  NVIDIA:  add --device cuda --compute-type float16
-  AMD:     faster-whisper cannot use your GPU - its backend is CUDA-only. If
-           you have a working ROCm build of PyTorch, use
-           --backend transformers instead, which reaches the GPU through it.
-  Neither: the default runs on CPU. Expect a few seconds per sentence.
-
-ACCURACY
-  --language en           pin the language. Auto-detection on short audio is
-                          unreliable and a wrong guess ruins the transcript.
-                          The mod overrides this per utterance with your game
-                          display language.
-  --vocabulary "Lilith"   bias recognition toward names it would otherwise
-                          mangle. Keep the list short - the model can also
-                          start emitting these words on unclear audio.
-  --whisper-model         small is fast, large-v3 is accurate.
-
-
--------------------------------------------------------------------------
 CONFIG REFERENCE
 -------------------------------------------------------------------------
 
@@ -175,23 +126,17 @@ The voice sounds wrong, flat, or unstable
   Replace the reference audio. Short, clean, calm, correct transcript. This is
   the cause far more often than the model is.
 
-Nothing is transcribed when I speak
-  Check push_to_talk.py's console. It prints "Listening." on F8 and the levels
-  it heard. If it never prints, the trigger path is wrong.
-
-She hears "thank you" when the room is silent
-  Whisper invents stock phrases from silence. The listener filters these and
-  uses voice detection to avoid transcribing near-silence; if it persists, your
-  microphone gain is very high.
+Anything about speaking TO her
+  See the speech-setup folder. That is a separate system with its own setup.
 
 
 -------------------------------------------------------------------------
 PRIVACY AND LICENSING
 -------------------------------------------------------------------------
 
-Everything here is local. Audio is never uploaded; recognition and synthesis
-both run on your machine. Only your typed or spoken message text goes to the
-language model, and your API key stays in the game's own config file.
+Everything here is local. Synthesis runs on your machine and no audio is
+uploaded. Only your typed or spoken message text goes to the language model,
+and your API key stays in the game's own config file.
 
 Voice models trained on the game's audio are derived from the developers'
 work. Keep them to yourself.

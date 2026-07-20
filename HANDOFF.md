@@ -346,7 +346,7 @@ CTranslate2 - faster-whisper's backend - is CUDA-only and has no ROCm build, so
 on this Radeon it can only ever use the CPU. Running Whisper through PyTorch
 instead reaches the GPU, because the ROCm torch in `voice-runtime` presents HIP
 as `cuda`. So the listener runs under `voice-runtime\python`, not the
-`.wake-runtime` venv, and `--backend faster-whisper` remains only as a CPU
+`.speech-runtime` venv, and `--backend faster-whisper` remains only as a CPU
 fallback for a machine without a working torch. Model is
 `openai/whisper-large-v3-turbo`, fp16, beam 5 for the final transcript and
 greedy for partials.
