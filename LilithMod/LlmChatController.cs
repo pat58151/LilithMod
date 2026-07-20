@@ -1523,7 +1523,7 @@ namespace LilithMod
             if (MentionsTimerOrAlarm(user)) return false;
 
             string trimmed = user.Trim();
-            if (trimmed.Length < 24) return false;
+            if (trimmed.Length < LilithModPlugin.CfgNoteMinMessageLength.Value) return false;
             if (trimmed.IndexOf("http", StringComparison.OrdinalIgnoreCase) >= 0) return false;
             if (trimmed.IndexOf('\\') >= 0) return false;
 
