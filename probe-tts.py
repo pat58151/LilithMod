@@ -21,6 +21,15 @@ import urllib.request
 
 DEFAULT_PORTS = [9880, 9881]  # zh, ja in the layout LilithVoiceHost uses
 
+# The payload we echo is Chinese or Japanese, and the console here is a legacy
+# codepage that cannot encode it - printing would crash before synthesis is even
+# attempted. Force UTF-8 and degrade unprintable characters instead of dying.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 
 def port_open(host, port, timeout=1.0):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -73,6 +82,11 @@ def main():
     ap.add_argument("--text-lang", default="zh")
     ap.add_argument("--timeout", type=float, default=120.0)
     ap.add_argument("--out", default="tts-probe.wav")
+    # cut5 splits on punctuation and pads every fragment with fragment_interval,
+    # which reads as unnatural pauses in short lines. cut0 disables splitting.
+    ap.add_argument("--split-method", default="cut5")
+    ap.add_argument("--fragment-interval", type=float, default=0.3)
+    ap.add_argument("--speed", type=float, default=1.0)
     args = ap.parse_args()
 
     print("== ports ==")
@@ -100,6 +114,9 @@ def main():
         "prompt_lang": args.prompt_lang,
         "media_type": "wav",
         "streaming_mode": False,
+        "text_split_method": args.split_method,
+        "fragment_interval": args.fragment_interval,
+        "speed_factor": args.speed,
     }
 
     print(f"\n== synth on {args.port} ==")

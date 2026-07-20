@@ -6,3 +6,11 @@ obj/
 
 # Holds a copy of LilithMod.cfg, which carries the API key.
 backup/
+
+# Voice audio extracted from the games. Local training data only - these are the
+# developers' assets and must never be committed or redistributed.
+voice-data/
+
+# Voice fine-tuning workspace: cloned upstream repo, extracted features, and
+# 6.8 GB of checkpoints. Reproducible from the scripts; never commit it.
+training/
