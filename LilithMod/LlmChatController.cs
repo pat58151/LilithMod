@@ -83,7 +83,6 @@ namespace LilithMod
         private float _lastInteractionReplyAt = -300f;
         private string _pendingInteraction;
         private float _interactionReplyAt;
-        private int _meaningfulConversationCount;
         private bool _letterInFlight;
         private string _speechCommandPath;
         private string _pushToTalkTriggerPath;
@@ -1503,35 +1502,68 @@ namespace LilithMod
             return false;
         }
 
+        /// <summary>
+        /// Whether an exchange is worth counting toward a note.
+        ///
+        /// Raw length was the old test, which let a pasted link qualify and refused
+        /// a short sincere line. This still uses length as the floor - it is the only
+        /// cheap signal available - but requires the message to be mostly words
+        /// rather than a URL or a path, and requires that she actually answered.
+        /// </summary>
+        private static bool IsSubstantialExchange(string user, string lilith)
+        {
+            if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(lilith)) return false;
+            string trimmed = user.Trim();
+            if (trimmed.Length < 24) return false;
+            if (trimmed.IndexOf("http", StringComparison.OrdinalIgnoreCase) >= 0) return false;
+            if (trimmed.IndexOf('\\') >= 0) return false;
+
+            int letters = 0;
+            foreach (char c in trimmed)
+                if (char.IsLetter(c)) letters++;
+            // CJK has no spaces, so word counting does not travel; letter density
+            // separates prose from a pasted token either way.
+            return letters * 2 >= trimmed.Length;
+        }
+
         private void RememberAndMaybeWrite(string user, string lilith)
         {
             MemoryStore.RecordConversation(user, lilith);
-            if (string.IsNullOrWhiteSpace(user) || user.Length < 24) return;
-            _meaningfulConversationCount++;
-            if (_meaningfulConversationCount < 3 || _letterInFlight) return;
-            _meaningfulConversationCount = 0;
+            if (_letterInFlight) return;
+            if (!IsSubstantialExchange(user, lilith)) return;
+
+            NoteJournal.RecordQualifying();
+            if (!NoteJournal.ShouldWrite(
+                    LilithModPlugin.CfgNoteMinConversations.Value,
+                    LilithModPlugin.CfgNoteCooldownHours.Value,
+                    LilithModPlugin.CfgNoteChance.Value))
+                return;
+
             _letterInFlight = true;
             string letterPersona = PersonaPrompt.BuildLetter(PersonaPrompt.CurrentDisplayLanguage());
             string letterMemory = MemoryStore.Context();
             float noteRoll = UnityEngine.Random.value;
             string lengthRule;
             int letterMaxTokens;
+            // Budgets are generous because the failure mode is a note that stops
+            // mid-sentence, and Japanese and Chinese cost far more tokens per
+            // sentence than English does. Overshooting costs nothing.
             if (noteRoll < 0.05f)
             {
                 lengthRule = "Write one long, flowing sentence of roughly 90 to 140 words, plus the Lilith signature.";
-                letterMaxTokens = 220;
+                letterMaxTokens = 420;
             }
             else if (noteRoll < 0.20f)
             {
                 int sentences = UnityEngine.Random.Range(4, 8);
                 lengthRule = $"Write exactly {sentences} short sentences, plus the Lilith signature.";
-                letterMaxTokens = 220;
+                letterMaxTokens = 340;
             }
             else
             {
                 int sentences = UnityEngine.Random.Range(2, 4);
                 lengthRule = $"Write exactly {sentences} short sentences, plus the Lilith signature.";
-                letterMaxTokens = 130;
+                letterMaxTokens = 220;
             }
             Task.Run(async () =>
             {
@@ -1546,7 +1578,13 @@ namespace LilithMod
                         letterMemory,
                         letterMaxTokens,
                         CancellationToken.None);
-                    if (!string.IsNullOrWhiteSpace(letter)) _letterQueue.Enqueue(letter);
+                    if (!string.IsNullOrWhiteSpace(letter))
+                    {
+                        _letterQueue.Enqueue(letter);
+                        // Only now: a failed request must not consume the cooldown,
+                        // or a transient outage silently costs a keepsake.
+                        NoteJournal.MarkWritten();
+                    }
                 }
                 catch (Exception ex)
                 {

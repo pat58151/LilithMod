@@ -27,6 +27,7 @@ import argparse
 import os
 import queue
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -36,7 +37,7 @@ import sounddevice as sd
 RATE = 16_000
 FRAME = 512                      # 32 ms; Silero requires exactly this at 16 kHz
 FRAME_SECONDS = FRAME / RATE
-PARTIAL_INTERVAL = 0.55          # seconds between interim decodes
+PARTIAL_INTERVAL = 0.25          # seconds between interim decodes
 SILENCE_SECONDS = 2.5            # trailing silence that ends an utterance
 MAX_SECONDS = 60.0               # hard cap, so a stuck trigger cannot grow without bound
 MIN_SPEECH_SECONDS = 0.45        # total voiced audio required before decoding at all
@@ -419,6 +420,63 @@ def main() -> None:
         last = min(len(frames), indices[-1] + 1 + SPEECH_PAD_FRAMES)
         return np.concatenate(frames[first:last])
 
+    # Interim decoding runs on its own thread. Done inline it stalled the capture
+    # loop for the length of a decode (~0.4 s), so audio backed up and updates
+    # could only arrive every interval-plus-decode. The loop now just hands over a
+    # snapshot and keeps reading the microphone.
+    partial_requests: queue.Queue = queue.Queue(maxsize=1)
+    model_lock = threading.Lock()
+    utterance_lock = threading.Lock()
+    utterance_id = 0
+
+    def current_utterance_id() -> int:
+        with utterance_lock:
+            return utterance_id
+
+    def partial_worker() -> None:
+        last_sent = ""
+        last_id = -1
+        while True:
+            item = partial_requests.get()
+            if item is None:
+                return
+            samples, request_id = item
+            if request_id != current_utterance_id():
+                continue  # the utterance ended while this was queued
+            if request_id != last_id:
+                last_id = request_id
+                last_sent = ""
+
+            decode_started = time.monotonic()
+            with model_lock:
+                text = asr.transcribe(samples)
+            decode_seconds = time.monotonic() - decode_started
+
+            if normalise(text) in HALLUCINATIONS:
+                text = ""
+            # Re-check: the utterance may have ended while this was decoding, and a
+            # late partial would overwrite the final transcript with a worse one.
+            if not text or text == last_sent or request_id != current_utterance_id():
+                continue
+            last_sent = text
+            write_command(output, PARTIAL_MARKER + "\n" + text)
+            print(f"Partial ({decode_seconds:.2f}s decode, "
+                  f"{len(samples) / RATE:.1f}s audio, "
+                  f"backlog={audio_queue.qsize()}): {text}", flush=True)
+
+    threading.Thread(target=partial_worker, name="partials", daemon=True).start()
+
+    def end_utterance() -> None:
+        """Invalidate in-flight partials so none can land after the final text."""
+        nonlocal utterance_id
+        with utterance_lock:
+            utterance_id += 1
+        try:
+            while True:
+                partial_requests.get_nowait()
+        except queue.Empty:
+            pass
+
     def report_energy(energies: list[float]) -> str:
         """Describe what was actually heard, so the threshold can be set from data."""
         if not energies:
@@ -429,6 +487,7 @@ def main() -> None:
 
     def finalise(frames: list[np.ndarray], flags: list[bool],
                  energies: list[float], reason: str) -> None:
+        end_utterance()
         voiced_seconds = sum(flags) * FRAME_SECONDS
         if voiced_seconds < MIN_SPEECH_SECONDS:
             write_command(output, "")
@@ -444,7 +503,8 @@ def main() -> None:
                 print(f"Could not save last utterance: {error}", flush=True)
 
         decode_started = time.monotonic()
-        text = asr.transcribe(samples, beam_size=args.beam_size)
+        with model_lock:
+            text = asr.transcribe(samples, beam_size=args.beam_size)
         decode_seconds = time.monotonic() - decode_started
         text = correct_leading_name(text, canonical_name)
 
@@ -527,6 +587,7 @@ def main() -> None:
                 # was heard anyway - a cancel after speaking usually means the
                 # threshold never let the utterance end on its own.
                 listening = False
+                end_utterance()
                 print(f"Listening cancelled. voiced={sum(voiced) * FRAME_SECONDS:.2f}s "
                       f"{report_energy(energies)}", flush=True)
                 active = []
@@ -557,21 +618,15 @@ def main() -> None:
                 # decodes near-silence and returns a stock caption phrase.
                 if (speech_frames * FRAME_SECONDS >= MIN_SPEECH_SECONDS
                         and now >= next_partial_at):
-                    decode_started = time.monotonic()
-                    partial = asr.transcribe(speech_region(active, voiced))
-                    decode_seconds = time.monotonic() - decode_started
-                    if normalise(partial) in HALLUCINATIONS:
-                        partial = ""
-                    if partial and partial != last_partial:
-                        last_partial = partial
-                        write_command(output, PARTIAL_MARKER + "\n" + partial)
-                        print(f"Partial ({decode_seconds:.2f}s decode, "
-                              f"{len(active) * FRAME_SECONDS:.1f}s audio, "
-                              f"backlog={audio_queue.qsize()}): {partial}", flush=True)
-                    else:
-                        print(f"Partial empty or unchanged ({decode_seconds:.2f}s "
-                              f"decode, backlog={audio_queue.qsize()}).", flush=True)
-                    next_partial_at = time.monotonic() + PARTIAL_INTERVAL
+                    # Hand the snapshot to the worker and carry on reading the
+                    # microphone. Never block: if the worker is still busy, skip
+                    # this turn rather than queue audio that is already stale.
+                    try:
+                        partial_requests.put_nowait(
+                            (speech_region(active, voiced), current_utterance_id()))
+                    except queue.Full:
+                        pass
+                    next_partial_at = now + PARTIAL_INTERVAL
                 continue
 
             frames, flags, levels = active, voiced, energies

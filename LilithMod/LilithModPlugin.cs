@@ -34,6 +34,9 @@ namespace LilithMod
         internal static ConfigEntry<float> CfgLilithOpacity;
         internal static ConfigEntry<bool> CfgPushToTalkEnabled;
         internal static ConfigEntry<string> CfgPushToTalkKey;
+        internal static ConfigEntry<int> CfgNoteMinConversations;
+        internal static ConfigEntry<double> CfgNoteCooldownHours;
+        internal static ConfigEntry<float> CfgNoteChance;
 
         // Voice settings – optional TTS via a local GPT‑SoVITS service.
         internal static ConfigEntry<bool> CfgVoiceEnabled;
@@ -182,7 +185,18 @@ namespace LilithMod
             CfgPushToTalkEnabled = Config.Bind("VoiceInput", "PushToTalkEnabled", true,
                 "Enable the external push-to-talk transcriber.");
             CfgPushToTalkKey = Config.Bind("VoiceInput", "PushToTalkKey", "F8",
-                "Hold this key to speak. F1-F12, A-Z, or 0-9.");
+                "Press this key to start and stop speaking. F1-F12, A-Z, or 0-9.");
+
+            // Notes are meant to be keepsakes, so all three gates are deliberately
+            // strict: substance, then time, then chance.
+            CfgNoteMinConversations = Config.Bind("Letters", "MinConversationsPerNote", 6,
+                "Substantial conversations required before a note becomes possible.");
+            CfgNoteCooldownHours = Config.Bind("Letters", "CooldownHours", 36.0,
+                "Minimum hours between notes.");
+            CfgNoteChance = Config.Bind("Letters", "Chance", 0.5f,
+                "Chance a note is written once it is otherwise due, so it does not arrive on a felt schedule.");
+
+            NoteJournal.Initialize();
 
             MemoryStore.Initialize();
 

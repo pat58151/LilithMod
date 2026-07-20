@@ -141,7 +141,7 @@ namespace LilithMod
                 }
             }
 
-            SetWrappedLabel(deepSeekLabel, "DeepSeek API Key");
+            SetWrappedLabel(deepSeekLabel, "DeepSeek\nAPI Key");
             SetWrappedLabel(hotkeyLabel, "Open chat");
             // Two lines: the row is narrow, so this sits better than one long label.
             SetWrappedLabel(_voiceFolderLabel, "Open Synth\nVoice Folder");
@@ -319,21 +319,36 @@ namespace LilithMod
             eye = null;
             if (field == null) return;
 
+            // Reserve room at the right of the field for the reveal toggle, so the
+            // key text stops before it instead of running underneath.
+            const float eyeInset = 6f;
+            const float eyeWidth = 28f;
+            const float textInset = eyeInset + eyeWidth + 4f;
+
             if (field.placeholder is TMP_Text placeholder)
             {
                 placeholder.text = "Place your API Key";
                 placeholder.enableWordWrapping = false;
                 placeholder.overflowMode = TextOverflowModes.Overflow;
+                Vector4 placeholderMargin = placeholder.margin;
+                placeholder.margin = new Vector4(placeholderMargin.x, placeholderMargin.y,
+                    textInset, placeholderMargin.w);
+            }
+            if (field.textComponent != null)
+            {
+                Vector4 textMargin = field.textComponent.margin;
+                field.textComponent.margin = new Vector4(textMargin.x, textMargin.y,
+                    textInset, textMargin.w);
             }
 
             var eyeObject = new GameObject("ApiKeyEye");
             eyeObject.transform.SetParent(field.transform, false);
             var rect = eyeObject.AddComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(28f, 20f);
-            rect.anchoredPosition = Vector2.zero;
+            rect.anchorMin = new Vector2(1f, 0.5f);
+            rect.anchorMax = new Vector2(1f, 0.5f);
+            rect.pivot = new Vector2(1f, 0.5f);
+            rect.sizeDelta = new Vector2(eyeWidth, 20f);
+            rect.anchoredPosition = new Vector2(-eyeInset, 0f);
 
             var image = eyeObject.AddComponent<Image>();
             image.sprite = GetEyeSprite();

@@ -59,6 +59,7 @@ integrations = read(MOD_DIR, "ModIntegrations.cs")
 game_voice = read(MOD_DIR, "GameVoiceCoordinator.cs")
 settings = read(MOD_DIR, "SettingsBridge.cs")
 voice_setup = read(MOD_DIR, "VoiceSetup.cs")
+note_journal = read(MOD_DIR, "NoteJournal.cs")
 voice_monitor = read(MOD_DIR, "VoiceServiceMonitor.cs")
 ptt = read(ROOT, "runtime", "push_to_talk.py")
 requirements = read(ROOT, "runtime", "wake-listener-requirements.txt")
@@ -298,6 +299,15 @@ check("StartCountdown((float)seconds, false)" in chat and
 check('SetWrappedLabel(_voiceFolderLabel, "Open Synth\\nVoice Folder")' in settings and
       'labels[i].enableWordWrapping = false' in settings,
       "The vocal synthesis folder row must be labelled over two lines")
+check("NoteJournal" in chat and "notes.json" in note_journal and
+      "MinConversationsPerNote" in plugin and "CooldownHours" in plugin,
+      "Note cadence must persist across restarts, or the counter resets every launch")
+check("NoteJournal.MarkWritten()" in chat and
+      chat.index("NoteJournal.MarkWritten()") > chat.index("_letterQueue.Enqueue(letter)"),
+      "The cooldown must start only after a note is actually produced, so a failed "
+      "request does not silently cost a keepsake")
+check("IsSubstantialExchange" in chat and "http" in chat,
+      "A pasted link must not count as a meaningful conversation")
 check("VocalSynthesisPreferred" in plugin and "Task.WhenAny" in voice_monitor and
       "CfgReplaceGameVoice.Value = effective" in voice_monitor and
       "VoiceServiceMonitor.IsAvailable" in settings and "_jp.enabled = available" in settings,
