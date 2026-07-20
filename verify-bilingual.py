@@ -308,6 +308,13 @@ check("NoteJournal.MarkWritten()" in chat and
       "request does not silently cost a keepsake")
 check("IsSubstantialExchange" in chat and "http" in chat,
       "A pasted link must not count as a meaningful conversation")
+check("nativeActionHandled) return false" in chat and
+      "NeedsLiveInformation(user)) return false" in chat and
+      "MentionsTimerOrAlarm" in chat,
+      "Errands - timers, alarms, weather, web lookups - must not build toward a note")
+check("QualifyingUtc" in note_journal and "WindowHours" in plugin and
+      "Prune(windowHours)" in note_journal,
+      "Qualifying conversations must fall inside one window, not accumulate forever")
 check("VocalSynthesisPreferred" in plugin and "Task.WhenAny" in voice_monitor and
       "CfgReplaceGameVoice.Value = effective" in voice_monitor and
       "VoiceServiceMonitor.IsAvailable" in settings and "_jp.enabled = available" in settings,

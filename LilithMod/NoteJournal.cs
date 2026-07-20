@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Newtonsoft.Json;
@@ -22,7 +23,9 @@ namespace LilithMod
         private sealed class State
         {
             public DateTime LastNoteUtc { get; set; } = DateTime.MinValue;
-            public int QualifyingSinceLastNote { get; set; }
+            // Timestamps rather than a running count: the conversations have to be
+            // part of one stretch of talking, not six exchanges spread over weeks.
+            public List<DateTime> QualifyingUtc { get; set; } = new List<DateTime>();
             public int NotesWritten { get; set; }
         }
 
@@ -46,13 +49,21 @@ namespace LilithMod
         }
 
         /// <summary>Counts one exchange substantial enough to be worth remembering.</summary>
-        public static void RecordQualifying()
+        public static void RecordQualifying(double windowHours)
         {
             lock (Gate)
             {
-                _state.QualifyingSinceLastNote++;
+                _state.QualifyingUtc.Add(DateTime.UtcNow);
+                Prune(windowHours);
                 Save();
             }
+        }
+
+        /// <summary>Drops timestamps that have fallen out of the window.</summary>
+        private static void Prune(double windowHours)
+        {
+            DateTime cutoff = DateTime.UtcNow.AddHours(-windowHours);
+            _state.QualifyingUtc.RemoveAll(stamp => stamp < cutoff);
         }
 
         /// <summary>
@@ -62,11 +73,13 @@ namespace LilithMod
         /// player can feel. A failed roll does NOT clear the count, so eligibility
         /// persists and the note simply comes later.
         /// </summary>
-        public static bool ShouldWrite(int minimumConversations, double cooldownHours, float chance)
+        public static bool ShouldWrite(int minimumConversations, double windowHours,
+                                      double cooldownHours, float chance)
         {
             lock (Gate)
             {
-                if (_state.QualifyingSinceLastNote < minimumConversations) return false;
+                Prune(windowHours);
+                if (_state.QualifyingUtc.Count < minimumConversations) return false;
                 if (_state.LastNoteUtc != DateTime.MinValue &&
                     (DateTime.UtcNow - _state.LastNoteUtc).TotalHours < cooldownHours) return false;
                 return UnityEngine.Random.value < chance;
@@ -78,7 +91,7 @@ namespace LilithMod
             lock (Gate)
             {
                 _state.LastNoteUtc = DateTime.UtcNow;
-                _state.QualifyingSinceLastNote = 0;
+                _state.QualifyingUtc.Clear();
                 _state.NotesWritten++;
                 Save();
                 LilithModPlugin.Logger.LogInfo(
@@ -93,7 +106,7 @@ namespace LilithMod
                 string last = _state.LastNoteUtc == DateTime.MinValue
                     ? "never"
                     : _state.LastNoteUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-                return $"qualifying={_state.QualifyingSinceLastNote} last={last} total={_state.NotesWritten}";
+                return $"qualifying={_state.QualifyingUtc.Count} last={last} total={_state.NotesWritten}";
             }
         }
 

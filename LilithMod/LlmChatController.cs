@@ -1215,7 +1215,7 @@ namespace LilithMod
                     {
                         lock (_history) _history.Add(new Message { Role = "assistant", Content = result.Text });
                         TrimHistory();
-                        RememberAndMaybeWrite(result.UserInput, result.Text);
+                        RememberAndMaybeWrite(result.UserInput, result.Text, result.NativeActionHandled);
                     }
 
                     if (VoiceConfig.Enabled && LilithModPlugin.VoiceProcessor != null)
@@ -1259,7 +1259,8 @@ namespace LilithMod
                 if (!result.Ambient)
                 {
                     TrimHistory();
-                    RememberAndMaybeWrite(result.UserInput, string.Join(" ", spoken));
+                    RememberAndMaybeWrite(result.UserInput, string.Join(" ", spoken),
+                        result.NativeActionHandled);
                 }
 
                 if (!VoiceConfig.Enabled || LilithModPlugin.VoiceProcessor == null)
@@ -1510,9 +1511,17 @@ namespace LilithMod
         /// cheap signal available - but requires the message to be mostly words
         /// rather than a URL or a path, and requires that she actually answered.
         /// </summary>
-        private static bool IsSubstantialExchange(string user, string lilith)
+        private static bool IsSubstantialExchange(string user, string lilith, bool nativeActionHandled)
         {
             if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(lilith)) return false;
+
+            // Errands are not conversations. Setting a timer, asking the forecast, or
+            // sending her to search the web should never build toward a keepsake -
+            // the note is supposed to come out of talking to her, not using her.
+            if (nativeActionHandled) return false;
+            if (NeedsLiveInformation(user)) return false;
+            if (MentionsTimerOrAlarm(user)) return false;
+
             string trimmed = user.Trim();
             if (trimmed.Length < 24) return false;
             if (trimmed.IndexOf("http", StringComparison.OrdinalIgnoreCase) >= 0) return false;
@@ -1526,15 +1535,30 @@ namespace LilithMod
             return letters * 2 >= trimmed.Length;
         }
 
-        private void RememberAndMaybeWrite(string user, string lilith)
+        /// <summary>
+        /// Catches timer and alarm talk the native handler did not claim - the LLM
+        /// may action it instead, and either way it is an errand, not a conversation.
+        /// </summary>
+        private static bool MentionsTimerOrAlarm(string text)
+        {
+            string value = text?.ToLowerInvariant() ?? string.Empty;
+            return value.Contains("timer") || value.Contains("alarm") ||
+                   value.Contains("remind me") || value.Contains("wake me") ||
+                   value.Contains("タイマー") || value.Contains("アラーム") ||
+                   value.Contains("计时") || value.Contains("闹钟");
+        }
+
+        private void RememberAndMaybeWrite(string user, string lilith, bool nativeActionHandled)
         {
             MemoryStore.RecordConversation(user, lilith);
             if (_letterInFlight) return;
-            if (!IsSubstantialExchange(user, lilith)) return;
+            if (!IsSubstantialExchange(user, lilith, nativeActionHandled)) return;
 
-            NoteJournal.RecordQualifying();
+            double windowHours = LilithModPlugin.CfgNoteWindowHours.Value;
+            NoteJournal.RecordQualifying(windowHours);
             if (!NoteJournal.ShouldWrite(
                     LilithModPlugin.CfgNoteMinConversations.Value,
+                    windowHours,
                     LilithModPlugin.CfgNoteCooldownHours.Value,
                     LilithModPlugin.CfgNoteChance.Value))
                 return;

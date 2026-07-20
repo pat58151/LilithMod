@@ -35,6 +35,7 @@ namespace LilithMod
         internal static ConfigEntry<bool> CfgPushToTalkEnabled;
         internal static ConfigEntry<string> CfgPushToTalkKey;
         internal static ConfigEntry<int> CfgNoteMinConversations;
+        internal static ConfigEntry<double> CfgNoteWindowHours;
         internal static ConfigEntry<double> CfgNoteCooldownHours;
         internal static ConfigEntry<float> CfgNoteChance;
 
@@ -191,6 +192,8 @@ namespace LilithMod
             // strict: substance, then time, then chance.
             CfgNoteMinConversations = Config.Bind("Letters", "MinConversationsPerNote", 6,
                 "Substantial conversations required before a note becomes possible.");
+            CfgNoteWindowHours = Config.Bind("Letters", "WindowHours", 4.0,
+                "Those conversations must all fall inside this many hours, so a note comes out of one stretch of talking.");
             CfgNoteCooldownHours = Config.Bind("Letters", "CooldownHours", 36.0,
                 "Minimum hours between notes.");
             CfgNoteChance = Config.Bind("Letters", "Chance", 0.5f,
