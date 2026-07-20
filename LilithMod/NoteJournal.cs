@@ -26,9 +26,8 @@ namespace LilithMod
             // Timestamps rather than a running count: the conversations have to be
             // part of one stretch of talking, not six exchanges spread over weeks.
             public List<DateTime> QualifyingUtc { get; set; } = new List<DateTime>();
-            // The subset that was personal - the player talking about themselves or
-            // about her, rather than talking well about anything. Absent from journals
-            // written before love letters existed, which deserialize to an empty list.
+            // The subset that was personal. Absent from journals written before love
+            // letters existed, which deserialize to an empty list.
             public List<DateTime> PersonalUtc { get; set; } = new List<DateTime>();
             public int NotesWritten { get; set; }
         }
@@ -43,8 +42,7 @@ namespace LilithMod
                 {
                     if (File.Exists(_path))
                         _state = JsonConvert.DeserializeObject<State>(File.ReadAllText(_path)) ?? new State();
-                    // An explicit null in the file beats the field initializer, so the
-                    // lists are re-established rather than trusted.
+                    // An explicit null in the file beats the field initializer.
                     if (_state.QualifyingUtc == null) _state.QualifyingUtc = new List<DateTime>();
                     if (_state.PersonalUtc == null) _state.PersonalUtc = new List<DateTime>();
                 }
@@ -68,10 +66,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// How many of the exchanges still inside the window were personal. Gates the
-        /// love letter, so it can only follow a stretch of actually talking to her.
-        /// </summary>
+        /// <summary>How many exchanges still inside the window were personal.</summary>
         public static int PersonalCount(double windowHours)
         {
             lock (Gate)

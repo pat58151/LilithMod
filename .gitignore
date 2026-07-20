@@ -42,3 +42,6 @@ build-test/
 runtime/*.log
 runtime/__pycache__/
 dist/
+
+# Control file for the local routing hook, not project source.
+.claude/routing-ack

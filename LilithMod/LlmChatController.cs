@@ -1554,13 +1554,9 @@ namespace LilithMod
 
         /// <summary>
         /// Whether the player was talking about themselves or about her, rather than
-        /// simply talking well about something. Gates the love letter, which has to
-        /// have something true to be about.
-        ///
-        /// Bare first person is deliberately not enough - almost every message has an
-        /// "I" in it. A feeling, a state, a life event, or the bond itself has to be
-        /// named. Keyword matching is coarse, but it only ever needs to be right about
-        /// a stretch of conversation, not about one line.
+        /// simply talking well about something. Bare first person is deliberately not
+        /// enough - almost every message has an "I" in it - so a feeling, a life
+        /// event, or the bond itself has to be named.
         /// </summary>
         private static bool IsPersonalExchange(string user)
         {
@@ -1628,9 +1624,8 @@ namespace LilithMod
             float noteRoll = UnityEngine.Random.value;
             string lengthRule;
             int letterMaxTokens;
-            // The rarest note becomes a love letter, but only when the talking that
-            // earned it was actually personal. Landing the roll after a stretch of
-            // errands would produce a declaration about nothing.
+            // Landing the rare roll after a stretch of errands would produce a
+            // declaration about nothing, so the talking has to have been personal.
             bool loveLetter = noteRoll < 0.05f &&
                 NoteJournal.PersonalCount(windowHours) >= LoveLetterPersonalMinimum;
             // Budgets are generous because the failure mode is a note that stops
@@ -1686,10 +1681,6 @@ namespace LilithMod
                 finally { _letterInFlight = false; }
             });
         }
-
-        // Hearts are drawn at a fixed spot on the note. Short notes sit clear of
-        // them; a long one grows underneath and the decoration lands on top of the
-        // text. Past this length the hearts are dropped rather than the words.
 
         /// <summary>
         /// Renders a note from a dropped file, so note layout can be tested without
@@ -1765,11 +1756,7 @@ namespace LilithMod
 
         private const float InteractionCooldownSeconds = 210f;
 
-        /// <summary>
-        /// Personal exchanges needed inside the note window before the rare note is
-        /// allowed to be a love letter. Two, so a single stray "love you" cannot arm
-        /// it on its own.
-        /// </summary>
+        // Two, so a single stray "love you" cannot arm a love letter on its own.
         private const int LoveLetterPersonalMinimum = 2;
 
         private void DrainInteractions()
@@ -1799,9 +1786,8 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Ambient remarks and interaction replies are unprompted LLM calls, so without
-        /// a key they can only fail. The player never asked for them and would just see
-        /// an error surface on its own - so they stay silent instead.
+        /// Ambient remarks and interaction replies are unprompted, so without a key
+        /// they can only surface an error the player never asked for.
         /// </summary>
         private static bool AmbientAllowed =>
             LilithModPlugin.CfgAmbientEnabled.Value && HasApiKey;

@@ -35,6 +35,17 @@ F7 opening the chat box is the acceptance test for 3 and 4.
 The csproj `OutputPath` points straight into the game's plugin folder, so
 **building is deploying**. Close the game first or the DLL is locked.
 
+To **compile-check without deploying** - which works with the game running -
+redirect the output instead:
+
+```
+"C:\Program Files\dotnet\dotnet.exe" build LilithMod\LilithMod.csproj -c Release ^
+    -p:OutputPath=D:\Lilith\build-test\ -v q --nologo -clp:ErrorsOnly
+```
+
+`build-test\` is gitignored. This is the fast loop for anything that is not
+being tested in-game; `dotnet` is not on `PATH`, hence the full path.
+
 ---
 
 ## 3. Running it
@@ -85,9 +96,10 @@ nothing else. Two things it deliberately does NOT do:
 
 | File | Responsibility |
 |---|---|
-| `LilithModPlugin.cs` | Entry point, config binding, **persona prompt**, voice init |
-| `LlmChatController.cs` | F7 chat UI, F8 speech toggle, DeepSeek calls, history, reply parsing, subtitles |
-| `PersonaPrompt.cs` | Persona, per-language style blocks, player name |
+| `LilithModPlugin.cs` | Entry point, config binding, voice init |
+| `LlmChatController.cs` | F7 chat UI, F8 speech toggle, DeepSeek calls, history, reply parsing, subtitles, note cadence |
+| `PersonaPrompt.cs` | Persona, per-language style blocks, player name, letter and love-letter prompts |
+| `NoteJournal.cs` | Persisted note cadence - qualifying and personal exchange timestamps, cooldown |
 | `SettingsBridge.cs` | Rows injected into the game's native settings tabs |
 | `runtime/push_to_talk.py` | Silero VAD + Whisper on the GPU; transcripts back to the mod |
 | `LiveInformationService.cs` | Startup time/weather warm-up, SearXNG search, SmartReader extraction |
@@ -248,12 +260,19 @@ Read this section before debugging anything.
   substantial messages inside four hours, a 36 hour cooldown and a 40% roll is
   a high bar, and "rare" and "broken" look identical from outside.
   `NoteJournal.Describe()` exists to answer this and is not wired to anything.
+  It now also reports `personal=`, so when a note does fire it is possible to
+  tell whether the love-letter branch was even eligible.
+- Whether a love letter has ever fired **in game**. Its prompt was exercised
+  directly against the API and reads correctly, but the branch needs the 5% roll
+  and two personal exchanges on top of every gate above. Assume it is untested.
 
 **Open / not started**
 - `Data/SenWords` filter never traced.
 - No automated install - the release zip is copied in by hand per `INSTALL.txt`.
-- `_dirty-bepinex-20260720-1515\` (~6.7 GB after the runtime was moved out) is
-  leftover and safe to delete.
+- `_dirty-bepinex-20260720-1515\` (**556 MB** measured, not the 6.7 GB claimed
+  here previously - the runtime had already been moved out) is leftover and safe
+  to delete. `backup-preinstall-20260720-1508\` is 6.9 MB and holds a copy of the
+  API key config; delete it deliberately, not casually.
 
 ---
 
@@ -274,10 +293,10 @@ Read this section before debugging anything.
   native bedtime state.
 - Memory: exactly five recent conversations/interactions in game-local
   `memory.json` and `MEMORY.md`. Direct recency is used instead of a vector DB.
-- Letters: every third meaningful conversation can create a DeepSeek-written note
-  through `NoteImageSaver` and notify the native inbox.
-- Settings: masked DeepSeek key bar, reveal toggle, voice replacement,
-  60% click-through, wake words, and ambient speech under the native Lilith tab.
+- Letters: a DeepSeek-written note through `NoteImageSaver`, notifying the native
+  inbox. *(Cadence has since changed twice - see the 2026-07-21 sections.)*
+- Settings: masked DeepSeek key bar, reveal toggle, voice replacement, and
+  60% click-through under the native Lilith tab. *(Row set has since shrunk.)*
 - Built-in voice: native voice playback is patched to GPT-SoVITS using the
   saved Japanese/Chinese choice. WAV results are cached on disk. A resume-safe
   full cache builder is `runtime/precache-game-voice.py`.
@@ -503,7 +522,12 @@ store the result, then decide. This bit once already.
 four runtime scripts resolve the repository root in the body instead. Worth
 knowing before "fixing" a hardcoded path the same way again.
 
-### Follow-up changes, 2026-07-21
+### Superseded: the wake-word era
+
+**Everything in this section describes the always-listening wake system, which
+was removed.** It is kept because the tuning history explains why several
+constants exist, but nothing here is current - F11 is now F7, and the wake model
+is gone entirely. Read "Keyed speech input replaces the wake word" above instead.
 
 - A standalone `Lilith` or `リリス` now opens the F11 bar in a visible listening
   state. The next phrase within eight seconds is submitted as the command.
@@ -526,3 +550,47 @@ knowing before "fixing" a hardcoded path the same way again.
 - Vocal Synthesis availability is checked every two seconds. The option greys out
   and temporarily uses native voice while its service is unavailable. The saved
   preference is retained and restored automatically when the service returns.
+
+### Love letters and the affection rule, 2026-07-21
+
+**Affection is never rejected.** The rule lives in `PersonaPrompt.Identity`, so
+it reaches chat replies and letters alike rather than being bolted onto one path.
+It names the hedges explicitly - deflecting, joking it away, asking if they are
+sure, disclaiming what she is - because a model reaching for a soft no still
+produces a no, and this is the one place in her character where that is wrong.
+Flustered, shy, and lost for words are all allowed; refusing is not.
+
+**The rarest note can become a love letter.** The existing 5% long-sentence
+branch upgrades to a love letter, but only when at least two exchanges inside the
+note window were *personal*. Both conditions matter: landing the rare roll after
+an evening of debugging would otherwise produce a declaration about nothing.
+
+- `NoteJournal` persists `PersonalUtc` alongside `QualifyingUtc`, pruned on the
+  same window and cleared by the same `MarkWritten`. An older `notes.json`
+  predates the field and loads to an empty list; the lists are re-established
+  after deserialization because an explicit `null` in the file beats the field
+  initializer.
+- `IsPersonalExchange` deliberately does not count bare first person - almost
+  every message has an "I" in it - so a feeling, a life event, or the bond itself
+  has to be named. English, Japanese and Simplified Chinese markers.
+- `LoveLetterFraming` requires the letter be anchored in one concrete thing the
+  player did, and bans forever-declarations and unfamiliar pet names. A love
+  letter about nothing in particular is a greeting card.
+- A love letter runs ~680 characters, well past the length where the heart
+  decoration is dropped from the render. Expect these notes to be heartless.
+
+**An anchoring instruction was considered and rejected.** The worry was that a
+note after a topic-heavy conversation would be about the topic rather than about
+the player. Tested directly: given a conversation entirely about the Voyager
+golden record, the *unanchored* prompt still pivoted to the player unprompted,
+and the anchored version was slightly worse - it pushed her toward narrating the
+player's interior instead of noticing a detail. `Identity` already carries "your
+world is the player", so an anchor competes with an instruction she is following.
+Do not add one without first seeing a real note that actually drifted.
+
+**Ambient speech is gated on an API key.** Ambient remarks and interaction
+replies are unprompted calls, so without a key they can only surface an error the
+player never asked for. `TryAmbientRemark` **reschedules** rather than leaving
+itself due - otherwise pasting a key mid-session is answered by a remark firing
+instantly out of nowhere. Interaction replies go through `AmbientAllowed`; the
+interaction is still recorded to memory when the reply is skipped.
