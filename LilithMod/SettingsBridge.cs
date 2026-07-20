@@ -24,7 +24,6 @@ namespace LilithMod
         private TMP_Text _hotkeyLabel;
         private bool _lastChatAvailability = true;
         private static readonly Color DisabledColor = new Color(0.45f, 0.45f, 0.45f, 1f);
-        private ButtonToggle _pushToTalk;
         private TMP_Text _pushToTalkLabel;
         private bool _lastSpeechAvailability = true;
         private TMP_InputField _pushToTalkKeyField;
@@ -97,7 +96,6 @@ namespace LilithMod
         {
             _view = view;
             Transform inputRow = view.GetRowOf(view._musicDirInputField.transform);
-            Transform toggleRow = view.GetRowOf(view._singleClickPassThroughToggle.transform);
             Transform actionRow = view.GetRowOf(view._openMusicFolderLabel.transform);
 
             _deepSeekKey = view.CloneInputRow(inputRow, "LilithDeepSeekApiKey", out TMP_Text deepSeekLabel);
@@ -121,7 +119,6 @@ namespace LilithMod
             if (speechFolderRow != null) speechFolderRow.gameObject.SetActive(true);
             Transform voiceFolderRow = view.GetRowOf(_voiceFolderLabel.transform);
             if (voiceFolderRow != null) voiceFolderRow.gameObject.SetActive(true);
-            _pushToTalk = view.CloneToggleRow(toggleRow, "LilithPushToTalk", out TMP_Text pushToTalkLabel);
             _pushToTalkKeyField = view.CloneInputRow(inputRow, "LilithPushToTalkKey",
                 out TMP_Text pushToTalkKeyLabel);
             Transform pushToTalkRow = view.GetRowOf(_pushToTalkKeyField.transform);
@@ -160,8 +157,7 @@ namespace LilithMod
             SetWrappedLabel(_speechFolderLabel, "Open Speech\nInput Folder");
             // Two lines: the row is narrow, so this sits better than one long label.
             SetWrappedLabel(_voiceFolderLabel, "Open Synth\nVoice Folder");
-            _pushToTalkLabel = pushToTalkLabel;
-            SetWrappedLabel(pushToTalkLabel, "Push to talk");
+            _pushToTalkLabel = pushToTalkKeyLabel;
             SetWrappedLabel(pushToTalkKeyLabel, "Push-to-talk");
             SetWrappedLabel(_opacityLabel, "Opacity");
 
@@ -174,7 +170,6 @@ namespace LilithMod
             }
             ConfigureApiKeyField(_deepSeekKey, out _deepSeekEye);
             UpdateApiKeyFields();
-            _pushToTalk.SetValue(LilithModPlugin.CfgPushToTalkEnabled.Value, false);
             _pushToTalkKeyField.text = LilithModPlugin.CfgPushToTalkKey.Value ?? "F8";
             if (_pushToTalkKeyField.placeholder is TMP_Text pushToTalkPlaceholder)
             {
@@ -183,10 +178,15 @@ namespace LilithMod
             }
 
             view.MapRow(_deepSeekKey, TraySettingView.TabMe);
-            if (_speechFolderLabel != null) view.MapRow(_speechFolderLabel, TraySettingView.TabMe);
+            if (_speechFolderLabel != null)
+            {
+                view.MapRow(_speechFolderLabel, TraySettingView.TabMe);
+                // Last sibling overall, which puts it at the bottom of its own tab.
+                Transform row = view.GetRowOf(_speechFolderLabel.transform);
+                if (row != null) row.SetAsLastSibling();
+            }
             view.MapRow(_hotkeyField, TraySettingView.TabControls);
             if (_voiceFolderLabel != null) view.MapRow(_voiceFolderLabel, TraySettingView.TabSound);
-            view.MapRow(_pushToTalk, TraySettingView.TabSound);
             view.MapRow(_pushToTalkKeyField, TraySettingView.TabControls);
             if (_opacity != null) view.MapRow(_opacity, TraySettingView.TabLilith);
 
@@ -212,7 +212,6 @@ namespace LilithMod
                 LilithModPlugin.CfgHotkey.Value = hotkey.ToUpperInvariant();
             if (_deepSeekEye != null) _deepSeekRevealed = _deepSeekEye.isOn;
             UpdateApiKeyFields();
-            if (_pushToTalk != null) LilithModPlugin.CfgPushToTalkEnabled.Value = _pushToTalk.IsOn;
             string pushToTalkKey = _pushToTalkKeyField?.text?.Trim() ?? string.Empty;
             // Reject a binding that collides with the open-chat key rather than leaving
             // two actions on one key; the field reverts so the rejection is visible.
@@ -514,23 +513,18 @@ namespace LilithMod
 
         private void RefreshSpeechAvailability()
         {
-            if (_pushToTalk == null) return;
+            if (_pushToTalkKeyField == null) return;
             // Both are required: the listener turns speech into text, and the key
-            // turns that text into a reply. Either missing makes the row a lie.
+            // turns that text into a reply. Either missing makes the binding a lie.
             bool available = SpeechInputService.IsAvailable && HasApiKey;
             if (_lastSpeechAvailability == available) return;
             _lastSpeechAvailability = available;
 
             Color color = available ? Color.white : DisabledColor;
-            if (_pushToTalk._button != null) _pushToTalk._button.interactable = available;
-            if (_pushToTalk._buttonImage != null) _pushToTalk._buttonImage.color = color;
+            _pushToTalkKeyField.interactable = available;
+            if (_pushToTalkKeyField.textComponent != null)
+                _pushToTalkKeyField.textComponent.color = color;
             if (_pushToTalkLabel != null) _pushToTalkLabel.color = color;
-            if (_pushToTalkKeyField != null)
-            {
-                _pushToTalkKeyField.interactable = available;
-                if (_pushToTalkKeyField.textComponent != null)
-                    _pushToTalkKeyField.textComponent.color = color;
-            }
         }
 
         private void RefreshSynthesisAvailability()

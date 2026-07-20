@@ -1646,12 +1646,18 @@ namespace LilithMod
             }
         }
 
+        private const float InteractionCooldownSeconds = 210f;
+
         private void DrainInteractions()
         {
             while (InteractionQueue.TryDequeue(out string kind))
             {
                 MemoryStore.RecordInteraction(kind);
-                if (!LilithModPlugin.CfgAmbientEnabled.Value || Time.unscaledTime - _lastInteractionReplyAt < 90f)
+                // Cooldown between reactions to being interacted with. Long enough that
+                // repeated petting does not turn into a running commentary; the
+                // interaction is still remembered even when the reply is skipped.
+                if (!LilithModPlugin.CfgAmbientEnabled.Value ||
+                    Time.unscaledTime - _lastInteractionReplyAt < InteractionCooldownSeconds)
                     continue;
                 _pendingInteraction = kind;
                 _interactionReplyAt = Time.unscaledTime + 3f;
