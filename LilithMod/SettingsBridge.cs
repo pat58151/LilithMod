@@ -186,7 +186,13 @@ namespace LilithMod
                 if (row != null) row.SetAsLastSibling();
             }
             view.MapRow(_hotkeyField, TraySettingView.TabControls);
-            if (_voiceFolderLabel != null) view.MapRow(_voiceFolderLabel, TraySettingView.TabSound);
+            if (_voiceFolderLabel != null)
+            {
+                view.MapRow(_voiceFolderLabel, TraySettingView.TabSound);
+                // Last sibling overall, which puts it at the bottom of its own tab.
+                Transform row = view.GetRowOf(_voiceFolderLabel.transform);
+                if (row != null) row.SetAsLastSibling();
+            }
             view.MapRow(_pushToTalkKeyField, TraySettingView.TabControls);
             if (_opacity != null) view.MapRow(_opacity, TraySettingView.TabLilith);
 
