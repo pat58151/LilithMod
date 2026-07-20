@@ -190,17 +190,3 @@ Read this section before debugging anything.
 - No packaging or README for anyone else to install this.
 - `_dirty-bepinex-20260720-1515\` (~6.7 GB after the runtime was moved out) is
   leftover and safe to delete.
-
----
-
-## 8. Process note
-
-Per the repo's CLAUDE.md, spec-able implementation is delegated to DeepSeek and
-Claude keeps design, a short intent, and review. Two things to know:
-
-- `pipeline.py plan` takes **no `-c` flag**, so it briefs the planner with zero
-  context and will invent files. Use
-  `implement_with_deepseek.py --plan -c <every relevant file>` instead.
-- The agent stage (`deepseek_agent.py`) failed here by emitting malformed
-  tool-call markup for 25 steps and writing nothing at all. If that recurs, the
-  ladder's terminal stage is Opus authorship.
