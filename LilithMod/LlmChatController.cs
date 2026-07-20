@@ -746,6 +746,14 @@ namespace LilithMod
                 _replyNode.text = result.Text;
                 DialogueManager.s_instance.StartDialogue(9500000);
                 LilithModPlugin.Logger.LogInfo("[LlmChat] LLM reply displayed.");
+
+                // Speak it. Enqueue only - synthesis and playback happen on the
+                // voice thread, so a slow or dead TTS service cannot stall the
+                // reply that has already been displayed above.
+                if (VoiceConfig.Enabled && LilithModPlugin.VoiceProcessor != null)
+                {
+                    LilithModPlugin.VoiceProcessor.Enqueue(result.Text);
+                }
             }
             else
             {

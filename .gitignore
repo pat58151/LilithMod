@@ -14,3 +14,6 @@ voice-data/
 # Voice fine-tuning workspace: cloned upstream repo, extracted features, and
 # 6.8 GB of checkpoints. Reproducible from the scripts; never commit it.
 training/
+
+# Pre-reinstall snapshots of game-folder state (configs, dumps, reference clips).
+backup-preinstall-*/

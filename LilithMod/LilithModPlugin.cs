@@ -2,8 +2,8 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
-using Il2CppInterop.Runtime.Injection;
-using UnityEngine;
+using System.IO;
+using System.Reflection;
 
 namespace LilithMod
 {
@@ -24,6 +24,24 @@ namespace LilithMod
         internal static ConfigEntry<int> CfgTimeoutSeconds;
         internal static ConfigEntry<string> CfgHotkey;
         internal static ConfigEntry<bool> CfgLogDiagnostics;
+
+        // Voice settings – optional TTS via a local GPT‑SoVITS service.
+        internal static ConfigEntry<bool> CfgVoiceEnabled;
+        internal static ConfigEntry<string> CfgVoiceEndpoint;
+        internal static ConfigEntry<string> CfgVoiceRefAudioPath;
+        internal static ConfigEntry<string> CfgVoicePromptText;
+        internal static ConfigEntry<string> CfgVoiceTextLang;
+        internal static ConfigEntry<string> CfgVoicePromptLang;
+        internal static ConfigEntry<int> CfgVoiceTimeoutSeconds;
+        internal static ConfigEntry<int> CfgVoiceWarmUpTimeoutSeconds;
+        internal static ConfigEntry<float> CfgVoiceFragmentInterval;
+        internal static ConfigEntry<string> CfgVoiceTextSplitMethod;
+
+        /// <summary>
+        /// Shared speech queue processor, created when voice is enabled.
+        /// <c>null</c> when voice is disabled or failed to initialise.
+        /// </summary>
+        internal static SpeechQueueProcessor VoiceProcessor { get; private set; }
 
         // Every rule below is measured from the game's own script - 1298 Chinese and 1808
         // Japanese lines - rather than guessed. The counts are kept in the comments because
@@ -88,12 +106,18 @@ namespace LilithMod
                 "Verbose per-frame input and window-focus logging. Only needed when "
                 + "diagnosing why a hotkey or the chat box is not responding.");
 
+            // ---- Voice configuration ------------------------------------------
+            BindVoiceConfig();
+
             // Use BepInEx's own AddComponent rather than creating a GameObject here.
             // Load() runs before the first scene exists, so a hand-made GameObject does
             // not survive DontDestroyOnLoad and its Update() never ticks. BepInEx attaches
             // to its persistent BepInEx_Manager object and registers the type for us.
             AddComponent<DumpDatabaseBehaviour>();
             AddComponent<LlmChatController>();
+
+            // ---- Voice initialisation -----------------------------------------
+            InitVoice();
 
             // Off by default: force-firing nothing, only logging. Authors turn this on to
             // discover which DialogueTriggerType a given interaction actually raises.
@@ -111,6 +135,101 @@ namespace LilithMod
                 {
                     Log.LogError($"[LilithMod] Trigger logging failed to install: {ex}");
                 }
+            }
+        }
+
+        private void BindVoiceConfig()
+        {
+            CfgVoiceEnabled = Config.Bind("Voice", "Enabled", false,
+                "Master switch for TTS voice output. When false, no voice threads or "
+                + "network calls are started.");
+
+            CfgVoiceEndpoint = Config.Bind("Voice", "Endpoint",
+                "http://127.0.0.1:9880/tts",
+                "Full URL of the GPT‑SoVITS TTS endpoint.");
+
+            // The reference clip is NOT shipped with this mod - it belongs to the
+            // game's rights holders. Point this at a clip you already have locally;
+            // the default is where the GPT-SoVITS installer puts it. The service
+            // reads this path itself, so it must be readable by that process.
+            CfgVoiceRefAudioPath = Config.Bind("Voice", "RefAudioPath",
+                @"D:\SteamLibrary\steamapps\common\The NOexistenceN of Lilith\BepInEx\data\LilithTextInjector\voice\jp\calm-reference.wav",
+                "Absolute path to the reference WAV the voice is cloned from, as seen "
+                + "by the TTS service. A relative path is resolved against the mod folder. "
+                + "3-10 seconds works best.");
+
+            CfgVoicePromptText = Config.Bind("Voice", "PromptText",
+                "これは儀式でもあるの。君に私の存在を感じてもらうための儀式ね。",
+                "Exact transcript of the reference audio clip (prompt_text).");
+
+            CfgVoiceTextLang = Config.Bind("Voice", "TextLang", "ja",
+                "Language code for the input text (e.g. ja, zh, en).");
+
+            CfgVoicePromptLang = Config.Bind("Voice", "PromptLang", "ja",
+                "Language code for the reference audio (e.g. ja, zh).");
+
+            CfgVoiceTimeoutSeconds = Config.Bind("Voice", "TimeoutSeconds", 60,
+                "HTTP timeout in seconds for each TTS request.");
+
+            CfgVoiceWarmUpTimeoutSeconds = Config.Bind("Voice", "WarmUpTimeoutSeconds", 120,
+                "Total time budget in seconds for the warm‑up phase.");
+
+            CfgVoiceFragmentInterval = Config.Bind("Voice", "FragmentInterval", 0.4f,
+                "fragment_interval parameter passed to the TTS service.");
+
+            CfgVoiceTextSplitMethod = Config.Bind("Voice", "TextSplitMethod", "cut5",
+                "text_split_method parameter passed to the TTS service.");
+        }
+
+        private void InitVoice()
+        {
+            if (!CfgVoiceEnabled.Value)
+            {
+                Log.LogInfo("[Voice] Voice is disabled in config; skipping TTS initialisation.");
+                return;
+            }
+
+            // Populate the static VoiceConfig snapshot.
+            VoiceConfig.Enabled = true;
+            VoiceConfig.Endpoint = CfgVoiceEndpoint.Value;
+            VoiceConfig.PromptText = CfgVoicePromptText.Value;
+            VoiceConfig.TextLang = CfgVoiceTextLang.Value;
+            VoiceConfig.PromptLang = CfgVoicePromptLang.Value;
+            VoiceConfig.TimeoutSeconds = CfgVoiceTimeoutSeconds.Value;
+            VoiceConfig.WarmUpTimeoutSeconds = CfgVoiceWarmUpTimeoutSeconds.Value;
+            VoiceConfig.FragmentInterval = CfgVoiceFragmentInterval.Value;
+            VoiceConfig.TextSplitMethod = CfgVoiceTextSplitMethod.Value;
+
+            // Resolve the reference audio path.
+            string modDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            VoiceConfig.RefAudioPath = Path.GetFullPath(
+                Path.Combine(modDir ?? ".", CfgVoiceRefAudioPath.Value));
+
+            if (!File.Exists(VoiceConfig.RefAudioPath))
+            {
+                Log.LogError(
+                    $"[Voice] Reference audio not found at '{VoiceConfig.RefAudioPath}'. "
+                    + "Voice disabled.");
+                VoiceConfig.Enabled = false;
+                return;
+            }
+
+            Log.LogInfo($"[Voice] Reference audio: {VoiceConfig.RefAudioPath}");
+
+            try
+            {
+                var ttsClient = new TtsClient();
+                var voicePlayer = new VoicePlayer();
+                VoiceProcessor = new SpeechQueueProcessor(ttsClient, voicePlayer);
+                VoiceProcessor.Start();
+                Log.LogInfo("[Voice] Voice processor started (warm‑up in background).");
+            }
+            catch (System.Exception ex)
+            {
+                Log.LogError($"[Voice] Failed to initialise voice: {ex.Message}");
+                VoiceConfig.Enabled = false;
+                VoiceProcessor?.Dispose();
+                VoiceProcessor = null;
             }
         }
     }
