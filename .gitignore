@@ -17,3 +17,7 @@ training/
 
 # Pre-reinstall snapshots of game-folder state (configs, dumps, reference clips).
 backup-preinstall-*/
+
+# The pre-clean-slate BepInEx tree, moved out of the game folder rather than
+# deleted. Contains their mod's 2 GB voice-runtime and a copy of LilithMod.cfg.
+_dirty-bepinex-*/

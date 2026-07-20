@@ -113,8 +113,51 @@ namespace LilithMod
             // Load() runs before the first scene exists, so a hand-made GameObject does
             // not survive DontDestroyOnLoad and its Update() never ticks. BepInEx attaches
             // to its persistent BepInEx_Manager object and registers the type for us.
-            AddComponent<DumpDatabaseBehaviour>();
-            AddComponent<LlmChatController>();
+            var dumpComp = AddComponent<DumpDatabaseBehaviour>();
+            var chatComp = AddComponent<LlmChatController>();
+            Log.LogInfo($"[DIAG] AddComponent returned: dump={(dumpComp == null ? "NULL" : "ok")} "
+                + $"chat={(chatComp == null ? "NULL" : "ok")}");
+            if (dumpComp != null)
+            {
+                var go = dumpComp.gameObject;
+                Log.LogInfo($"[DIAG] host='{go.name}' activeInHierarchy={go.activeInHierarchy} "
+                    + $"enabled={dumpComp.enabled} scene='{go.scene.name}'");
+
+                // BepInEx creates its manager object before any scene exists, so the object
+                // belongs to no scene and Unity's player loop never ticks it - Awake() runs
+                // (AddComponent calls it directly) but Update() never does. DontDestroyOnLoad
+                // moves it into the DDOL scene, which restores update dispatch.
+                UnityEngine.Object.DontDestroyOnLoad(go);
+                Log.LogInfo($"[DIAG] after DontDestroyOnLoad scene='{go.scene.name}'");
+            }
+
+            // Experiment A: our own host object, to tell "BepInEx_Manager is the problem"
+            // apart from "injected Update never dispatches at all".
+            try
+            {
+                var ownGo = new UnityEngine.GameObject("LilithModHost");
+                UnityEngine.Object.DontDestroyOnLoad(ownGo);
+                var ownComp = ownGo.AddComponent<DumpDatabaseBehaviour>();
+                Log.LogInfo($"[DIAG] own host created: comp={(ownComp == null ? "NULL" : "ok")} "
+                    + $"scene='{ownGo.scene.name}' active={ownGo.activeInHierarchy}");
+            }
+            catch (System.Exception ex)
+            {
+                Log.LogError($"[DIAG] own host failed: {ex}");
+            }
+
+            // Experiment B: a per-frame heartbeat that does not rely on type injection at
+            // all. ArchiveRuntimeTracker.Update is known to run every frame (it appears in
+            // the game's own Player.log).
+            try
+            {
+                DiagHeartbeat.Install(new HarmonyLib.Harmony("LilithMod.diag"));
+                DiagDelegateProbe.Install();
+            }
+            catch (System.Exception ex)
+            {
+                Log.LogError($"[DIAG] heartbeat patch failed: {ex}");
+            }
 
             // ---- Voice initialisation -----------------------------------------
             InitVoice();
