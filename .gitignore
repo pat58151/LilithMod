@@ -31,3 +31,13 @@ _dirty-bepinex-*/
 
 # Local secrets: DeepSeek API key. Never commit.
 .env
+
+# Extracted game dialogue. Developers' content: local use only, never committed.
+LilithMod/dialogue/
+
+# Build output.
+build-test/
+
+# Runtime logs.
+runtime/*.log
+runtime/__pycache__/

@@ -3,6 +3,9 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.IO;
+using System.Reflection;
+using System.Security.Cryptography;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -27,6 +30,7 @@ namespace LilithMod
             public string PromptLang;
             public float FragmentInterval;
             public string TextSplitMethod;
+            public string CacheIdentity;
         }
 
         public TtsClient()
@@ -40,6 +44,7 @@ namespace LilithMod
                 PromptLang = VoiceConfig.PromptLang,
                 FragmentInterval = VoiceConfig.FragmentInterval,
                 TextSplitMethod = VoiceConfig.TextSplitMethod,
+                CacheIdentity = VoiceConfig.CacheIdentity,
             };
 
             _httpClient = new HttpClient();
@@ -52,10 +57,21 @@ namespace LilithMod
         /// </summary>
         public async Task<byte[]> SynthesizeAsync(string text, CancellationToken token = default)
         {
+            return await SynthesizeAsync(text, null, token);
+        }
+
+        public async Task<byte[]> SynthesizeAsync(string text, string language, CancellationToken token = default)
+        {
+            string effectiveLanguage = string.IsNullOrEmpty(language) ? _cfg.TextLang : language;
+            VoiceModelSwitcher.EnsureLanguage(effectiveLanguage, token);
+            string cachePath = CachePath(text, effectiveLanguage);
+            if (File.Exists(cachePath))
+                return File.ReadAllBytes(cachePath);
+
             var requestBody = new
             {
                 text = text,
-                text_lang = _cfg.TextLang,
+                text_lang = effectiveLanguage,
                 ref_audio_path = _cfg.RefAudioPath,
                 prompt_text = _cfg.PromptText,
                 prompt_lang = _cfg.PromptLang,
@@ -91,9 +107,28 @@ namespace LilithMod
                         throw new TtsException($"TTS service returned {(int)response.StatusCode}: {message}");
                     }
 
-                    return await response.Content.ReadAsByteArrayAsync();
+                    byte[] audio = await response.Content.ReadAsByteArrayAsync();
+                    try
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
+                        File.WriteAllBytes(cachePath, audio);
+                    }
+                    catch (IOException) { }
+                    return audio;
                 }
             }
+        }
+
+        private string CachePath(string text, string language)
+        {
+            string modelIdentity = (_cfg.CacheIdentity ?? language) + "\n";
+            string material = modelIdentity + language + "\n" + text + "\n" + _cfg.RefAudioPath + "\n" + _cfg.PromptText;
+            byte[] hash;
+            using (var sha = SHA256.Create()) hash = sha.ComputeHash(Encoding.UTF8.GetBytes(material));
+            var name = new StringBuilder(hash.Length * 2);
+            foreach (byte value in hash) name.Append(value.ToString("x2"));
+            string root = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".";
+            return Path.Combine(root, "voice-cache", language, name + ".wav");
         }
 
         public void Dispose()

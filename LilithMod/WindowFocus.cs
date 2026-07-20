@@ -11,6 +11,8 @@ namespace LilithMod
 
         // Saved original extended window style, so EnableTyping() is idempotent.
         private static IntPtr? s_originalExStyle = null;
+        private static bool s_chatInputActive;
+        private static bool s_settingsInputActive;
 
         private const int GWL_EXSTYLE = -20;
         private const uint WS_EX_NOACTIVATE = 0x08000000;
@@ -42,6 +44,24 @@ namespace LilithMod
             catch (Exception ex)
             {
                 LilithModPlugin.Logger.LogWarning($"[WindowFocus] IsKeyDown({vKey}) failed: {ex}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns true for as long as the key is physically down, with no edge
+        /// detection. Push-to-talk needs the held state, not the transition, and it
+        /// must not disturb the edge history <see cref="IsKeyDown"/> keeps per key.
+        /// </summary>
+        public static bool IsKeyHeld(int vKey)
+        {
+            try
+            {
+                return (WindowsNativeAPI.GetAsyncKeyState(vKey) & 0x8000) != 0;
+            }
+            catch (Exception ex)
+            {
+                LilithModPlugin.Logger.LogWarning($"[WindowFocus] IsKeyHeld({vKey}) failed: {ex}");
                 return false;
             }
         }
@@ -96,6 +116,24 @@ namespace LilithMod
         /// </summary>
         public static void EnableTyping()
         {
+            s_chatInputActive = true;
+            EnterInteractiveMode(true);
+        }
+
+        public static void SetSettingsInteractive(bool enabled)
+        {
+            if (s_settingsInputActive == enabled)
+                return;
+
+            s_settingsInputActive = enabled;
+            if (enabled)
+                EnterInteractiveMode(false);
+            else
+                LeaveInteractiveMode();
+        }
+
+        private static void EnterInteractiveMode(bool takeFocus)
+        {
             try
             {
                 IntPtr hWnd = GetGameWindowHandle();
@@ -105,14 +143,15 @@ namespace LilithMod
                     return;
                 }
 
-                // Only save the original style once, so repeated calls remain idempotent.
+                // Save before the native component clears click-through flags.
                 if (s_originalExStyle == null)
                 {
                     s_originalExStyle = WindowsNativeAPI.GetWindowLongPtrSafe(hWnd, GWL_EXSTYLE);
+                    TransparentWindowNew.BeginKeyboardInput();
                 }
 
                 // Clear the NOACTIVATE and TRANSPARENT bits while leaving everything else intact.
-                long current = (long)s_originalExStyle.Value;
+                long current = (long)WindowsNativeAPI.GetWindowLongPtrSafe(hWnd, GWL_EXSTYLE);
                 long newStyle = current & ~((long)WS_EX_NOACTIVATE | (long)WS_EX_TRANSPARENT);
 
                 WindowsNativeAPI.SetWindowLongPtrSafe(hWnd, GWL_EXSTYLE, (IntPtr)newStyle);
@@ -124,13 +163,17 @@ namespace LilithMod
                 // worked on the first open and never after. Synthesising an ALT keypress
                 // makes our process the last input source, lifting that restriction. This
                 // is the long-standing documented workaround for the rule.
-                bool fg = WindowsNativeAPI.SetForegroundWindow(hWnd);
-                if (!fg)
+                bool fg = true;
+                if (takeFocus)
                 {
-                    WindowsNativeAPI.keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
-                    WindowsNativeAPI.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                    WindowsNativeAPI.ShowWindow(hWnd, SW_SHOW);
                     fg = WindowsNativeAPI.SetForegroundWindow(hWnd);
+                    if (!fg)
+                    {
+                        WindowsNativeAPI.keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
+                        WindowsNativeAPI.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                        WindowsNativeAPI.ShowWindow(hWnd, SW_SHOW);
+                        fg = WindowsNativeAPI.SetForegroundWindow(hWnd);
+                    }
                 }
 
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
@@ -161,8 +204,17 @@ namespace LilithMod
         /// </summary>
         public static void RestoreWindow()
         {
+            s_chatInputActive = false;
+            LeaveInteractiveMode();
+        }
+
+        private static void LeaveInteractiveMode()
+        {
             try
             {
+                if (s_chatInputActive || s_settingsInputActive)
+                    return;
+
                 if (s_originalExStyle == null)
                     return;
 
@@ -176,6 +228,8 @@ namespace LilithMod
 
                 WindowsNativeAPI.SetWindowLongPtrSafe(hWnd, GWL_EXSTYLE, s_originalExStyle.Value);
                 s_originalExStyle = null;
+                // Resume character click-through only after the last interactive panel closes.
+                TransparentWindowNew.EndKeyboardInput();
             }
             catch (Exception ex)
             {

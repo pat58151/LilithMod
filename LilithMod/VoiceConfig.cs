@@ -18,6 +18,11 @@ namespace LilithMod
         public static int WarmUpTimeoutSeconds;
         public static float FragmentInterval;
         public static string TextSplitMethod;
+        public static string SubtitleLang;
+        public static string CacheIdentity;
+        public static string GptWeights;
+        public static string SovitsWeights;
+        public static string WarmUpText;
 
         /// <summary>
         /// Resolves a relative path (from the mod root) to an absolute path on disk.

@@ -11,5 +11,8 @@ namespace LilithMod
         public string Text { get; set; }
         /// <summary>Error description when Ok == false.</summary>
         public string Error { get; set; }
+        public string UserInput { get; set; }
+        public bool Ambient { get; set; }
+        public bool NativeActionHandled { get; set; }
     }
 }

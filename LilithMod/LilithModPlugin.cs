@@ -10,6 +10,7 @@ namespace LilithMod
     [BepInPlugin("LilithMod", "LilithMod", "1.0.0")]
     public class LilithModPlugin : BasePlugin
     {
+        private static LilithModPlugin _instance;
         // Injected MonoBehaviours are not BasePlugin subclasses and have no Log
         // property of their own; they log through here.
         internal static ManualLogSource Logger;
@@ -20,10 +21,19 @@ namespace LilithMod
         internal static ConfigEntry<string> CfgApiKey;
         internal static ConfigEntry<string> CfgModel;
         internal static ConfigEntry<string> CfgSystemPrompt;
+        internal static ConfigEntry<string> CfgSearXngEndpoints;
         internal static ConfigEntry<int> CfgMaxHistoryTurns;
         internal static ConfigEntry<int> CfgTimeoutSeconds;
         internal static ConfigEntry<string> CfgHotkey;
         internal static ConfigEntry<bool> CfgLogDiagnostics;
+        internal static ConfigEntry<bool> CfgAmbientEnabled;
+        internal static ConfigEntry<int> CfgAmbientMinMinutes;
+        internal static ConfigEntry<int> CfgAmbientMaxMinutes;
+        internal static ConfigEntry<bool> CfgReplaceGameVoice;
+        internal static ConfigEntry<bool> CfgVoiceSynthesisPreferred;
+        internal static ConfigEntry<float> CfgLilithOpacity;
+        internal static ConfigEntry<bool> CfgPushToTalkEnabled;
+        internal static ConfigEntry<string> CfgPushToTalkKey;
 
         // Voice settings – optional TTS via a local GPT‑SoVITS service.
         internal static ConfigEntry<bool> CfgVoiceEnabled;
@@ -103,6 +113,7 @@ namespace LilithMod
 
         public override void Load()
         {
+            _instance = this;
             Logger = Log;
             Log.LogInfo("[LilithMod] Loaded.");
 
@@ -110,7 +121,17 @@ namespace LilithMod
                 "OpenAI-compatible API base URL. Works with DeepSeek, OpenAI, OpenRouter, Ollama.");
             CfgApiKey = Config.Bind("LLM", "ApiKey", "",
                 "Your API key. Required. Never share this file after filling it in.");
-            CfgModel = Config.Bind("LLM", "Model", "deepseek-chat", "Model name.");
+            CfgModel = Config.Bind("LLM", "Model", "deepseek-v4-flash", "Model name.");
+            CfgSearXngEndpoints = Config.Bind("LiveInformation", "SearXngEndpoints",
+                "https://metacat.online,https://nyc1.sx.ggtyler.dev,https://ooglester.com," +
+                "https://search.080609.xyz,https://search.canine.tools,https://search.catboy.house," +
+                "https://search.citw.lgbt,https://search.federicociro.com,https://search.hbubli.cc," +
+                "https://search.im-in.space,https://search.indst.eu",
+                "Comma-separated SearXNG instances. The app checks these at startup and discovers fallbacks.");
+            bool removedLegacyClaude =
+                Config.Remove(new ConfigDefinition("LLM", "AnthropicApiKey")) |
+                Config.Remove(new ConfigDefinition("LLM", "AnthropicModel"));
+            if (removedLegacyClaude) Config.Save();
             // Deliberately a new key. Config.Bind keeps whatever is already in the cfg,
             // so editing the default under the old "SystemPrompt" name would silently do
             // nothing on an existing install - the bilingual prompt would never arrive
@@ -124,14 +145,46 @@ namespace LilithMod
             CfgMaxHistoryTurns = Config.Bind("LLM", "MaxHistoryTurns", 8,
                 "How many past exchanges to keep as context.");
             CfgTimeoutSeconds = Config.Bind("LLM", "TimeoutSeconds", 30, "Request timeout.");
-            CfgHotkey = Config.Bind("LLM", "Hotkey", "F11",
+            CfgHotkey = Config.Bind("LLM", "Hotkey", "F7",
                 "Key that opens the chat box. A letter (A-Z), digit (0-9), or F1-F12. "
                 + "Polled globally via Win32, so it works even though the pet window "
                 + "never takes keyboard focus.");
+            var hotkeyDefaultMigrated = Config.Bind("Migration", "ChatHotkeyDefaultF7", false,
+                "Internal one-time migration marker.");
+            if (!hotkeyDefaultMigrated.Value)
+            {
+                if (string.Equals(CfgHotkey.Value, "F11", System.StringComparison.OrdinalIgnoreCase))
+                    CfgHotkey.Value = "F7";
+                hotkeyDefaultMigrated.Value = true;
+                Config.Save();
+            }
 
             CfgLogDiagnostics = Config.Bind("Debug", "LogDiagnostics", false,
                 "Verbose per-frame input and window-focus logging. Only needed when "
                 + "diagnosing why a hotkey or the chat box is not responding.");
+
+            CfgAmbientEnabled = Config.Bind("Companion", "AmbientConversation", true,
+                "Allow occasional generated remarks and responses to physical interactions.");
+            CfgAmbientMinMinutes = Config.Bind("Companion", "AmbientMinMinutes", 12,
+                "Minimum interval between spontaneous remarks.");
+            CfgAmbientMaxMinutes = Config.Bind("Companion", "AmbientMaxMinutes", 25,
+                "Maximum interval between spontaneous remarks.");
+            CfgReplaceGameVoice = Config.Bind("Voice", "ReplaceAllGameVoice", true,
+                "Replace built-in dialogue voice with cached GPT-SoVITS speech.");
+            CfgVoiceSynthesisPreferred = Config.Bind("Voice", "VocalSynthesisPreferred",
+                CfgReplaceGameVoice.Value,
+                "Saved user preference. Service outages temporarily fall back to native voice without changing this value.");
+            CfgLilithOpacity = Config.Bind("Display", "LilithOpacity", 0.6f,
+                "Lilith character opacity from 0.2 to 1.0. Click-through uses the game's built-in setting.");
+            // Deliberately new key names. Config.Bind keeps whatever is already in the
+            // cfg, so reusing "WakeWordEnabled" would silently inherit the old value
+            // and the setting would appear to do nothing on an existing install.
+            CfgPushToTalkEnabled = Config.Bind("VoiceInput", "PushToTalkEnabled", true,
+                "Enable the external push-to-talk transcriber.");
+            CfgPushToTalkKey = Config.Bind("VoiceInput", "PushToTalkKey", "F8",
+                "Hold this key to speak. F1-F12, A-Z, or 0-9.");
+
+            MemoryStore.Initialize();
 
             // ---- Voice configuration ------------------------------------------
             BindVoiceConfig();
@@ -142,9 +195,21 @@ namespace LilithMod
             // to its persistent BepInEx_Manager object and registers the type for us.
             AddComponent<DumpDatabaseBehaviour>();
             AddComponent<LlmChatController>();
+            AddComponent<SettingsBridge>();
+            AddComponent<GameVoiceCoordinator>();
+            AddComponent<VoiceServiceMonitor>();
 
             // ---- Voice initialisation -----------------------------------------
             InitVoice();
+
+            try
+            {
+                ModIntegrations.Install(new HarmonyLib.Harmony("LilithMod.integrations"));
+            }
+            catch (System.Exception ex)
+            {
+                Log.LogError($"[LilithMod] Integration patches failed: {ex.Message}");
+            }
 
             // Off by default: force-firing nothing, only logging. Authors turn this on to
             // discover which DialogueTriggerType a given interaction actually raises.
@@ -163,6 +228,12 @@ namespace LilithMod
                     Log.LogError($"[LilithMod] Trigger logging failed to install: {ex}");
                 }
             }
+        }
+
+        internal static void SaveConfig()
+        {
+            try { _instance?.Config.Save(); }
+            catch (System.Exception ex) { Logger?.LogWarning($"[Settings] Could not save config: {ex.Message}"); }
         }
 
         private void BindVoiceConfig()
@@ -210,7 +281,9 @@ namespace LilithMod
 
         private void InitVoice()
         {
-            if (!CfgVoiceEnabled.Value)
+            VoiceSetup.Load();
+            bool setupEnabled = VoiceSetup.Loaded ? VoiceSetup.Enabled : CfgVoiceEnabled.Value;
+            if (!setupEnabled)
             {
                 Log.LogInfo("[Voice] Voice is disabled in config; skipping TTS initialisation.");
                 return;
@@ -218,10 +291,17 @@ namespace LilithMod
 
             // Populate the static VoiceConfig snapshot.
             VoiceConfig.Enabled = true;
-            VoiceConfig.Endpoint = CfgVoiceEndpoint.Value;
-            VoiceConfig.PromptText = CfgVoicePromptText.Value;
-            VoiceConfig.TextLang = CfgVoiceTextLang.Value;
-            VoiceConfig.PromptLang = CfgVoicePromptLang.Value;
+            VoiceProfile profile = VoiceSetup.Loaded ? VoiceSetup.Profile() : null;
+            VoiceConfig.Endpoint = VoiceSetup.Loaded ? VoiceSetup.Endpoint : CfgVoiceEndpoint.Value;
+            VoiceConfig.PromptText = profile?.PromptText ?? CfgVoicePromptText.Value;
+            VoiceConfig.TextLang = profile?.Language ?? CfgVoiceTextLang.Value;
+            VoiceConfig.SubtitleLang = VoiceSetup.Loaded ? VoiceSetup.SubtitleLanguage : "en";
+            VoiceConfig.PromptLang = profile?.PromptLanguage ?? CfgVoicePromptLang.Value;
+            VoiceConfig.CacheIdentity = profile?.CacheIdentity ??
+                (VoiceConfig.TextLang.StartsWith("ja") ? "ja-finetuned-e12-s1016-v1" : VoiceConfig.TextLang);
+            VoiceConfig.GptWeights = profile?.GptWeights;
+            VoiceConfig.SovitsWeights = profile?.SovitsWeights;
+            VoiceConfig.WarmUpText = profile?.WarmUpText;
             VoiceConfig.TimeoutSeconds = CfgVoiceTimeoutSeconds.Value;
             VoiceConfig.WarmUpTimeoutSeconds = CfgVoiceWarmUpTimeoutSeconds.Value;
             VoiceConfig.FragmentInterval = CfgVoiceFragmentInterval.Value;
@@ -229,8 +309,16 @@ namespace LilithMod
 
             // Resolve the reference audio path.
             string modDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            VoiceConfig.RefAudioPath = Path.GetFullPath(
-                Path.Combine(modDir ?? ".", CfgVoiceRefAudioPath.Value));
+            VoiceConfig.RefAudioPath = profile?.RefAudioPath;
+            if (string.IsNullOrWhiteSpace(VoiceConfig.RefAudioPath))
+                VoiceConfig.RefAudioPath = Path.GetFullPath(
+                    Path.Combine(modDir ?? ".", CfgVoiceRefAudioPath.Value));
+
+            CfgVoiceTextLang.Value = VoiceConfig.TextLang;
+            CfgVoicePromptLang.Value = VoiceConfig.PromptLang;
+            // Availability is applied by VoiceServiceMonitor. Start in native fallback
+            // until the configured endpoint passes its first health check.
+            CfgReplaceGameVoice.Value = false;
 
             if (!File.Exists(VoiceConfig.RefAudioPath))
             {

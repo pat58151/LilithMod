@@ -8,5 +8,9 @@ namespace LilithMod
     {
         public string JaText { get; set; }
         public string EnText { get; set; }
+        public string Language { get; set; }
+        public bool SuppressSubtitle { get; set; }
+        public bool EndOfReply { get; set; }
+        internal NativeDialogueCue NativeDialogue { get; set; }
     }
 }

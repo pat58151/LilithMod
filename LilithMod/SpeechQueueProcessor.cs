@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -17,9 +18,11 @@ namespace LilithMod
         private readonly TtsClient _ttsClient;
         private readonly VoicePlayer _voicePlayer;
         private readonly ManualResetEventSlim _warmUpComplete = new ManualResetEventSlim(false);
+        private readonly AutoResetEvent _queueAvailable = new AutoResetEvent(false);
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private Thread _workerThread;
         private Thread _warmUpThread;
+        private readonly string _playbackLockPath;
 
         // Repeated identical failures are collapsed; see the catch in ProcessLoop.
         private string _lastFailure;
@@ -29,13 +32,17 @@ namespace LilithMod
         {
             _ttsClient = ttsClient ?? throw new ArgumentNullException(nameof(ttsClient));
             _voicePlayer = voicePlayer ?? throw new ArgumentNullException(nameof(voicePlayer));
+            string pluginDirectory = Path.GetDirectoryName(typeof(SpeechQueueProcessor).Assembly.Location) ?? ".";
+            _playbackLockPath = Path.Combine(pluginDirectory, "voice-output.active");
         }
 
         /// <summary>
         /// Subtitles to show, in the order their audio plays. Written by the voice
         /// thread, drained by LlmChatController on the Unity main thread.
         /// </summary>
-        public ConcurrentQueue<string> SubtitleQueue { get; } = new ConcurrentQueue<string>();
+        public ConcurrentQueue<SubtitleCue> SubtitleQueue { get; } = new ConcurrentQueue<SubtitleCue>();
+        internal ConcurrentQueue<NativeDialogueCue> NativeDialogueQueue { get; } =
+            new ConcurrentQueue<NativeDialogueCue>();
 
         /// <summary>
         /// Raised once when synthesis fails and the remaining sentences are abandoned,
@@ -44,6 +51,7 @@ namespace LilithMod
         /// defect waiting to be displayed.
         /// </summary>
         public ConcurrentQueue<bool> VoiceFailureQueue { get; } = new ConcurrentQueue<bool>();
+        public ConcurrentQueue<bool> ReplyFinishedQueue { get; } = new ConcurrentQueue<bool>();
 
         /// <summary>Thread-safe enqueue for the Unity main thread.</summary>
         public void Enqueue(Utterance utterance)
@@ -51,6 +59,7 @@ namespace LilithMod
             if (utterance == null || string.IsNullOrEmpty(utterance.JaText))
                 return;
             _queue.Enqueue(utterance);
+            _queueAvailable.Set();
         }
 
         /// <summary>
@@ -61,7 +70,14 @@ namespace LilithMod
         {
             if (string.IsNullOrEmpty(text))
                 return;
-            _queue.Enqueue(new Utterance { JaText = text, EnText = null });
+            _queue.Enqueue(new Utterance
+            {
+                JaText = text,
+                EnText = text,
+                Language = PersonaPrompt.CurrentVoiceLanguage(),
+                EndOfReply = true
+            });
+            _queueAvailable.Set();
         }
 
         /// <summary>
@@ -72,8 +88,14 @@ namespace LilithMod
         public void CancelCurrent()
         {
             while (_queue.TryDequeue(out _)) { }
-            while (SubtitleQueue.TryDequeue(out _)) { }
+            while (SubtitleQueue.TryDequeue(out SubtitleCue cue))
+            {
+                cue.MarkDisplayed();
+            }
+            while (NativeDialogueQueue.TryDequeue(out NativeDialogueCue nativeCue))
+                nativeCue.MarkDisplayed();
             while (VoiceFailureQueue.TryDequeue(out _)) { }
+            while (ReplyFinishedQueue.TryDequeue(out _)) { }
             _abandonRun = true;
         }
 
@@ -123,7 +145,10 @@ namespace LilithMod
             var stopwatch = Stopwatch.StartNew();
             int timeoutMs = VoiceConfig.WarmUpTimeoutSeconds * 1000;
 
-            foreach (var sentence in WarmUpSentences)
+            string[] sentences = string.IsNullOrWhiteSpace(VoiceConfig.WarmUpText)
+                ? WarmUpSentences
+                : new[] { VoiceConfig.WarmUpText };
+            foreach (var sentence in sentences)
             {
                 if (stopwatch.ElapsedMilliseconds > timeoutMs)
                 {
@@ -135,7 +160,7 @@ namespace LilithMod
                 try
                 {
                     // Synthesize but discard the audio – we only want to warm the model.
-                    _ttsClient.SynthesizeAsync(sentence, CancellationToken.None).GetAwaiter().GetResult();
+                    _ttsClient.SynthesizeAsync(sentence, VoiceConfig.TextLang, CancellationToken.None).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {
@@ -170,7 +195,7 @@ namespace LilithMod
 
             while (!_cts.IsCancellationRequested)
             {
-                Utterance current;
+                Utterance current = null;
                 byte[] currentWav;
 
                 try
@@ -187,13 +212,13 @@ namespace LilithMod
                     {
                         if (!_queue.TryDequeue(out current))
                         {
-                            Thread.Sleep(100);
+                            WaitHandle.WaitAny(new[] { _queueAvailable, _cts.Token.WaitHandle });
                             continue;
                         }
                         // First sentence of a reply: nothing was pre-synthesised, so
                         // this one is paid for up front.
                         _abandonRun = false;
-                        currentWav = _ttsClient.SynthesizeAsync(current.JaText, _cts.Token)
+                        currentWav = _ttsClient.SynthesizeAsync(current.JaText, current.Language, _cts.Token)
                             .GetAwaiter().GetResult();
                     }
                 }
@@ -205,7 +230,16 @@ namespace LilithMod
                 {
                     next = null;
                     nextSynth = null;
-                    ReportSynthesisFailure(ex);
+                    if (current?.NativeDialogue != null)
+                    {
+                        NativeDialogueQueue.Enqueue(current.NativeDialogue);
+                        LilithModPlugin.Logger.LogWarning(
+                            $"[Voice] Game-line synthesis failed; showing text without voice: {ex.Message}");
+                    }
+                    else
+                    {
+                        ReportSynthesisFailure(ex);
+                    }
                     continue;
                 }
 
@@ -218,17 +252,13 @@ namespace LilithMod
                     continue;
                 }
 
-                // The subtitle belongs to the audio that is about to play.
-                if (!string.IsNullOrEmpty(current.EnText))
-                    SubtitleQueue.Enqueue(current.EnText);
-
                 // Start the next sentence BEFORE blocking on playback. This is the
                 // whole point: synthesis of N+1 runs while N is being heard.
                 if (_queue.TryDequeue(out next))
                 {
                     var pending = next;
                     nextSynth = Task.Run(
-                        () => _ttsClient.SynthesizeAsync(pending.JaText, _cts.Token)
+                        () => _ttsClient.SynthesizeAsync(pending.JaText, pending.Language, _cts.Token)
                             .GetAwaiter().GetResult());
                     LilithModPlugin.Logger.LogInfo(
                         "[Voice] synth started for next sentence while current one plays.");
@@ -239,9 +269,52 @@ namespace LilithMod
                     nextSynth = null;
                 }
 
+                // Audio is ready. Hand its subtitle to Unity and wait for the bubble
+                // refresh before starting playback. This prevents early subtitles and
+                // makes the text and voice begin on the same main-thread frame.
+                SubtitleCue subtitleCue = null;
+                if (current.NativeDialogue != null)
+                {
+                    NativeDialogueQueue.Enqueue(current.NativeDialogue);
+                    current.NativeDialogue.WaitUntilDisplayed(_cts.Token);
+                }
+                if (!current.SuppressSubtitle && !string.IsNullOrEmpty(current.EnText))
+                {
+                    subtitleCue = new SubtitleCue(current.EnText);
+                    SubtitleQueue.Enqueue(subtitleCue);
+                    try
+                    {
+                        subtitleCue.WaitUntilDisplayed(_cts.Token);
+                    }
+                    finally
+                    {
+                        subtitleCue.Dispose();
+                    }
+                }
+
+                // Cancellation may have removed the cue before Unity displayed it.
+                // Do not play orphaned audio under the next reply.
+                if (_abandonRun)
+                {
+                    _abandonRun = false;
+                    next = null;
+                    nextSynth = null;
+                    continue;
+                }
+
                 try
                 {
-                    _voicePlayer.PlaySync(currentWav);
+                    SetPlaybackActive(true);
+                    try
+                    {
+                        _voicePlayer.PlaySync(currentWav);
+                    }
+                    finally
+                    {
+                        SetPlaybackActive(false);
+                    }
+                    if (current.EndOfReply)
+                        ReplyFinishedQueue.Enqueue(true);
                 }
                 catch (Exception playEx)
                 {
@@ -249,6 +322,18 @@ namespace LilithMod
                         $"[Voice] Playback error: {playEx.Message}");
                 }
             }
+        }
+
+        private void SetPlaybackActive(bool active)
+        {
+            try
+            {
+                if (active)
+                    File.WriteAllText(_playbackLockPath, "active");
+                else if (File.Exists(_playbackLockPath))
+                    File.Delete(_playbackLockPath);
+            }
+            catch { }
         }
 
         /// <summary>
@@ -280,7 +365,9 @@ namespace LilithMod
 
         public void Dispose()
         {
+            SetPlaybackActive(false);
             _cts.Cancel();
+            _queueAvailable.Set();
             _warmUpComplete.Set(); // unblock the processor if it's still waiting
             try
             {
@@ -296,6 +383,7 @@ namespace LilithMod
                 // Best effort.
             }
             _cts.Dispose();
+            _queueAvailable.Dispose();
             _warmUpComplete.Dispose();
             _ttsClient.Dispose();
             _voicePlayer.Dispose();

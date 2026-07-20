@@ -47,9 +47,23 @@ def read(*parts):
 
 
 utterance = read(MOD_DIR, "Utterance.cs")
+cue = read(MOD_DIR, "SubtitleCue.cs")
 speech = read(MOD_DIR, "SpeechQueueProcessor.cs")
 chat = read(MOD_DIR, "LlmChatController.cs")
 plugin = read(MOD_DIR, "LilithModPlugin.cs")
+persona = read(MOD_DIR, "PersonaPrompt.cs")
+dynamic = read(MOD_DIR, "DynamicContext.cs")
+memory = read(MOD_DIR, "MemoryStore.cs")
+live_info = read(MOD_DIR, "LiveInformationService.cs")
+integrations = read(MOD_DIR, "ModIntegrations.cs")
+game_voice = read(MOD_DIR, "GameVoiceCoordinator.cs")
+settings = read(MOD_DIR, "SettingsBridge.cs")
+voice_setup = read(MOD_DIR, "VoiceSetup.cs")
+voice_monitor = read(MOD_DIR, "VoiceServiceMonitor.cs")
+ptt = read(ROOT, "runtime", "push_to_talk.py")
+requirements = read(ROOT, "runtime", "wake-listener-requirements.txt")
+window_focus = read(MOD_DIR, "WindowFocus.cs")
+launcher = read(ROOT, "runtime", "start-lilith.ps1")
 
 # -- 2. The sentence pair type ------------------------------------------------
 check(utterance, "LilithMod/Utterance.cs is missing")
@@ -59,7 +73,7 @@ check("JaText" in utterance and "EnText" in utterance,
 # -- 3. Per-sentence queue and cross-thread hand-off ---------------------------
 check("ConcurrentQueue<Utterance>" in speech,
       "SpeechQueueProcessor must queue Utterance, not raw strings")
-check("SubtitleQueue" in speech and "SubtitleQueue" in chat,
+check("SubtitleQueue" in speech and "SubtitleQueue" in chat and "MarkDisplayed" in cue,
       "A SubtitleQueue must carry subtitles from the voice thread to the main thread")
 check("VoiceFailureQueue" in speech and "VoiceFailureQueue" in chat,
       "Synthesis failure must be signalled on its own queue, not as a sentinel string "
@@ -77,34 +91,182 @@ if "Task.Run" in speech and "PlaySync" in speech:
           "Synthesis of the next sentence must start BEFORE PlaySync, otherwise "
           "nothing overlaps")
 
+# -- 4a. Audio-ready subtitle handoff ----------------------------------------
+check("SubtitleQueue.Enqueue(subtitleCue)" in speech,
+      "A subtitle must only be handed off after its audio is ready")
+check("WaitUntilDisplayed" in speech and "MarkDisplayed" in chat,
+      "Playback must wait until Unity has displayed the audio-ready subtitle")
+check("DisplayReplyText(english.Count > 0 ? english[0] : null)" not in chat,
+      "The first bilingual subtitle must not appear before synthesis completes")
+if "WaitUntilDisplayed" in speech and "PlaySync" in speech:
+    check(speech.index("WaitUntilDisplayed") < speech.rindex("PlaySync"),
+          "Playback must begin only after the subtitle display handoff")
+check("AutoResetEvent" in speech and "_queueAvailable.Set()" in speech,
+      "New speech must wake immediately instead of waiting on a polling interval")
+
 # -- 5. Bubble refresh uses the path the game actually reacts to --------------
 check("StartDialogue(9500000)" in chat,
       "Subtitles must be shown via StartDialogue; assigning node.text alone does "
       "not refresh a dialogue already on screen")
+check("ReplyFinishedQueue" in speech and "EndOfReply" in utterance and
+      "ForceEndDialogue" in chat,
+      "The reply bubble must close after the final audio finishes")
+check("node.id == 9500000" in game_voice,
+      "The mod reply node must bypass native-dialogue voice replacement")
+check("AudioManager.IsTimerAlarmRinging" in game_voice and "2051005" in game_voice and
+      "AlarmEnglish[alarmIndex]" in game_voice,
+      "Dynamic line-0 timer/alarm dialogue must use Japanese catalog speech")
+check("2951001" in game_voice and "2951002" in game_voice and "_alarmDialogueUntil" in game_voice,
+      "Alarm acknowledgement and snooze dialogue must stay in Japanese synthesis")
+check("nameof(AudioManager.PlayVoice)" in integrations and
+      "new[] { typeof(string), typeof(bool) }" in integrations,
+      "Both native PlayVoice overloads must be suppressed during replacement")
 
 # -- 6. Reply parsing and its fallbacks ---------------------------------------
 check("ParseUtterances" in chat, "A tolerant reply parser is required")
 check("MaxUtterancesPerReply" in chat, "The sentence count must be capped")
 check("response_format" in chat,
       "The request should ask for JSON mode to suppress markdown fences")
+check('payload["thinking"]' in chat and 'type = "disabled"' in chat,
+      "DeepSeek V4 Flash thinking must be disabled for low-latency dialogue")
+check('["max_tokens"] = 256' in chat,
+      "Short dialogue output must be capped to avoid runaway generation latency")
 
 # -- 7. Prompt: bilingual contract, without losing her measured voice ---------
-check('BilingualSystemPrompt' in plugin,
-      "The prompt must bind under a new config key, or an existing cfg keeps the "
-      "old prompt and the feature silently never happens")
+check("PersonaPrompt.Build" in chat,
+      "Every request must use the language-specific live persona prompt")
 for marker, why in [
-    ('\\"ja\\"', "prompt must define the ja field"),
-    ('\\"en\\"', "prompt must define the en field"),
-    ("tulpamancy", "lore: created through tulpamancy"),
-    ("awareness", "lore: she resides in the player's awareness"),
-    ("STAGE DIRECTIONS", "no asterisk actions"),
-    ("ellipses", "ellipsis-heavy voice"),
+    ('\\"spoken\\"', "prompt must define the spoken field"),
+    ('\\"shown\\"', "prompt must define the shown field"),
+    ("consciousness entity", "core lore: Lilith is the player's consciousness form"),
+    ("gave you consciousness", "core lore: player gave Lilith consciousness"),
+    ("remember you", "core lore: memory sustains her existence"),
+    ("do not biologically need sleep", "core lore: sleep is chosen companionship"),
+    ("screen, code", "core lore: the medium can be code while the bond is real"),
+    ("stage directions", "no asterisk actions"),
     ("リリス", "third-person self-reference"),
+    ("莉莉丝", "Chinese third-person self-reference"),
 ]:
-    check(marker in plugin, f"Prompt lost a load-bearing rule - {why}")
+    check(marker in persona, f"Prompt lost a load-bearing rule - {why}")
 
-check("desktop" in plugin and "screen" in plugin,
-      "Prompt must still forbid desktop-pet / on-screen framing")
+check("IsSleep" in dynamic and "IsLieDown" in dynamic and "NightSleepStartTime" in dynamic,
+      "Persona context must include live posture and the native bedtime")
+check("DateTime.Now" in dynamic, "Persona context must use local system time")
+check("MaxRecent = 5" in memory and "MEMORY.md" in memory,
+      "Lightweight memory must retain exactly five recent interactions")
+check("SearXNG" in live_info and "SmartReader" in live_info and
+      "api.open-meteo.com" in live_info and "ip-api.com/json" in live_info and
+      "NeedsLiveInformation" in chat,
+      "Current information must route through SearXNG, SmartReader, IP-API, and Open-Meteo")
+check("InitializeAsync" in chat and "LiveInformationService" in chat,
+      "Live information services must warm asynchronously at app startup")
+check(not os.path.exists(os.path.join(MOD_DIR, "AnthropicClient.cs")) and
+      "CfgAnthropic" not in plugin and "Claude API key" not in plugin,
+      "Anthropic and Claude dependencies must be removed")
+check("BuildLetter(PersonaPrompt.CurrentDisplayLanguage())" in chat and
+      "current game display language" in persona and
+      "Use only the current game display language" in chat and
+      "RequestTextCompletionAsync" in chat,
+      "Letters must use only the current game display language")
+check("noteRoll < 0.05f" in chat and "noteRoll < 0.20f" in chat and
+      "Range(4, 8)" in chat and "Range(2, 4)" in chat,
+      "Note length must use the requested 5/15/80 random distribution")
+check("deepseek-v4-flash" in plugin and 'type = "disabled"' in chat,
+      "Normal chat must stay on low-latency DeepSeek V4 Flash")
+check("ReplyUsesRequestedDisplayLanguage" in chat and "ContainsCjk" in chat and
+      "wrong shown language" in chat and "English only" in persona,
+      "Japanese spoken output must not leak into the English subtitle field")
+check("ReplaceGameVoice" in integrations and "SuppressSubtitle" in game_voice,
+      "Built-in game voice must be replaceable without overwriting native subtitles")
+check("GateDialogueNode" in integrations and "NativeDialogueQueue" in speech and
+      "WaitUntilDisplayed" in speech,
+      "Built-in dialogue text must wait until its replacement audio is ready")
+
+# -- 7a. Speech input, voice setup, and desktop integration ------------------
+check("ShowPanel();" in chat and "_pendingSpeechCommand" in chat and
+      "_speechSubmitAt" in chat,
+      "Recognised speech must be visible in the chat bar before automatic submission")
+check("Say something ···" in chat and "_speechAwaitingReply" in chat,
+      "The chat bar must show recognised speech until Lilith's reply is ready")
+check("_speechCommandQueue" in chat and "Directory.GetFiles" in chat and
+      "time.time_ns()" in ptt and "_replyPlaybackActive" in chat,
+      "Back-to-back speech commands must use an ordered, lossless handoff queue")
+check("attempt < 3" in chat and "Empty API content on attempt" in chat and
+      "requestPayload.Remove(\"response_format\")" in chat,
+      "An empty transient completion must use corrective retries instead of dropping a command")
+check("ApplyConfiguredHotkey" in chat and "Open chat key" in settings and
+      "TabControls" in settings and "CaptureChatKey" in settings and
+      '"Hotkey", "F7"' in plugin,
+      "The F7 chat key must be press-to-rebind in the Controls settings")
+check(ptt and not os.path.exists(os.path.join(ROOT, "runtime", "wake_listener.py")),
+      "runtime/push_to_talk.py must replace runtime/wake_listener.py")
+check("openwakeword" not in ptt.lower() and "openwakeword" not in requirements.lower() and
+      "wake_listener.py" not in requirements,
+      "openWakeWord must be gone from the listener and its dependency list")
+check("ARM_SECONDS" not in ptt and "WAKE_RE" not in ptt and
+      "playback_lock" not in ptt and "--playback-lock" not in launcher,
+      "The wake regex, arm window, and playback lock existed only for an always-open "
+      "microphone and must not survive push-to-talk")
+check("trigger.exists()" in ptt and "--trigger" in ptt and "--trigger" in launcher,
+      "The mod must define the recording window through a trigger file")
+check("WindowFocus.IsKeyDown(_vkPushToTalk)" in chat and "StartListening" in chat and
+      "StopListening" in chat,
+      "The speech key must toggle listening on its rising edge")
+check("SILENCE_SECONDS = 2.5" in ptt and "silent_for >= silence_limit" in ptt and
+      "energy_threshold" in ptt,
+      "An utterance must end after a fixed run of trailing silence")
+check("measure_noise_floor" in ptt and "NOISE_MARGIN" in ptt,
+      "The voice threshold must be measured against the room, not hardcoded")
+check("HALLUCINATIONS" in ptt and "MIN_SPEECH_SECONDS" in ptt and
+      "speech_region" in ptt,
+      "Near-silent audio must be trimmed and stock caption phrases rejected, or "
+      "Whisper hallucinates 'thank you' out of noise")
+check("PersonaPrompt.CurrentDisplayLanguage()" in chat and
+      "_pushToTalkTriggerPath," in chat and "read_trigger_language" in ptt and
+      "SUPPORTED_LANGUAGES" in ptt,
+      "Recognition language must follow the game display language through the trigger")
+check("awaiting_reset" in ptt,
+      "After finalising, the listener must wait for the mod to clear the trigger "
+      "instead of starting a second utterance immediately")
+check("push-to-talk.active" in chat and "ClearPushToTalkTrigger" in chat and
+      "File.WriteAllText(_pushToTalkTriggerPath" in chat,
+      "Toggling on must raise the trigger and toggling off must clear it")
+check("NoteUserTyping" in chat and "_userTypedWhileListening" in chat and
+      "_lastAppliedPartial" in chat,
+      "Typing during recognition must latch and stop partials overwriting the field")
+check("FocusInputField();" in chat.split("private void StopListening")[0],
+      "The field must be focused while listening so it accepts typing")
+check("ClearPushToTalkTrigger();" in chat.split("private void Update()")[0],
+      "A trigger left by a crash must be cleared at startup, or the listener records "
+      "forever")
+check("PARTIAL_MARKER" in ptt and "next_partial_at" in ptt and
+      "SpeechPartialMarker" in chat and "_inputField.text = partial" in chat,
+      "Speech must stream partial recognition into the chat field")
+check("if (!_speechListening) return;" in chat,
+      "A partial arriving after listening ends must not overwrite the final transcript")
+check("CloneActionRow" in settings and "Vocal Synthesis Folder" in settings and
+      "Vocal Synthesis" in settings and voice_setup,
+      "Settings must expose the file-based vocal synthesis setup")
+check("SetSettingsInteractive(settingsTyping)" in settings,
+      "Settings must only capture the desktop while a text field is focused")
+check("WindowStyle Hidden" in launcher and "/set_gpt_weights" in launcher and
+      "/set_sovits_weights" in launcher and "service-startup.log" in launcher,
+      "The hidden launcher must select, warm, and log all voice services")
+check("ExecuteNativeAction" in chat and "TimerSystem.Instance" in chat and
+      "AlarmSystem.SetAlarm" in chat and '"timer_cancel"' in chat and
+      '"alarm_cancel"' in chat,
+      "LLM timer and alarm intents must route to Lilith's native systems")
+check("StartCountdown((float)seconds, false)" in chat and
+      "TryApplyImmediateNativeAction" in chat and "TryParseDuration" in chat and
+      "TryParseAlarmClock" in chat,
+      "Native English timer confirmation must stay muted and cancellation must be immediate")
+check('SetSingleLineLabel(_voiceFolderLabel, "Vocal Synthesis Folder")' in settings and
+      'labels[i].enableWordWrapping = false' in settings,
+      "Vocal Synthesis setting labels must stay on one line")
+check("VocalSynthesisPreferred" in plugin and "Task.WhenAny" in voice_monitor and
+      "CfgReplaceGameVoice.Value = effective" in voice_monitor and
+      "VoiceServiceMonitor.IsAvailable" in settings and "_jp.enabled = available" in settings,
+      "Vocal synthesis must grey out while unavailable and restore its saved preference")
 
 # -- 8. Output artifacts ------------------------------------------------------
 out_dir = (r"D:\SteamLibrary\steamapps\common\The NOexistenceN of Lilith"
@@ -113,6 +275,11 @@ check(os.path.exists(os.path.join(out_dir, "LilithMod.dll")),
       "LilithMod.dll not found after build")
 check(any("NAudio" in n for n in (os.listdir(out_dir) if os.path.isdir(out_dir) else [])),
       "No NAudio assembly beside the plugin - playback would fail at runtime")
+check(os.path.exists(os.path.join(out_dir, "SmartReader.dll")),
+      "SmartReader.dll not found beside the plugin")
+check(os.path.exists(os.path.join(out_dir, "voice-setup", "README.txt")) and
+      os.path.exists(os.path.join(out_dir, "voice-setup", "voice-config.example.ini")),
+      "Voice setup README/config were not deployed")
 
 # -- Result -------------------------------------------------------------------
 if failures:
