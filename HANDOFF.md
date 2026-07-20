@@ -1,39 +1,22 @@
-# Handoff: injected callbacks never dispatch (BepInEx IL2CPP)
+# Handoff: LilithMod
 
-> **RESOLVED — 2026-07-20. Kept only as a record of the investigation.**
->
-> Not an Il2CppInterop bug. Steam inherited BepInEx/Doorstop state from an earlier
-> direct launch, and the game process being tested was a **separate vanilla
-> instance** with no BepInEx in it. The modded process logged `Load()`, `Awake()`
-> and `sceneLoaded`, then handed off to the already-running vanilla instance and
-> exited — which is exactly why every deferred callback looked dead while the
-> startup ones looked fine.
->
-> The investigation below never verified that the process writing the log was the
-> process rendering the game. Section 4's table is therefore measuring a
-> short-lived process, not a broken runtime, and the `Class::Init` warning in
-> section 5 was a red herring — it is benign and near-universal on Unity 2021.2+.
-> **Check process identity first.**
-
-Written for a fresh reader with no prior context. Everything below was observed
-directly on this machine. Where something is inferred rather than measured, it
-says so.
+A BepInEx mod for **The NOexistenceN of Lilith**, a Unity IL2CPP desktop-pet
+game. Written for someone picking this up cold. Everything here was observed on
+this machine; where something is unverified, it says so.
 
 ---
 
-## 1. The project
+## 1. What the mod does
 
-A BepInEx mod for **The NOexistenceN of Lilith**, a Unity IL2CPP desktop-pet
-game. The mod adds three features, all of which were working end to end at one
-point:
+1. **Dialogue dumper** - writes the game's dialogue tables to JSON on startup.
+2. **Custom dialogue injection** - authored nodes from `custom/*.json` are merged
+   into the game's database at runtime.
+3. **Free-text LLM chat** - press **F11**, type, Lilith answers in her own voice.
+4. **Bilingual voice** - she *speaks Japanese* through a local fine-tuned
+   GPT-SoVITS model while the on-screen bubble shows *English*, advancing one
+   sentence at a time.
 
-1. A dialogue-database dumper (writes JSON dumps of the game's dialogue tables).
-2. JSON-driven injection of custom dialogue nodes.
-3. Free-text LLM chat: press **F11**, type, Lilith answers via an
-   OpenAI-compatible API. A local GPT-SoVITS TTS voice was wired in but has
-   never been verified in-game.
-
-**F11 opening the chat box is the acceptance test.** It currently does nothing.
+F11 opening the chat box is the acceptance test for 3 and 4.
 
 ---
 
@@ -41,246 +24,183 @@ point:
 
 | | |
 |---|---|
-| Game path | `D:\SteamLibrary\steamapps\common\The NOexistenceN of Lilith` |
-| Steam AppID / depot | `4643090` / `4643091` |
-| Current game BuildID | `24275097` (published 2026-07-19, reinstalled clean 2026-07-20 15:10) |
-| Previous BuildID | `24242545`, depot manifest `3037869171313872550` |
+| Game | `D:\SteamLibrary\steamapps\common\The NOexistenceN of Lilith` |
+| Steam AppID / depot | `4643090` / `4643091`, BuildID `24275097` |
 | Unity | `2021.3.45f2`, IL2CPP |
-| BepInEx | `6.0.0-be.785` (x64 IL2CPP), zip cached at `D:\Lilith\tools\bepinex785.zip` |
-| Il2CppInterop | `1.5.3` (bundled with be.785) |
-| Repo | `D:\Lilith`, branch `master`, HEAD `84ed1a2` |
-| Last known-good mod commit | `8e1f94b` |
-| Build command | `"C:\Program Files\dotnet\dotnet.exe" build D:\Lilith\LilithMod\LilithMod.csproj -c Release` |
+| BepInEx | `6.0.0-be.785` x64 IL2CPP (`D:\Lilith\tools\bepinex785.zip`) |
+| Repo | `D:\Lilith`, branch `master` |
+| Build | `"C:\Program Files\dotnet\dotnet.exe" build D:\Lilith\LilithMod\LilithMod.csproj -c Release` |
 
-The csproj writes straight into the game's plugin folder, so a build is a deploy.
-Close the game before building or the DLL is locked.
-
-Verbose BepInEx logging is currently **on** (`LogLevels = All`,
-`LogChannels = All` in `BepInEx\config\BepInEx.cfg`). Keep it on; the decisive
-evidence only appears at Debug level.
+The csproj `OutputPath` points straight into the game's plugin folder, so
+**building is deploying**. Close the game first or the DLL is locked.
 
 ---
 
-## 3. The symptom
-
-The plugin loads. `Load()` runs. Types register. Then nothing ever ticks.
-
-Concretely, in `BepInEx\LogOutput.log` you will see the plugin load and its
-`Awake()` log lines, and **the log then stops** — no per-frame activity, and no
-Unity log forwarding despite `UnityLogListening = true`.
-
-The dumper writes its files from `Update()`, so **an empty
-`BepInEx\plugins\LilithMod\dump\` after ~45 s of runtime is the fastest
-automated check** that the fault is present. No keypress needed.
-
-### The split
-
-- `Awake()` **runs.** This is not evidence that dispatch works — `AddComponent`
-  invokes `Awake` directly and synchronously.
-- `Update()` **never runs**, on any component, on any host GameObject.
-- Managed → native calls **work fine**: `AddComponent`, `new GameObject`,
-  `DontDestroyOnLoad`, static field reads all succeed.
-- Native → managed dispatch is **dead**, with exactly one exception (below).
-
----
-
-## 4. Callback surface, measured
-
-Every row was built, run, and read out of the log. Only one path works.
-
-| Path | Registers? | Fires? |
-|---|---|---|
-| `SceneManager.sceneLoaded` | yes | **YES** |
-| Injected MonoBehaviour `Update()` | n/a | no |
-| Harmony postfix on `DialogueManager.Update` | yes | no |
-| Harmony postfix on `ArchiveRuntimeTracker.Update` | yes | no |
-| Harmony postfix on `SteamPlaytimeSync.Tick` | yes | no |
-| `InputSystem.onAfterUpdate` (registered in `Load()`) | yes | no |
-| `InputSystem.onAfterUpdate` (registered after scene load) | yes | no |
-| `RenderPipelineManager.beginFrameRendering` | yes | no |
-| `PlayerLoop` `updateDelegate` (with `type` set) | yes | no |
-| `Camera.onPreRender` / `onPostRender` | yes | no (expected — URP) |
-
-`Camera.onPreRender`/`onPostRender` are legacy callbacks and are inert under URP,
-which this game uses, so those two are not evidence of anything.
-
-`Harmony.GetAllPatchedMethods()` reports the patches as applied. The patched
-methods demonstrably run every frame — the game's own `Player.log`
-(`C:\Users\User\AppData\LocalLow\Nino\Lilith\Player.log`) shows
-`ArchiveRuntimeTracker:Update()` and `SteamPlaytimeSync:Tick(Single)` in live
-stack traces during the same session. The postfixes still never execute.
-
----
-
-## 5. Named cause (probable, not proven)
-
-From the Debug-level log at startup:
-
-```
-[Warning:Il2CppInterop] Class::Init signatures have been exhausted, using a substitute!
-[Debug  :Il2CppInterop] Picked mono_class_instance_size as a Class::Init substitute
-```
-
-`mono_class_instance_size` returns a size and initialises nothing. If injected
-and patched classes never get initialised, Unity never builds the class method
-cache it uses for per-frame callbacks — which fits the observed split exactly
-(`Awake` direct-invoked and fine, everything deferred dead).
-
-Interop generation is also degraded on this build:
-
-```
-[Info :Il2CppInteropGen] Failed to restore 2 fields
-[Info :Il2CppInteropGen] Failed to restore 1136 methods
-[Info :Il2CppInteropGen] IL unstrip statistics: 7438 successful, 1359 failed
-```
-
-**Caveat, and it matters:** the `Class::Init` warning is extremely common across
-Unity 2021.2+ games where BepInEx mods work fine (see BepInEx issues #474, #624,
-#455). So the warning alone does not prove causation. It is the best-fitting
-explanation found, not a confirmed diagnosis.
-
-The detour layer itself is **healthy** — `DobbyDetour` prepares trampolines
-successfully at startup and BepInEx's own `runtime_invoke` hook installs.
-
----
-
-## 6. Ruled out by test, not by argument
-
-Each of these was actually performed and the fault still reproduced:
-
-- **Our code.** Built commit `8e1f94b` (the tree that last worked) in a separate
-  git worktree. Fails identically. The mod source is exonerated.
-- **BepInEx version.** Tested be.785, be.780, and be.764. be.764 bundles
-  Il2CppInterop **1.5.1** rather than 1.5.3, so this is not a 1.5.3 regression.
-  be.785 is the newest build published (2026-06-28); there is nothing newer to try.
-- **Game install.** Full Steam uninstall + reinstall.
-- **The other mod** (`LilithTextInjector`, from `github.com/mimimi6666/Lilith-AI-Mod`).
-  Not present on the clean slate. Its BepInEx tree, plugin and 2 GB voice runtime
-  are parked at `D:\Lilith\_dirty-bepinex-20260720-1515`.
-- **Shadow assemblies.** Moved all `NAudio*` and `System.*` DLLs out of the plugin
-  folder (they are NAudio dependencies; `System.Runtime.CompilerServices.Unsafe`
-  shadowing MonoMod's copy was a plausible detour-breaker). No change.
-- **Windows policy.** No ASR rules, no IFEO entries for `Lilith.exe`, no
-  `AppInit_DLLs`, Smart App Control off, ACG (`BlockDynamicCode`) and CFG both
-  **OFF** on the live process. Dynamic code generation is permitted.
-- **Environment.** No `DOTNET_*` / `COMPlus_*` / `CORECLR_*` vars at machine,
-  user, or process level.
-- **Loader files.** `winhttp.dll`, `doorstop_config.ini`, `.doorstop_version` and
-  the `dotnet/` CoreCLR runtime at the game root all hash/date-match our be.785
-  zip. No stale loader.
-- **A reboot.**
-
-### Notably, the other mod is broken the same way
-
-Decompiling `LilithTextInjector.dll` shows it drives itself from
-`[HarmonyPatch(typeof(DialogueManager), "Update")]`. Patching that exact method
-from our mod registers and never fires. **Their mod cannot work on this build
-either.** Its installer is not the culprit.
-
----
-
-## 7. The anomaly nobody has explained
-
-The mod demonstrably worked on **this same game build**. Evidence: the dumper's
-output files at
-`D:\Lilith\_dirty-bepinex-20260720-1515\BepInEx\plugins\LilithMod\dump\` carry
-`CreationTime 2026-07-20 01:25:41` and `LastWriteTime 2026-07-20 04:06:41`. The
-dumper only writes from `Update()`, so `Update()` was dispatching at 01:25 and
-again at 04:06 on 2026-07-20. Game build `24275097` was installed 2026-07-19
-04:20:56, i.e. **before** both of those runs (per Steam's
-`content_log.txt`).
-
-So this is not simply "the game updated and broke IL2CPP interop". Something
-changed between 04:06 on 2026-07-20 and now that survives a clean game
-reinstall, a fresh BepInEx, and a reboot — or the timestamp evidence is
-misleading in a way not yet identified.
-
-**This contradiction is the most valuable thread for a fresh reader.** Do not
-assume the prior investigation framed it correctly.
-
----
-
-## 8. Reproducing in one minute
+## 3. Running it
 
 ```powershell
-$g = "D:\SteamLibrary\steamapps\common\The NOexistenceN of Lilith"
-Get-Process Lilith -EA SilentlyContinue | Stop-Process -Force
-Remove-Item "$g\BepInEx\LogOutput.log" -Force -EA SilentlyContinue
-Remove-Item "$g\BepInEx\plugins\LilithMod\dump" -Recurse -Force -EA SilentlyContinue
-Start-Process "$g\Lilith.exe" -WorkingDirectory $g
-Start-Sleep -Seconds 45
-Select-String -Path "$g\BepInEx\LogOutput.log" -Pattern "DIAG|FIRED|Class::Init"
-(Get-ChildItem "$g\BepInEx\plugins\LilithMod\dump" -EA SilentlyContinue).Count
+# 1. voice service - leave the window open, ~40s to load the model
+powershell -ExecutionPolicy Bypass -File D:\Lilith\start-tts.ps1
+
+# 2. launch the game from Steam, then press F11
 ```
 
-Expected on the fault: `sceneLoaded` fires, nothing else does, dump count `0`.
+Voice is optional. With `[Voice] Enabled = false` in
+`BepInEx\config\LilithMod.cfg`, chat works and simply stays silent.
 
-Note: launching via Steam (`steam://rungameid/4643090`) at one point produced
-**no BepInEx log at all**. That was self-inflicted — repeated `Stop-Process
--Force` abandoned BepInEx's startup mutex
-(`System.Threading.AbandonedMutexException` in a
-`preloader_*.log` at the game root). Prefer launching `Lilith.exe` directly, and
-be aware that force-killing can poison the next launch.
+**Verify scripts** (each builds, then asserts load-bearing source markers):
 
----
-
-## 9. Diagnostic scaffolding currently in the tree
-
-These are temporary and should be deleted once the cause is found:
-
-- `LilithMod/DiagHeartbeat.cs` — Harmony postfixes on `DialogueManager.Update`,
-  `ArchiveRuntimeTracker.Update`, `SteamPlaytimeSync.Tick`; dumps
-  `Harmony.GetAllPatchedMethods()`.
-- `LilithMod/DiagDelegateProbe.cs` — `Camera.*`, `RenderPipelineManager`,
-  `InputSystem.onAfterUpdate`, `SceneManager.sceneLoaded`; re-registers the
-  per-frame hooks after scene load.
-- `LilithMod/DiagTickProbe.cs` — `PlayerLoop` injection.
-- `LilithModPlugin.Load()` — `[DIAG]` lines around `AddComponent`, plus a
-  `DontDestroyOnLoad` call added while chasing the `scene=''` lead (the BepInEx
-  manager object belongs to no scene; forcing it into the DDOL scene did **not**
-  restore dispatch, so that call is not a fix and can go).
-- `LilithMod.csproj` — a `DOTween` reference added for a probe that was dropped
-  (`DOVirtual.Float` is stripped from the game's IL2CPP build).
+```
+python verify-bilingual.py   # the bilingual voice feature - the current one
+python verify-voice.py       # the original voice plumbing
+python verify-step3.py       # LLM chat
+```
 
 ---
 
-## 10. Leads not yet tried
+## 4. Layout
 
-1. **MelonLoader** instead of BepInEx. A different IL2CPP loader with its own
-   bootstrap; it may resolve `Class::Init` where this one does not. This is the
-   single most promising untried option.
-2. **Force the correct `Class::Init`.** Rather than accept Il2CppInterop's
-   substitute, locate the real `il2cpp::vm::Class::Init` in `GameAssembly.dll`
-   and supply it — via a BepInEx preloader patcher, or a local Il2CppInterop
-   build. Directly targets the suspected cause; confirms or kills the theory.
-3. **Roll the game back** to BuildID `24242545` via the Steam console
-   (`download_depot 4643090 4643091 3037869171313872550`). Weak on the evidence,
-   since the mod worked *after* that update — but it would settle whether the
-   game binary is involved at all.
-4. **Re-examine section 7.** Establish independently whether the mod really did
-   run at 01:25 / 04:06 on 2026-07-20 (e.g. check dump file *contents* against
-   the current game's dialogue tables — if they match the current build, the
-   files really were produced by a working run on it).
-5. **File upstream.** This is a clean, well-evidenced BepInEx / Il2CppInterop
-   report for Unity 2021.3.45f2 if it turns out to be genuinely their bug.
+| File | Responsibility |
+|---|---|
+| `LilithModPlugin.cs` | Entry point, config binding, **persona prompt**, voice init |
+| `LlmChatController.cs` | F11 UI, chat history, API call, reply parsing, subtitles |
+| `DumpDatabaseBehaviour.cs` | Dialogue dump + custom-node injection |
+| `Utterance.cs` | One sentence: `JaText` (spoken) + `EnText` (shown) |
+| `SpeechQueueProcessor.cs` | Voice thread; overlaps synthesis with playback |
+| `TtsClient.cs` | HTTP to GPT-SoVITS |
+| `VoicePlayer.cs` | NAudio `WaveOutEvent` playback |
+| `WindowFocus.cs`, `PointerFocus.cs` | Win32 focus/cursor work (see §6) |
+| `GameStyle.cs` | Copies the game's own dialogue-bar styling |
+
+Outside the repo, gitignored, **not reproducible cheaply**:
+
+| Path | What | Size |
+|---|---|---|
+| `D:\Lilith\voice-runtime\` | GPT-SoVITS + bundled Python + pretrained models | ~2 GB |
+| `D:\Lilith\training\weights\` | **fine-tuned JA voice model** | 1.2 GB |
+| `D:\Lilith\voice-data\` | 752 clips extracted from a second game + transcripts | 337 MB |
+| `D:\Lilith\backup-preinstall-20260720-1508\` | configs incl. API key, dumps, reference WAVs | 7 MB |
 
 ---
 
-## 11. Assets worth not destroying
+## 5. How the voice path works
 
-- `D:\Lilith\backup-preinstall-20260720-1508\` — configs (including the LLM API
-  key), 26 dialogue dumps, 11 reference WAVs, dialogue TSVs.
-- `D:\Lilith\training\weights\` — a fine-tuned GPT-SoVITS Japanese voice model
-  (~1.2 GB). Expensive to reproduce.
-- `D:\Lilith\voice-data\` — 752 audio clips extracted from a second game, plus
-  transcripts.
-- `D:\Lilith\_dirty-bepinex-20260720-1515\` — the pre-clean-slate BepInEx tree
-  (8.7 GB), including the other mod's DLL and the dump files whose timestamps
-  section 7 rests on. **Do not delete until section 7 is resolved.**
-- `C:\Users\User\Downloads\packages\` — the other mod's installer packages
-  (2.3 GB), so nothing needs re-downloading.
+```
+F11 -> LlmChatController -> one LLM call
+     -> {"lines":[{"ja":"…","en":"…"}, …]}
+     -> parse; history stores the JA she actually said
+     -> first EN shown immediately; all sentences queued to the voice thread
 
-`voice-data/`, `training/`, `backup*/` and `_dirty-bepinex-*/` are gitignored.
-Extracted game audio belongs to the game's developers and must not be committed
-or redistributed. The API key lives in
-`BepInEx\config\LilithMod.cfg` and must never be committed or hardcoded.
+SpeechQueueProcessor (background thread), per sentence:
+     enqueue EN subtitle   (main thread drains it and displays)
+     start synthesis of the NEXT sentence   <- before PlaySync, this is the overlap
+     PlaySync(current audio)                <- blocks
+```
+
+Only the first sentence is paid for up front. Measured: a one-sentence reply is
+~2.2 s to first sound, a two-sentence reply was ~7 s serially and is ~2.4 s
+pipelined. The LLM leg is ~0.9 s.
+
+Fallbacks, all defined and implemented:
+- reply is not the JSON shape -> shown and spoken as plain text
+- voice disabled -> whole reply shown at once, no audio
+- synthesis fails mid-reply -> whole reply shown **once**, remaining subtitles
+  dropped (with no audio there is nothing pacing them, so they would otherwise
+  flash past in a frame)
+- a new reply arrives mid-speech -> `CancelCurrent()` flushes the old queue; the
+  sentence already inside `PlaySync` is allowed to finish
+
+---
+
+## 6. Gotchas that cost real time
+
+Read this section before debugging anything.
+
+1. **Verify process identity before believing a log.** The game is
+   single-instance. Launching `Lilith.exe` directly while a Steam-launched copy
+   is running produces a *second* process that initialises BepInEx, logs
+   `Load()` / `Awake()`, hands off to the existing vanilla instance and exits.
+   The result looks exactly like "injected callbacks are dead": startup logs
+   appear, nothing ever ticks, Harmony patches never fire. This cost an entire
+   session and produced a confident, wrong diagnosis blaming Il2CppInterop.
+   **Confirm the PID writing the log is the PID rendering the game.**
+
+2. **`Config.Bind` keeps whatever is already in the cfg.** Changing a default in
+   code does nothing on an existing install. To actually ship a new prompt,
+   bind a *new key name* - that is why the prompt lives under
+   `BilingualSystemPrompt` and the old `SystemPrompt` entry is ignored. Silent
+   no-ops here look exactly like a feature that "doesn't work".
+
+3. **`node.text = …` does not refresh a dialogue already on screen.**
+   `DialogueManager.StartDialogue(9500000)` is what the game reacts to. This is
+   why each subtitle re-calls StartDialogue.
+
+4. **`Class::Init signatures have been exhausted` is benign.** It appears on
+   essentially every Unity 2021.2+ game including working ones. Do not build a
+   theory on it (see item 1).
+
+5. **Force-killing the game can abandon BepInEx's startup mutex**, leaving an
+   `AbandonedMutexException` in a root `preloader_*.log` and no BepInEx at all
+   on the next launch. If BepInEx suddenly stops loading, suspect this.
+
+6. **GPT-SoVITS prints CJK to stdout.** On a cp874 console that raises
+   `UnicodeEncodeError`, surfaced as a misleading `HTTP 400 tts failed`.
+   `start-tts.ps1` sets `PYTHONIOENCODING=utf-8`; keep it.
+
+7. **Kernel compilation is per sequence length.** The first request at a new
+   text length can take 6-14 s while warm ones take ~2 s. Early measurements
+   lie; warm up before timing anything.
+
+8. **The TTS service is not actually streaming.** `streaming_mode: true` was
+   tested with `wav`, `raw` and `ogg`: first chunk always equalled completion.
+   Sentence-level pipelining is the substitute, and is why it exists.
+
+9. **Licensing.** `voice-data/` and `training/` are audio and models derived
+   from the games' own assets; `voice-runtime/` is third-party GPT-SoVITS plus
+   pretrained weights. All gitignored. Never commit or redistribute them. A
+   commit once swept in the whole 2 GB runtime and had to be reset.
+
+10. **The API key** lives in `BepInEx\config\LilithMod.cfg`, is user-supplied,
+    and must never be hardcoded, logged, or committed. `backup*/` is gitignored
+    because it contains a copy.
+
+---
+
+## 7. State
+
+**Verified**
+- Mod loads, ticks, dumps dialogue, injects custom nodes.
+- F11 opens the chat box; a reply was received, parsed as a sentence pair, shown,
+  and queued to voice with no errors logged.
+- `verify-bilingual.py` passes: build plus every load-bearing marker.
+- The TTS service answers the mod's exact payload - JA text, `prompt_text`,
+  `cut5`, `fragment_interval` 0.4 - in 13.3 s cold, ~2.2 s warm.
+- The new config key materialises on an install that already had a cfg.
+
+**Not verified**
+- That audio was *audibly* heard in-game. The log shows it queued with no
+  failures; nobody has confirmed by ear through the game itself.
+- How a **two-sentence** reply looks. Each subtitle re-calls `StartDialogue`,
+  which restarts the dialogue, so the bubble may visibly re-trigger mid-reply.
+  Correct, but possibly ugly. This is the first thing to look at.
+- Whether an IME composes correctly in the chat box.
+
+**Open / not started**
+- `Data/SenWords` filter never traced.
+- No packaging or README for anyone else to install this.
+- `_dirty-bepinex-20260720-1515\` (~6.7 GB after the runtime was moved out) is
+  leftover and safe to delete.
+
+---
+
+## 8. Process note
+
+Per the repo's CLAUDE.md, spec-able implementation is delegated to DeepSeek and
+Claude keeps design, a short intent, and review. Two things to know:
+
+- `pipeline.py plan` takes **no `-c` flag**, so it briefs the planner with zero
+  context and will invent files. Use
+  `implement_with_deepseek.py --plan -c <every relevant file>` instead.
+- The agent stage (`deepseek_agent.py`) failed here by emitting malformed
+  tool-call markup for 25 steps and writing nothing at all. If that recurs, the
+  ladder's terminal stage is Opus authorship.
