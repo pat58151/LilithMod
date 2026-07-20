@@ -511,7 +511,7 @@ namespace LilithMod
             placeholderGo.transform.SetParent(textArea.transform, false);
             StretchToParent(placeholderGo);
             _placeholderText = placeholderGo.AddComponent<TextMeshProUGUI>();
-            _placeholderText.text = "Say something ···";
+            _placeholderText.text = "Say something···";
             _placeholderText.fontStyle = FontStyles.Italic;
             _placeholderText.color = Color.grey;
             ApplyTextMetrics(_placeholderText, true);
@@ -1670,7 +1670,7 @@ namespace LilithMod
         private void StopListening(bool cancelled)
         {
             _speechListening = false;
-            if (_placeholderText != null) _placeholderText.text = "Say something ···";
+            if (_placeholderText != null) _placeholderText.text = "Say something···";
             ClearPushToTalkTrigger();
             if (cancelled && !_userTypedWhileListening &&
                 string.IsNullOrWhiteSpace(_inputField?.text) &&

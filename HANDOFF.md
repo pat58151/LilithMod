@@ -43,7 +43,7 @@ The csproj `OutputPath` points straight into the game's plugin folder, so
 # 1. voice service - leave the window open, ~40s to load the model
 powershell -ExecutionPolicy Bypass -File D:\Lilith\start-tts.ps1
 
-# 2. launch the game from Steam, then press F11
+# 2. launch the game from Steam, then press F7 to type or F8 to speak
 ```
 
 Voice is optional. With `[Voice] Enabled = false` in
@@ -64,7 +64,10 @@ python verify-step3.py       # LLM chat
 | File | Responsibility |
 |---|---|
 | `LilithModPlugin.cs` | Entry point, config binding, **persona prompt**, voice init |
-| `LlmChatController.cs` | F11 UI, DeepSeek calls, chat history, reply parsing, subtitles |
+| `LlmChatController.cs` | F7 chat UI, F8 speech toggle, DeepSeek calls, history, reply parsing, subtitles |
+| `PersonaPrompt.cs` | Persona, per-language style blocks, player name |
+| `SettingsBridge.cs` | Rows injected into the game's native settings tabs |
+| `runtime/push_to_talk.py` | Silero VAD + Whisper on the GPU; transcripts back to the mod |
 | `LiveInformationService.cs` | Startup time/weather warm-up, SearXNG search, SmartReader extraction |
 | `DumpDatabaseBehaviour.cs` | Dialogue dump + custom-node injection |
 | `Utterance.cs` | One sentence: `JaText` (spoken) + `EnText` (shown) |
@@ -88,7 +91,7 @@ Outside the repo, gitignored, **not reproducible cheaply**:
 ## 5. How the voice path works
 
 ```
-F11 -> LlmChatController -> one LLM call
+F7 (or F8 speech) -> LlmChatController -> one LLM call
      -> {"lines":[{"spoken":"…","shown":"…"}, …]}
      -> parse; history stores what she actually said
      -> all sentences queued without showing an early subtitle
@@ -142,28 +145,40 @@ Read this section before debugging anything.
    essentially every Unity 2021.2+ game including working ones. Do not build a
    theory on it (see item 1).
 
-5. **Force-killing the game can abandon BepInEx's startup mutex**, leaving an
+5. **Keyboard focus and mouse capture are separate, and chat must only take the
+   keyboard.** Delivering keystrokes needs `WS_EX_NOACTIVATE` cleared and the
+   window foregrounded - nothing more. Clearing `WS_EX_TRANSPARENT` or calling
+   `TransparentWindowNew.BeginKeyboardInput()` additionally suspends the game's
+   per-pixel click-through, and since the window is fullscreen that makes the
+   entire desktop stop accepting clicks. The chat bar therefore uses
+   `EnterKeyboardMode`; only settings uses `EnterInteractiveMode`, because it
+   actually needs the mouse, and it scopes that to while a text field is focused.
+   `s_beganKeyboardInput` keeps Begin/End balanced now that only one path
+   suspends click-through - an unmatched `End` leaves the pet unable to pass
+   clicks through at all.
+
+6. **Force-killing the game can abandon BepInEx's startup mutex**, leaving an
    `AbandonedMutexException` in a root `preloader_*.log` and no BepInEx at all
    on the next launch. If BepInEx suddenly stops loading, suspect this.
 
-6. **GPT-SoVITS prints CJK to stdout.** On a cp874 console that raises
+7. **GPT-SoVITS prints CJK to stdout.** On a cp874 console that raises
    `UnicodeEncodeError`, surfaced as a misleading `HTTP 400 tts failed`.
    `start-tts.ps1` sets `PYTHONIOENCODING=utf-8`; keep it.
 
-7. **Kernel compilation is per sequence length.** The first request at a new
+8. **Kernel compilation is per sequence length.** The first request at a new
    text length can take 6-14 s while warm ones take ~2 s. Early measurements
    lie; warm up before timing anything.
 
-8. **The TTS service is not actually streaming.** `streaming_mode: true` was
+9. **The TTS service is not actually streaming.** `streaming_mode: true` was
    tested with `wav`, `raw` and `ogg`: first chunk always equalled completion.
    Sentence-level pipelining is the substitute, and is why it exists.
 
-9. **Licensing.** `voice-data/` and `training/` are audio and models derived
+10. **Licensing.** `voice-data/` and `training/` are audio and models derived
    from the games' own assets; `voice-runtime/` is third-party GPT-SoVITS plus
    pretrained weights. All gitignored. Never commit or redistribute them. A
    commit once swept in the whole 2 GB runtime and had to be reset.
 
-10. **A running listener survives deleting its `.py` file.** Python loads the
+11. **A running listener survives deleting its `.py` file.** Python loads the
     source once, so an old `runtime/*.py` helper keeps running - holding the
     microphone and writing handoff files nothing reads - long after the file is
     gone and the launcher has been repointed. Editing `start-lilith.ps1` only
@@ -173,7 +188,7 @@ Read this section before debugging anything.
     gotcha 1: believing a code change took effect without confirming which
     process is actually running.
 
-11. **The API key** lives in `BepInEx\config\LilithMod.cfg`, is user-supplied,
+12. **The API key** lives in `BepInEx\config\LilithMod.cfg`, is user-supplied,
     and must never be hardcoded, logged, or committed. `backup*/` is gitignored
     because it contains a copy.
 
@@ -183,7 +198,7 @@ Read this section before debugging anything.
 
 **Verified**
 - Mod loads, ticks, dumps dialogue, injects custom nodes.
-- F11 opens the chat box; a reply was received, parsed as a sentence pair, shown,
+- F7 opens the chat box; a reply was received, parsed as a sentence pair, shown,
   and queued to voice with no errors logged.
 - `verify-bilingual.py` passes: build plus every load-bearing marker.
 - The TTS service answers the mod's exact payload - JA text, `prompt_text`,

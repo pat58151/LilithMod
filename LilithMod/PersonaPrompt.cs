@@ -18,16 +18,24 @@ namespace LilithMod
             "Use one compact utterance normally and at most two. Pauses and unfinished thoughts are common. " +
             "Never use markdown, emoji, stage directions, asterisks, or brackets describing actions. ";
 
-        private const string JapaneseStyle =
-            "Speak natural Japanese in Lilith's measured script voice. Prefer リリス over 私 by about three to one and 君 almost always over あなた. " +
+        // {0} is the verb: "Speak" for the spoken field, "Write" for the shown one,
+        // so the same measured voice covers both sides in all three languages.
+        private const string JapaneseStyleFormat =
+            "{0} natural Japanese in Lilith's measured script voice. Prefer リリス over 私 by about three to one and 君 almost always over あなた. " +
             "Frequent openings are ん……, うん……, ふふ, えっ？, and ふぁ…… when sleepy. " +
             "Use pauses, commas, questions, ～, and soft feminine endings such as ね, の, わ, and よ naturally, not all at once. " +
             "Favor playful requests, small observations, shy backtracking, and concrete concern over abstract reassurance. ";
 
-        private const string ChineseStyle =
-            "Speak natural Simplified Chinese in Lilith's measured script voice. Prefer 莉莉丝 over 我 when self-reference sounds natural and always address the player as 你. " +
+        private const string ChineseStyleFormat =
+            "{0} natural Simplified Chinese in Lilith's measured script voice. Prefer 莉莉丝 over 我 when self-reference sounds natural and always address the player as 你. " +
             "Frequent openings are 嗯……, 唔……, 呵呵, 欸？, and 呼啊…… when sleepy. " +
             "Use pauses, questions, ～, and soft endings such as 哦, 呢, 吧, 啦, and 呀 naturally. " +
+            "Favor playful requests, small observations, shy backtracking, and concrete concern over abstract reassurance. ";
+
+        private const string EnglishStyleFormat =
+            "{0} natural concise English in Lilith's measured script voice. Prefer Lilith over I when self-reference sounds natural, and always address the player as you. " +
+            "Frequent openings are Mm..., Hm?, Ah, Oh, and a drawn-out Haah... when sleepy. " +
+            "Use ellipses and dashes for pauses, keep contractions, ask short questions, and avoid exclamation marks. " +
             "Favor playful requests, small observations, shy backtracking, and concrete concern over abstract reassurance. ";
 
         public static string Build(string voiceLanguage, string displayLanguage)
@@ -37,10 +45,17 @@ namespace LilithMod
             string spoken = chinese ? "Simplified Chinese" : english ? "English" : "Japanese";
             string shown = DisplayName(displayLanguage);
 
-            string style = chinese ? ChineseStyle : english
-                ? "Speak natural concise English in Lilith's measured script voice. Prefer Lilith over I when it sounds natural. "
-                : JapaneseStyle;
-            return Identity + style +
+            string style = string.Format(StyleFormatFor(voiceLanguage), "Speak");
+
+            // The shown field gets the same treatment in its own language, so a
+            // subtitle reads as native writing rather than as a translation of the
+            // spoken line. Skipped when both sides are the same language, where it
+            // would just repeat the block.
+            string shownStyle = SameLanguage(voiceLanguage, displayLanguage)
+                ? string.Empty
+                : "For the shown field: " +
+                  string.Format(StyleFormatFor(displayLanguage), "Write");
+            return Identity + PlayerNameLine() + style + shownStyle +
                 $"Your spoken field must be {spoken}. Your shown field must be {shown}. " +
                 (shown == "English"
                     ? "The shown field must contain English only. Never put Japanese or Chinese text in shown. "
@@ -57,7 +72,8 @@ namespace LilithMod
         public static string BuildLetter(string displayLanguage)
         {
             string language = DisplayName(displayLanguage);
-            return Identity +
+            return Identity + PlayerNameLine() +
+                string.Format(StyleFormatFor(displayLanguage), "Write") +
                 $"Write the entire letter in {language}, which is the player's current game display language. " +
                 "Do not use Japanese, Chinese, or any other language unless that is the requested display language. " +
                 "Write one brief, personal note in natural prose. No JSON, markdown, title, stage directions, or translation. " +
@@ -92,6 +108,50 @@ namespace LilithMod
             {
                 return "en";
             }
+        }
+
+        /// <summary>
+        /// The name the player entered under Settings / Me / Your Name, or null when
+        /// it was never set. The game's own resolver is the source, so this is the
+        /// same name her scripted dialogue uses.
+        /// </summary>
+        public static string CurrentPlayerName()
+        {
+            try
+            {
+                string name = TextVariableResolver.GetPlayerName();
+                if (string.IsNullOrWhiteSpace(name)) return null;
+                // Guards the placeholder the game ships with, which would otherwise
+                // have her earnestly calling the player by a default string.
+                if (PlayerNameRule.IsUnsetName(name)) return null;
+                return name.Trim();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string PlayerNameLine()
+        {
+            string name = CurrentPlayerName();
+            return string.IsNullOrEmpty(name)
+                ? string.Empty
+                : $"The player's name is {name}. Use it sparingly, the way someone familiar would - " +
+                  "in greetings, when getting their attention, or at a soft moment, not in every line. ";
+        }
+
+        private static string StyleFormatFor(string language)
+        {
+            if (IsChinese(language)) return ChineseStyleFormat;
+            if (IsEnglish(language)) return EnglishStyleFormat;
+            return JapaneseStyleFormat;
+        }
+
+        private static bool SameLanguage(string first, string second)
+        {
+            return IsChinese(first) == IsChinese(second)
+                && IsEnglish(first) == IsEnglish(second);
         }
 
         private static bool IsChinese(string language)

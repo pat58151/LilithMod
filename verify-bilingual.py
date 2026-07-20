@@ -135,6 +135,20 @@ check('["max_tokens"] = 256' in chat,
 # -- 7. Prompt: bilingual contract, without losing her measured voice ---------
 check("PersonaPrompt.Build" in chat,
       "Every request must use the language-specific live persona prompt")
+check("EnglishStyleFormat" in persona and "JapaneseStyleFormat" in persona and
+      "ChineseStyleFormat" in persona,
+      "All three languages need a full style block; English was a single inlined "
+      "sentence while Japanese and Chinese had four clauses each")
+check("TextVariableResolver.GetPlayerName()" in persona and
+      "PlayerNameRule.IsUnsetName(name)" in persona and
+      "PlayerNameLine()" in persona,
+      "The name from Settings/Me/Your Name must reach the prompt, and the game's "
+      "unset placeholder must not be used as a real name")
+check('string.Format(StyleFormatFor(voiceLanguage), "Speak")' in persona and
+      'string.Format(StyleFormatFor(displayLanguage), "Write")' in persona and
+      "SameLanguage(voiceLanguage, displayLanguage)" in persona,
+      "Both the spoken and shown sides need the style block for their own language, "
+      "and it must not be repeated when the two sides match")
 for marker, why in [
     ('\\"spoken\\"', "prompt must define the spoken field"),
     ('\\"shown\\"', "prompt must define the shown field"),
@@ -186,7 +200,7 @@ check("GateDialogueNode" in integrations and "NativeDialogueQueue" in speech and
 check("ShowPanel();" in chat and "_pendingSpeechCommand" in chat and
       "_speechSubmitAt" in chat,
       "Recognised speech must be visible in the chat bar before automatic submission")
-check("Say something ···" in chat and "_speechAwaitingReply" in chat,
+check("Say something···" in chat and "_speechAwaitingReply" in chat,
       "The chat bar must show recognised speech until Lilith's reply is ready")
 check("_speechCommandQueue" in chat and "Directory.GetFiles" in chat and
       "time.time_ns()" in ptt and "_replyPlaybackActive" in chat,
@@ -262,6 +276,14 @@ check("voiceFolderRow.gameObject.SetActive(true)" in settings and
       "row must be activated explicitly or it renders as nothing")
 check("SetSettingsInteractive(settingsTyping)" in settings,
       "Settings must only capture the desktop while a text field is focused")
+check("EnterKeyboardMode" in window_focus and
+      "BeginKeyboardInput" not in window_focus.split("EnterKeyboardMode")[1].split(
+          "private static void EnterInteractiveMode")[0],
+      "Opening the chat bar must take the keyboard without suspending click-through, "
+      "or the whole screen stops passing clicks to the desktop")
+check("s_beganKeyboardInput" in window_focus,
+      "BeginKeyboardInput/EndKeyboardInput must stay balanced now that only one of "
+      "the two entry paths suspends click-through")
 check("WindowStyle Hidden" in launcher and "/set_gpt_weights" in launcher and
       "/set_sovits_weights" in launcher and "service-startup.log" in launcher,
       "The hidden launcher must select, warm, and log all voice services")

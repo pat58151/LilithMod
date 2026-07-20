@@ -13,6 +13,8 @@ namespace LilithMod
         private static IntPtr? s_originalExStyle = null;
         private static bool s_chatInputActive;
         private static bool s_settingsInputActive;
+        // Whether click-through is currently suspended, so Begin/End stay balanced.
+        private static bool s_beganKeyboardInput;
 
         private const int GWL_EXSTYLE = -20;
         private const uint WS_EX_NOACTIVATE = 0x08000000;
@@ -117,7 +119,55 @@ namespace LilithMod
         public static void EnableTyping()
         {
             s_chatInputActive = true;
-            EnterInteractiveMode(true);
+            EnterKeyboardMode();
+        }
+
+        /// <summary>
+        /// Makes the window able to receive keystrokes WITHOUT taking the mouse.
+        ///
+        /// Only WS_EX_NOACTIVATE is cleared, because that is all keyboard delivery
+        /// needs - hit-testing is a separate concern. The per-pixel click-through the
+        /// game runs is deliberately left alone, so the desktop stays usable while the
+        /// chat bar is open, and clicks still land on the bar itself because it is
+        /// opaque.
+        ///
+        /// The settings path still uses EnterInteractiveMode, which additionally
+        /// clears WS_EX_TRANSPARENT and suspends click-through. Doing that for chat is
+        /// what made opening the bar capture the entire screen.
+        /// </summary>
+        private static void EnterKeyboardMode()
+        {
+            try
+            {
+                IntPtr hWnd = GetGameWindowHandle();
+                if (hWnd == IntPtr.Zero)
+                {
+                    LilithModPlugin.Logger.LogWarning("[WindowFocus] EnableTyping: could not obtain window handle.");
+                    return;
+                }
+
+                if (s_originalExStyle == null)
+                    s_originalExStyle = WindowsNativeAPI.GetWindowLongPtrSafe(hWnd, GWL_EXSTYLE);
+
+                long current = (long)WindowsNativeAPI.GetWindowLongPtrSafe(hWnd, GWL_EXSTYLE);
+                long newStyle = current & ~(long)WS_EX_NOACTIVATE;
+                WindowsNativeAPI.SetWindowLongPtrSafe(hWnd, GWL_EXSTYLE, (IntPtr)newStyle);
+
+                // Same foreground rule as EnterInteractiveMode: Windows refuses
+                // SetForegroundWindow unless we own the foreground or sent the last
+                // input event, so synthesise an ALT tap to qualify.
+                if (!WindowsNativeAPI.SetForegroundWindow(hWnd))
+                {
+                    WindowsNativeAPI.keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
+                    WindowsNativeAPI.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    WindowsNativeAPI.ShowWindow(hWnd, SW_SHOW);
+                    WindowsNativeAPI.SetForegroundWindow(hWnd);
+                }
+            }
+            catch (Exception ex)
+            {
+                LilithModPlugin.Logger.LogWarning($"[WindowFocus] EnableTyping failed: {ex}");
+            }
         }
 
         public static void SetSettingsInteractive(bool enabled)
@@ -145,9 +195,11 @@ namespace LilithMod
 
                 // Save before the native component clears click-through flags.
                 if (s_originalExStyle == null)
-                {
                     s_originalExStyle = WindowsNativeAPI.GetWindowLongPtrSafe(hWnd, GWL_EXSTYLE);
+                if (!s_beganKeyboardInput)
+                {
                     TransparentWindowNew.BeginKeyboardInput();
+                    s_beganKeyboardInput = true;
                 }
 
                 // Clear the NOACTIVATE and TRANSPARENT bits while leaving everything else intact.
@@ -228,8 +280,14 @@ namespace LilithMod
 
                 WindowsNativeAPI.SetWindowLongPtrSafe(hWnd, GWL_EXSTYLE, s_originalExStyle.Value);
                 s_originalExStyle = null;
-                // Resume character click-through only after the last interactive panel closes.
-                TransparentWindowNew.EndKeyboardInput();
+                // Resume character click-through only after the last interactive panel
+                // closes, and only if it was ever suspended. The chat bar's keyboard
+                // mode never suspends it, so ending it here would be unbalanced.
+                if (s_beganKeyboardInput)
+                {
+                    TransparentWindowNew.EndKeyboardInput();
+                    s_beganKeyboardInput = false;
+                }
             }
             catch (Exception ex)
             {
