@@ -133,6 +133,7 @@ namespace LilithMod
             string pluginDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".";
             _speechCommandPath = Path.Combine(pluginDir, "speech-command.txt");
             _pushToTalkTriggerPath = Path.Combine(pluginDir, "push-to-talk.active");
+            SpeechInputService.Initialize();
             // A trigger left behind by a crash would make the listener record forever.
             ClearPushToTalkTrigger();
 
@@ -1677,7 +1678,11 @@ namespace LilithMod
         /// </summary>
         private void PollPushToTalkKey()
         {
-            if (!LilithModPlugin.CfgPushToTalkEnabled.Value)
+            SpeechInputService.Refresh(Time.unscaledTime);
+
+            // Without the listener running the key would open the bar, show
+            // "Listening~", and wait forever for a transcript nobody is writing.
+            if (!LilithModPlugin.CfgPushToTalkEnabled.Value || !SpeechInputService.IsAvailable)
             {
                 if (_speechListening) StopListening(true);
                 return;

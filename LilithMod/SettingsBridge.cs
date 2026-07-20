@@ -20,6 +20,8 @@ namespace LilithMod
         private Toggle _deepSeekEye;
         private TMP_Text _voiceFolderLabel;
         private ButtonToggle _pushToTalk;
+        private TMP_Text _pushToTalkLabel;
+        private bool _lastSpeechAvailability = true;
         private TMP_InputField _pushToTalkKeyField;
         private ButtonToggle _ambient;
         private Slider _opacity;
@@ -53,6 +55,7 @@ namespace LilithMod
                 _nextOpacityRefresh = Time.unscaledTime + 0.5f;
                 ApplyLilithOpacity(LilithModPlugin.CfgLilithOpacity.Value);
                 RefreshSynthesisAvailability();
+                RefreshSpeechAvailability();
             }
 
             bool settingsVisible = _view != null && _view.IsVisible;
@@ -145,6 +148,7 @@ namespace LilithMod
             SetWrappedLabel(hotkeyLabel, "Open chat");
             // Two lines: the row is narrow, so this sits better than one long label.
             SetWrappedLabel(_voiceFolderLabel, "Open Synth\nVoice Folder");
+            _pushToTalkLabel = pushToTalkLabel;
             SetWrappedLabel(pushToTalkLabel, "Push to talk");
             SetWrappedLabel(pushToTalkKeyLabel, "Push-to-talk");
             SetWrappedLabel(ambientLabel, "Ambient remarks");
@@ -474,6 +478,31 @@ namespace LilithMod
             LilithModPlugin.SaveConfig();
             LilithModPlugin.Logger.LogInfo(
                 synthesis ? "[Voice] Vocal synthesis selected." : "[Voice] Native Chinese voice selected.");
+        }
+
+        /// <summary>
+        /// Greys the push-to-talk row while its listener is not running, matching
+        /// how Vocal Synthesis behaves when its server is down. The saved preference
+        /// is left untouched, so it comes back on by itself once the listener
+        /// returns rather than needing to be re-enabled by hand.
+        /// </summary>
+        private void RefreshSpeechAvailability()
+        {
+            if (_pushToTalk == null) return;
+            bool available = SpeechInputService.IsAvailable;
+            if (_lastSpeechAvailability == available) return;
+            _lastSpeechAvailability = available;
+
+            Color color = available ? Color.white : new Color(0.45f, 0.45f, 0.45f, 1f);
+            if (_pushToTalk._button != null) _pushToTalk._button.interactable = available;
+            if (_pushToTalk._buttonImage != null) _pushToTalk._buttonImage.color = color;
+            if (_pushToTalkLabel != null) _pushToTalkLabel.color = color;
+            if (_pushToTalkKeyField != null)
+            {
+                _pushToTalkKeyField.interactable = available;
+                if (_pushToTalkKeyField.textComponent != null)
+                    _pushToTalkKeyField.textComponent.color = color;
+            }
         }
 
         private void RefreshSynthesisAvailability()

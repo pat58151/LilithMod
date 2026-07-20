@@ -60,6 +60,7 @@ game_voice = read(MOD_DIR, "GameVoiceCoordinator.cs")
 settings = read(MOD_DIR, "SettingsBridge.cs")
 voice_setup = read(MOD_DIR, "VoiceSetup.cs")
 note_journal = read(MOD_DIR, "NoteJournal.cs")
+speech_input = read(MOD_DIR, "SpeechInputService.cs")
 voice_monitor = read(MOD_DIR, "VoiceServiceMonitor.cs")
 ptt = read(ROOT, "runtime", "push_to_talk.py")
 requirements = read(ROOT, "runtime", "wake-listener-requirements.txt")
@@ -312,6 +313,12 @@ check("nativeActionHandled) return false" in chat and
       "NeedsLiveInformation(user)) return false" in chat and
       "MentionsTimerOrAlarm" in chat,
       "Errands - timers, alarms, weather, web lookups - must not build toward a note")
+check("SpeechInputService" in speech_input and "push-to-talk.alive" in speech_input and
+      "HEARTBEAT_INTERVAL" in ptt and "RefreshSpeechAvailability" in settings,
+      "Push-to-talk must grey out when its listener is not running, or the key opens "
+      "a bar that waits forever for a transcript nobody is writing")
+check("!SpeechInputService.IsAvailable" in chat,
+      "The key must not start listening while the listener is down")
 check("QualifyingUtc" in note_journal and "WindowHours" in plugin and
       "Prune(windowHours)" in note_journal,
       "Qualifying conversations must fall inside one window, not accumulate forever")

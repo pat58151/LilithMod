@@ -52,6 +52,7 @@ ENERGY_FLOOR = 90.0
 NOISE_MARGIN = 2.0
 CALIBRATION_SECONDS = 1.5
 PARTIAL_MARKER = "__LILITH_PTT_PARTIAL__"
+HEARTBEAT_INTERVAL = 2.0         # seconds between liveness touches
 SUPPORTED_LANGUAGES = {"en", "ja", "zh"}
 
 # Whisper emits stock caption phrases when handed silence or noise - they are
@@ -359,6 +360,10 @@ def main() -> None:
 
     output = Path(args.output)
     trigger = Path(args.trigger) if args.trigger else output.with_name("push-to-talk.active")
+    # Touched periodically so the mod can tell this process is alive and grey out
+    # the setting when it is not. A file rather than a port: everything else in
+    # this handoff is already files, and it survives the process being killed.
+    heartbeat = trigger.with_name("push-to-talk.alive")
     silence_limit = max(0.5, args.silence)
     language = args.language.strip()
     save_last = Path(args.save_last) if args.save_last else None
@@ -553,9 +558,18 @@ def main() -> None:
 
     with sd.InputStream(samplerate=RATE, channels=1, dtype="int16",
                         blocksize=FRAME, callback=callback):
+        next_heartbeat = 0.0
         while True:
             frame = audio_queue.get()
             now = time.monotonic()
+
+            if now >= next_heartbeat:
+                next_heartbeat = now + HEARTBEAT_INTERVAL
+                try:
+                    heartbeat.write_text(str(time.time()), encoding="utf-8")
+                except OSError:
+                    pass
+
             on = trigger.exists()
 
             if awaiting_reset:
