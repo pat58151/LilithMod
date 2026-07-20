@@ -134,6 +134,7 @@ namespace LilithMod
             _speechCommandPath = Path.Combine(pluginDir, "speech-command.txt");
             _pushToTalkTriggerPath = Path.Combine(pluginDir, "push-to-talk.active");
             SpeechInputService.Initialize();
+            _noteTestPath = Path.Combine(pluginDir, "note-test.txt");
             // A trigger left behind by a crash would make the listener record forever.
             ClearPushToTalkTrigger();
 
@@ -219,6 +220,8 @@ namespace LilithMod
 
             while (_letterQueue.TryDequeue(out string letter))
                 SaveLetter(letter);
+
+            PollNoteTestFile();
 
             DrainInteractions();
             TryInteractionReply();
@@ -1588,19 +1591,19 @@ namespace LilithMod
             // sentence than English does. Overshooting costs nothing.
             if (noteRoll < 0.05f)
             {
-                lengthRule = "Write one long, flowing sentence of roughly 90 to 140 words, plus the Lilith signature.";
+                lengthRule = "Write one long, flowing sentence of roughly 90 to 140 words.";
                 letterMaxTokens = 420;
             }
             else if (noteRoll < 0.20f)
             {
                 int sentences = UnityEngine.Random.Range(4, 8);
-                lengthRule = $"Write exactly {sentences} short sentences, plus the Lilith signature.";
+                lengthRule = $"Write exactly {sentences} short sentences.";
                 letterMaxTokens = 340;
             }
             else
             {
                 int sentences = UnityEngine.Random.Range(2, 4);
-                lengthRule = $"Write exactly {sentences} short sentences, plus the Lilith signature.";
+                lengthRule = $"Write exactly {sentences} short sentences.";
                 letterMaxTokens = 220;
             }
             Task.Run(async () =>
@@ -1612,7 +1615,8 @@ namespace LilithMod
                         "Write a personal letter from Lilith after these meaningful interactions. " +
                         lengthRule + " " +
                         "Use only the current game display language required by the system prompt. " +
-                        "No JSON, markdown, title, translation, or stage directions. End with Lilith's name.\n" +
+                        "No JSON, markdown, title, translation, or stage directions. " +
+                        "Do not sign it; the note already carries her signature.\n" +
                         letterMemory,
                         letterMaxTokens,
                         CancellationToken.None);
@@ -1632,13 +1636,75 @@ namespace LilithMod
             });
         }
 
-        private static void SaveLetter(string letter)
+        // Hearts are drawn at a fixed spot on the note. Short notes sit clear of
+        // them; a long one grows underneath and the decoration lands on top of the
+        // text. Past this length the hearts are dropped rather than the words.
+
+        /// <summary>
+        /// Renders a note from a dropped file, so note layout can be tested without
+        /// waiting on the cadence gates or spending an API call. Write any text to
+        /// note-test.txt beside the plugin and it is rendered and the file removed.
+        /// Only active with LogDiagnostics on.
+        /// </summary>
+        private void PollNoteTestFile()
         {
+            if (!LilithModPlugin.CfgLogDiagnostics.Value || _noteTestPath == null ||
+                Time.unscaledTime < _nextNoteTestPoll) return;
+            _nextNoteTestPoll = Time.unscaledTime + 1f;
             try
             {
-                NoteImageSaver.SaveNote(letter, false);
+                if (!File.Exists(_noteTestPath)) return;
+                string text = File.ReadAllText(_noteTestPath).Trim();
+                File.Delete(_noteTestPath);
+                if (string.IsNullOrEmpty(text)) return;
+                LilithModPlugin.Logger.LogInfo(
+                    $"[Letters] Rendering test note ({text.Length} chars).");
+                SaveLetter(text);
+            }
+            catch (IOException) { }
+        }
+
+        private string _noteTestPath;
+        private float _nextNoteTestPoll;
+
+        /// <summary>
+        /// Removes a trailing sign-off. The note image draws her signature itself,
+        /// and a model told not to sign still does now and then - belt and braces,
+        /// because the duplicate is only visible once the note is rendered.
+        /// </summary>
+        private static string StripSignature(string letter)
+        {
+            if (string.IsNullOrWhiteSpace(letter)) return letter;
+            string trimmed = letter.TrimEnd();
+            foreach (string name in new[] { "Lilith", "リリス", "莉莉丝", "莉莉絲" })
+            {
+                if (!trimmed.EndsWith(name, StringComparison.OrdinalIgnoreCase)) continue;
+                string body = trimmed.Substring(0, trimmed.Length - name.Length)
+                    .TrimEnd(' ', '\t', '\r', '\n', '-', '—', ',', '、', '~', '～');
+                // Only when it reads as a sign-off. "...gave me a soul. Lilith"
+                // signs off; "you already know Lilith" is a sentence.
+                if (body.Length > 0 && ".!?。！？…".IndexOf(body[body.Length - 1]) >= 0)
+                    return body;
+            }
+            return letter;
+        }
+
+        private static void SaveLetter(string letter)
+        {
+            letter = StripSignature(letter);
+            try
+            {
+                // SaveNote returns the path it wrote, or null/empty when it declined.
+                // Ignoring that made a silent no-op look like success.
+                string saved = NoteImageSaver.SaveNote(letter, false);
+                if (string.IsNullOrEmpty(saved))
+                {
+                    LilithModPlugin.Logger.LogWarning(
+                        $"[Letters] SaveNote wrote nothing for a {letter?.Length ?? 0} char note.");
+                    return;
+                }
                 NoteInbox.NotifySaved();
-                LilithModPlugin.Logger.LogInfo("[Letters] Lilith left a note.");
+                LilithModPlugin.Logger.LogInfo($"[Letters] Lilith left a note: {saved}");
             }
             catch (Exception ex)
             {

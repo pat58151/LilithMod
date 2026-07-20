@@ -77,7 +77,9 @@ namespace LilithMod
                 $"Write the entire letter in {language}, which is the player's current game display language. " +
                 "Do not use Japanese, Chinese, or any other language unless that is the requested display language. " +
                 "Write one brief, personal note in natural prose. No JSON, markdown, title, stage directions, or translation. " +
-                "End with Lilith's name. " + DynamicContext.Build();
+                // The note image draws her signature underneath, so a signed-off
+                // letter renders her name twice.
+                "Do not sign it or end with your own name. " + DynamicContext.Build();
         }
 
         public static string CurrentVoiceLanguage()
