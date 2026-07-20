@@ -26,6 +26,10 @@ namespace LilithMod
             // Timestamps rather than a running count: the conversations have to be
             // part of one stretch of talking, not six exchanges spread over weeks.
             public List<DateTime> QualifyingUtc { get; set; } = new List<DateTime>();
+            // The subset that was personal - the player talking about themselves or
+            // about her, rather than talking well about anything. Absent from journals
+            // written before love letters existed, which deserialize to an empty list.
+            public List<DateTime> PersonalUtc { get; set; } = new List<DateTime>();
             public int NotesWritten { get; set; }
         }
 
@@ -39,6 +43,10 @@ namespace LilithMod
                 {
                     if (File.Exists(_path))
                         _state = JsonConvert.DeserializeObject<State>(File.ReadAllText(_path)) ?? new State();
+                    // An explicit null in the file beats the field initializer, so the
+                    // lists are re-established rather than trusted.
+                    if (_state.QualifyingUtc == null) _state.QualifyingUtc = new List<DateTime>();
+                    if (_state.PersonalUtc == null) _state.PersonalUtc = new List<DateTime>();
                 }
                 catch (Exception ex)
                 {
@@ -49,13 +57,27 @@ namespace LilithMod
         }
 
         /// <summary>Counts one exchange substantial enough to be worth remembering.</summary>
-        public static void RecordQualifying(double windowHours)
+        public static void RecordQualifying(double windowHours, bool personal = false)
         {
             lock (Gate)
             {
                 _state.QualifyingUtc.Add(DateTime.UtcNow);
+                if (personal) _state.PersonalUtc.Add(DateTime.UtcNow);
                 Prune(windowHours);
                 Save();
+            }
+        }
+
+        /// <summary>
+        /// How many of the exchanges still inside the window were personal. Gates the
+        /// love letter, so it can only follow a stretch of actually talking to her.
+        /// </summary>
+        public static int PersonalCount(double windowHours)
+        {
+            lock (Gate)
+            {
+                Prune(windowHours);
+                return _state.PersonalUtc.Count;
             }
         }
 
@@ -64,6 +86,7 @@ namespace LilithMod
         {
             DateTime cutoff = DateTime.UtcNow.AddHours(-windowHours);
             _state.QualifyingUtc.RemoveAll(stamp => stamp < cutoff);
+            _state.PersonalUtc.RemoveAll(stamp => stamp < cutoff);
         }
 
         /// <summary>
@@ -92,6 +115,7 @@ namespace LilithMod
             {
                 _state.LastNoteUtc = DateTime.UtcNow;
                 _state.QualifyingUtc.Clear();
+                _state.PersonalUtc.Clear();
                 _state.NotesWritten++;
                 Save();
                 LilithModPlugin.Logger.LogInfo(
@@ -106,7 +130,8 @@ namespace LilithMod
                 string last = _state.LastNoteUtc == DateTime.MinValue
                     ? "never"
                     : _state.LastNoteUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-                return $"qualifying={_state.QualifyingUtc.Count} last={last} total={_state.NotesWritten}";
+                return $"qualifying={_state.QualifyingUtc.Count} personal={_state.PersonalUtc.Count} " +
+                       $"last={last} total={_state.NotesWritten}";
             }
         }
 

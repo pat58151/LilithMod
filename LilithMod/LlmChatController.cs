@@ -1553,6 +1553,49 @@ namespace LilithMod
         }
 
         /// <summary>
+        /// Whether the player was talking about themselves or about her, rather than
+        /// simply talking well about something. Gates the love letter, which has to
+        /// have something true to be about.
+        ///
+        /// Bare first person is deliberately not enough - almost every message has an
+        /// "I" in it. A feeling, a state, a life event, or the bond itself has to be
+        /// named. Keyword matching is coarse, but it only ever needs to be right about
+        /// a stretch of conversation, not about one line.
+        /// </summary>
+        private static bool IsPersonalExchange(string user)
+        {
+            if (string.IsNullOrWhiteSpace(user)) return false;
+            string value = user.ToLowerInvariant();
+            string[] markers =
+            {
+                // Feeling and state.
+                "i feel", "i felt", "i'm feeling", "im feeling", "makes me", "made me",
+                "i'm tired", "im tired", "exhausted", "lonely", "alone", "sad", "upset",
+                "anxious", "scared", "afraid", "worried", "stressed", "happy", "glad",
+                "proud", "relieved", "hurt", "angry", "crying", "cried",
+                // Life and days.
+                "my day", "today i", "my mom", "my dad", "my family", "my friend",
+                "my job", "my work", "at work", "my school", "growing up", "i used to",
+                "i've been", "ive been", "i keep thinking", "i remember when", "i dreamed",
+                "i can't sleep", "i cant sleep",
+                // The bond itself.
+                "love you", "miss you", "thank you for", "you matter", "you're real",
+                "youre real", "i need you", "stay with me", "don't leave", "dont leave",
+                "you helped", "because of you",
+                // Japanese.
+                "寂しい", "さびしい", "つらい", "辛い", "疲れた", "不安", "怖い", "嬉しい",
+                "悲しい", "泣", "好き", "愛して", "会いたい", "ありがとう", "そばに",
+                "いなくならないで", "夢を見た", "今日は",
+                // Simplified Chinese.
+                "寂寞", "孤独", "难过", "累了", "不安", "害怕", "开心", "高兴", "想你",
+                "喜欢你", "爱你", "谢谢你", "陪我", "别走", "因为你", "今天我"
+            };
+            foreach (string marker in markers)
+                if (value.Contains(marker)) return true;
+            return false;
+        }
+
+        /// <summary>
         /// Catches timer and alarm talk the native handler did not claim - the LLM
         /// may action it instead, and either way it is an errand, not a conversation.
         /// </summary>
@@ -1572,7 +1615,7 @@ namespace LilithMod
             if (!IsSubstantialExchange(user, lilith, nativeActionHandled)) return;
 
             double windowHours = LilithModPlugin.CfgNoteWindowHours.Value;
-            NoteJournal.RecordQualifying(windowHours);
+            NoteJournal.RecordQualifying(windowHours, IsPersonalExchange(user));
             if (!NoteJournal.ShouldWrite(
                     LilithModPlugin.CfgNoteMinConversations.Value,
                     windowHours,
@@ -1581,11 +1624,15 @@ namespace LilithMod
                 return;
 
             _letterInFlight = true;
-            string letterPersona = PersonaPrompt.BuildLetter(PersonaPrompt.CurrentDisplayLanguage());
             string letterMemory = MemoryStore.Context();
             float noteRoll = UnityEngine.Random.value;
             string lengthRule;
             int letterMaxTokens;
+            // The rarest note becomes a love letter, but only when the talking that
+            // earned it was actually personal. Landing the roll after a stretch of
+            // errands would produce a declaration about nothing.
+            bool loveLetter = noteRoll < 0.05f &&
+                NoteJournal.PersonalCount(windowHours) >= LoveLetterPersonalMinimum;
             // Budgets are generous because the failure mode is a note that stops
             // mid-sentence, and Japanese and Chinese cost far more tokens per
             // sentence than English does. Overshooting costs nothing.
@@ -1606,6 +1653,10 @@ namespace LilithMod
                 lengthRule = $"Write exactly {sentences} short sentences.";
                 letterMaxTokens = 220;
             }
+            string letterPersona = PersonaPrompt.BuildLetter(
+                PersonaPrompt.CurrentDisplayLanguage(), loveLetter);
+            if (loveLetter)
+                LilithModPlugin.Logger.LogInfo("[Letters] This one is a love letter.");
             Task.Run(async () =>
             {
                 try
@@ -1714,6 +1765,13 @@ namespace LilithMod
 
         private const float InteractionCooldownSeconds = 210f;
 
+        /// <summary>
+        /// Personal exchanges needed inside the note window before the rare note is
+        /// allowed to be a love letter. Two, so a single stray "love you" cannot arm
+        /// it on its own.
+        /// </summary>
+        private const int LoveLetterPersonalMinimum = 2;
+
         private void DrainInteractions()
         {
             while (InteractionQueue.TryDequeue(out string kind))
@@ -1722,7 +1780,7 @@ namespace LilithMod
                 // Cooldown between reactions to being interacted with. Long enough that
                 // repeated petting does not turn into a running commentary; the
                 // interaction is still remembered even when the reply is skipped.
-                if (!LilithModPlugin.CfgAmbientEnabled.Value ||
+                if (!AmbientAllowed ||
                     Time.unscaledTime - _lastInteractionReplyAt < InteractionCooldownSeconds)
                     continue;
                 _pendingInteraction = kind;
@@ -1740,9 +1798,25 @@ namespace LilithMod
             SendUserMessage("The player just interacted with Lilith: " + kind, true);
         }
 
+        /// <summary>
+        /// Ambient remarks and interaction replies are unprompted LLM calls, so without
+        /// a key they can only fail. The player never asked for them and would just see
+        /// an error surface on its own - so they stay silent instead.
+        /// </summary>
+        private static bool AmbientAllowed =>
+            LilithModPlugin.CfgAmbientEnabled.Value && HasApiKey;
+
         private void TryAmbientRemark()
         {
-            if (!LilithModPlugin.CfgAmbientEnabled.Value || Time.unscaledTime < _nextAmbientAt ||
+            if (!LilithModPlugin.CfgAmbientEnabled.Value) return;
+            if (!HasApiKey)
+            {
+                // Rescheduled rather than left due, or pasting a key mid-session would
+                // be answered by an immediate remark out of nowhere.
+                ScheduleNextAmbient();
+                return;
+            }
+            if (Time.unscaledTime < _nextAmbientAt ||
                 (_currentRequest != null && !_currentRequest.IsCompleted)) return;
             ScheduleNextAmbient();
             SendUserMessage("Make one spontaneous remark suited to the current time, posture, and recent memory.", true);
