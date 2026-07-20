@@ -196,7 +196,7 @@ namespace LilithMod
                 "Those conversations must all fall inside this many hours, so a note comes out of one stretch of talking.");
             CfgNoteCooldownHours = Config.Bind("Letters", "CooldownHours", 36.0,
                 "Minimum hours between notes.");
-            CfgNoteChance = Config.Bind("Letters", "Chance", 0.5f,
+            CfgNoteChance = Config.Bind("Letters", "Chance", 0.4f,
                 "Chance a note is written once it is otherwise due, so it does not arrive on a felt schedule.");
 
             NoteJournal.Initialize();
