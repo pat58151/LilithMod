@@ -98,8 +98,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="dialogue\ja.tsv" LogicalName="LilithMod.Dialogue.ja.tsv" />
-    <EmbeddedResource Include="dialogue\zh.tsv" LogicalName="LilithMod.Dialogue.zh.tsv" />
+    <!-- The game's own dialogue script. Compiled in for local builds so native
+         dialogue can be re-voiced, and EXCLUDED from distribution builds because
+         it is the developers' content and not ours to redistribute. Build with
+         -p:IncludeDialogueCatalog=false to ship. -->
+    <EmbeddedResource Include="dialogue\ja.tsv" LogicalName="LilithMod.Dialogue.ja.tsv"
+                      Condition="'$(IncludeDialogueCatalog)' != 'false' And Exists('dialogue\ja.tsv')" />
+    <EmbeddedResource Include="dialogue\zh.tsv" LogicalName="LilithMod.Dialogue.zh.tsv"
+                      Condition="'$(IncludeDialogueCatalog)' != 'false' And Exists('dialogue\zh.tsv')" />
     <None Include="voice-setup\README.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="voice-setup\voice-config.example.ini" CopyToOutputDirectory="PreserveNewest" />
     <None Include="speech-setup\README.txt" CopyToOutputDirectory="PreserveNewest" />

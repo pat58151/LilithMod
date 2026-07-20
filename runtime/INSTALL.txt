@@ -1,0 +1,108 @@
+LILITHMOD - INSTALLATION
+========================
+
+A chat and voice mod for The NOexistenceN of Lilith. She answers freely in her
+own voice instead of only from a script.
+
+You need a DeepSeek API key. Voice is optional and set up separately.
+
+
+INSTALL
+-------
+1. Close the game.
+
+2. Copy everything in this archive into the game folder - the one containing
+   Lilith.exe. If Steam installed it in the usual place:
+
+       ...\steamapps\common\The NOexistenceN of Lilith\
+
+   When done you should have a BepInEx folder sitting next to Lilith.exe.
+
+3. Launch the game from Steam once and quit. This lets BepInEx create its
+   configuration. The first launch is slower than usual.
+
+4. Launch again. Open settings, go to the Me tab, and paste your DeepSeek API
+   key. Get one at platform.deepseek.com.
+
+5. Press F7 and type something.
+
+That is the whole installation. Chat works from here.
+
+
+KEYS
+----
+    F7      open the chat box
+    F8      speak instead of typing (needs setup, see below)
+    Escape  close
+    Enter   send
+
+Both keys can be rebound under Settings -> Controls.
+
+
+OPTIONAL - HER VOICE
+--------------------
+Out of the box she writes but does not speak.
+
+No voice model is included. One trained on the game's audio is the developers'
+work and is not mine to distribute, so you supply your own. Instructions are in
+
+    BepInEx\plugins\LilithMod\voice-setup\README.txt
+
+or through Settings -> Sound -> Open Synth Voice Folder.
+
+
+OPTIONAL - TALKING TO HER
+-------------------------
+Press F8 and speak instead of typing. Needs Python and a speech model, both
+local. Instructions are in
+
+    BepInEx\plugins\LilithMod\speech-setup\README.txt
+
+or through Settings -> Me -> Open Speech Input Folder.
+
+Until it is installed, the Push-to-talk setting stays greyed out.
+
+
+UNINSTALL
+---------
+Delete these from the game folder:
+
+    BepInEx\
+    winhttp.dll
+    doorstop_config.ini
+    .doorstop_version
+
+The game returns to normal. Nothing else was modified - the mod only reads the
+game's files and adds its own.
+
+
+TROUBLESHOOTING
+---------------
+Nothing happens when I press F7
+  No API key. Settings -> Me. The Open chat row is greyed without one.
+
+The mod does not seem to load at all
+  Check BepInEx\LogOutput.log next to Lilith.exe. If BepInEx never wrote one,
+  the archive probably went into the wrong folder - winhttp.dll must sit
+  directly beside Lilith.exe.
+
+  If the game was force-killed previously, BepInEx can leave an abandoned lock
+  and skip loading. Restart the computer or the game and try again.
+
+She replies but says nothing aloud
+  Expected until a voice is set up. See voice-setup\README.txt.
+
+I get errors about the API key
+  Keys are checked when used, not when saved. A typo shows up as a failed
+  reply. Re-paste it, avoiding surrounding spaces.
+
+
+PRIVACY
+-------
+Your API key is stored in BepInEx\config\LilithMod.cfg on your computer and
+sent only to DeepSeek. Conversations go to DeepSeek to generate replies.
+Speech recognition and voice synthesis, if installed, run entirely offline -
+no audio ever leaves your machine.
+
+Conversation memory, notes, and cached audio stay in
+BepInEx\plugins\LilithMod\.

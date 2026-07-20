@@ -13,6 +13,7 @@ namespace LilithMod
         private static Dictionary<int, string> _chinese;
         private static readonly Dictionary<string, int> SoundIds =
             new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        private static bool _warnedMissing;
 
         internal static bool TryGet(int lineId, string language, out string text)
         {
@@ -51,8 +52,21 @@ namespace LilithMod
             var result = new Dictionary<int, string>();
             using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
             {
+                // Absent in distribution builds: the catalogue is the game's own
+                // script and is not ours to redistribute, so it is compiled in only
+                // for local builds. Without it, native dialogue keeps its original
+                // voice and everything else works unchanged.
                 if (stream == null)
-                    throw new FileNotFoundException($"Embedded dialogue catalog is missing: {resourceName}");
+                {
+                    if (!_warnedMissing)
+                    {
+                        _warnedMissing = true;
+                        LilithModPlugin.Logger.LogInfo(
+                            "[Voice] No dialogue catalogue in this build; the game's own "
+                            + "dialogue keeps its original voice.");
+                    }
+                    return result;
+                }
                 using (var reader = new StreamReader(stream, Encoding.UTF8, true))
                 {
                     string line;

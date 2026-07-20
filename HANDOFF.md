@@ -12,7 +12,7 @@ this machine; where something is unverified, it says so.
 2. **Custom dialogue injection** - authored nodes from `custom/*.json` are merged
    into the game's database at runtime.
 3. **Free-text LLM chat** - press **F7**, type, Lilith answers in her own voice.
-   Or hold **F8** and speak.
+   Or press **F8** and speak; it submits after 2.5 s of silence.
 4. **Bilingual voice** - she *speaks Japanese* through a local fine-tuned
    GPT-SoVITS model while the on-screen bubble shows *English*, advancing one
    sentence at a time.
@@ -58,6 +58,28 @@ python verify-step3.py       # LLM chat
 ```
 
 ---
+
+## 3a. Packaging a release
+
+```powershell
+powershell -ExecutionPolicy Bypass -File runtime\package-mod.ps1
+```
+
+Writes `dist\LilithMod-<version>.zip` containing BepInEx and the plugin, and
+nothing else. Two things it deliberately does NOT do:
+
+- **It never copies the installed plugin folder.** That folder accumulates
+  dialogue dumps, cached voice audio, `memory.json`, `notes.json`, logs, and a
+  config file holding the API key. The build output is assembled from scratch
+  into a temporary staging folder instead, and a guard fails the run if a
+  `.wav`, `.cfg`, `.ckpt`, `.pth`, dump or memory file ever reaches it.
+- **It excludes the dialogue catalogue.** `dialogue/*.tsv` is the game's own
+  script and is compiled into the DLL as an embedded resource for local builds
+  only - gitignoring it kept the repo clean but the DLL carried it regardless.
+  `-p:IncludeDialogueCatalog=false` drops it. Verify with the file size: a
+  release DLL is ~195 KB, a local one ~410 KB. Without the catalogue, native
+  game dialogue simply keeps its original voice; `DialogueTextCatalog` returns
+  empty rather than throwing.
 
 ## 4. Layout
 
@@ -205,6 +227,12 @@ Read this section before debugging anything.
   `cut5`, `fragment_interval` 0.4 - in 13.3 s cold, ~2.2 s warm.
 - The new config key materialises on an install that already had a cfg.
 
+- Speech input end to end: F8, spoken sentence, transcript submitted, reply
+  spoken. Interim text streams into the field as you talk.
+- Settings rows grey correctly when their service is stopped, and recover on
+  their own when it returns.
+- `runtime\package-mod.ps1` produces a release zip with no game content in it.
+
 **Not verified**
 - Audio was generated, cached, and played without an error, but no human ear
   check was performed during automated verification.
@@ -212,10 +240,18 @@ Read this section before debugging anything.
   which restarts the dialogue, so the bubble may visibly re-trigger mid-reply.
   Correct, but possibly ugly. This is the first thing to look at.
 - Whether an IME composes correctly in the chat box.
+- **The release zip has never been installed anywhere.** It is assembled and
+  its contents checked, but no clean machine has run it. Every install bug this
+  project hit was environmental and only appeared on a real run - assume the
+  same is true of the ones still in there.
+- Whether a note has ever actually fired under the current gates. Seven
+  substantial messages inside four hours, a 36 hour cooldown and a 40% roll is
+  a high bar, and "rare" and "broken" look identical from outside.
+  `NoteJournal.Describe()` exists to answer this and is not wired to anything.
 
 **Open / not started**
 - `Data/SenWords` filter never traced.
-- No packaging or README for anyone else to install this.
+- No automated install - the release zip is copied in by hand per `INSTALL.txt`.
 - `_dirty-bepinex-20260720-1515\` (~6.7 GB after the runtime was moved out) is
   leftover and safe to delete.
 
@@ -426,6 +462,46 @@ Still unverified: whether interim transcripts actually reach the chat field.
 Final transcripts work. If partials do not appear, the log shows `Partial (...)`
 lines when the listener emits them - if those are present and nothing shows,
 the fault is `NoteUserTyping()` in the mod, not recognition.
+
+### Notes, settings, and packaging, 2026-07-21
+
+**Notes are keepsakes now, not a counter.** Seven substantial player messages
+inside a 4 hour window, at least 36 hours since the last note, then a 40% roll -
+and a failed roll keeps eligibility rather than clearing it, so the note simply
+arrives later. State lives in `notes.json` beside `memory.json`, because the old
+counter was a field and every restart wiped progress toward one. Errands never
+count: timers, alarms, weather and web lookups are using her rather than talking
+to her, and the native action flag is reused rather than re-guessed. The
+cooldown starts when a note is produced, not attempted, so a failed request does
+not silently cost one.
+
+**Settings shrank from eight rows to five.** Every removed toggle either
+duplicated a control that already existed or switched off something that should
+not be switchable. Push-to-talk lost its toggle because the key binding already
+controls it; ambient remarks lost theirs because spontaneous speech is most of
+what makes her feel present, and its config key was renamed so an existing
+"off" cannot carry forward.
+
+| tab | rows |
+|---|---|
+| Me | DeepSeek API Key, Open Speech Input Folder |
+| Controls | Open chat, Push-to-talk |
+| Sound | Open Synth Voice Folder |
+| Lilith | Opacity |
+
+**Rows grey when they would be lying.** Open chat needs an API key;
+push-to-talk needs the key *and* a running listener. F7 and F8 are genuinely
+inert without a key rather than opening a box whose every send fails - a
+throttled warning explains it in the log. The two folder buttons are never
+greyed, because they are how you find out why something is unavailable.
+
+**`WindowFocus.IsKeyDown` consumes the transition.** Calling it twice for the
+same key in one frame means the second call always returns false. Poll once,
+store the result, then decide. This bit once already.
+
+**`$PSScriptRoot` is empty inside `param()` defaults on PowerShell 5.1.** All
+four runtime scripts resolve the repository root in the body instead. Worth
+knowing before "fixing" a hardcoded path the same way again.
 
 ### Follow-up changes, 2026-07-21
 

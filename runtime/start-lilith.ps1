@@ -3,12 +3,16 @@ param(
     # Empty means "find it": Steam can install to any drive, so the library list
     # is asked rather than a path assumed.
     [string]$GameFolder = "",
-    # The repository this script lives in.
-    [string]$ProjectFolder = (Split-Path -Parent $PSScriptRoot),
+    [string]$ProjectFolder = "",
     [switch]$ServicesOnly
 )
 
 $ErrorActionPreference = "Stop"
+
+# $PSScriptRoot is not populated inside param() defaults on PowerShell 5.1, so
+# the repository root is resolved here instead of on the parameter.
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $ProjectFolder) { $ProjectFolder = Split-Path -Parent $scriptDir }
 
 function Find-GameFolder {
     $relative = "steamapps\common\The NOexistenceN of Lilith"
