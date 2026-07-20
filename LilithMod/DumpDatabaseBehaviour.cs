@@ -17,23 +17,14 @@ namespace LilithMod
 
         public DumpDatabaseBehaviour(System.IntPtr ptr) : base(ptr) { }
 
-        private bool _tickLogged;
-
         public void Awake()
         {
             _elapsed = 0f;
             _done = false;
-            LilithModPlugin.Logger.LogInfo("[DIAG] DumpDatabaseBehaviour.Awake reached.");
         }
 
         public void Update()
         {
-            if (!_tickLogged)
-            {
-                _tickLogged = true;
-                LilithModPlugin.Logger.LogInfo("[DIAG] DumpDatabaseBehaviour.Update first tick.");
-            }
-
             if (_done)
                 return;
 

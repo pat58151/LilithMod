@@ -181,6 +181,61 @@ namespace LilithMod
             // --- Drain reply queue (main thread only) ---
             while (_replyQueue.TryDequeue(out ChatResult result))
                 HandleChatResult(result);
+
+            DrainVoiceQueues();
+        }
+
+        /// <summary>
+        /// Moves subtitles and voice failures from the voice thread onto the main
+        /// thread, where Unity APIs may actually be called.
+        /// </summary>
+        private void DrainVoiceQueues()
+        {
+            var processor = LilithModPlugin.VoiceProcessor;
+            if (processor == null)
+                return;
+
+            // If synthesis gave up, show the whole reply once and drop the rest of
+            // the per-sentence subtitles - with no audio there is nothing pacing
+            // them, so they would otherwise flash past within a frame or two.
+            bool failed = false;
+            while (processor.VoiceFailureQueue.TryDequeue(out _))
+                failed = true;
+
+            if (failed)
+            {
+                while (processor.SubtitleQueue.TryDequeue(out _)) { }
+                if (_currentReplyEnglish != null && _currentReplyEnglish.Count > 0)
+                {
+                    DisplayReplyText(string.Join(" ", _currentReplyEnglish));
+                    _currentReplyEnglish = null;
+                }
+                return;
+            }
+
+            while (processor.SubtitleQueue.TryDequeue(out string english))
+                DisplayReplyText(english);
+        }
+
+        /// <summary>
+        /// Puts text in the bubble. Assigning node.text alone does not refresh a
+        /// dialogue that is already on screen; StartDialogue is what the game reacts
+        /// to, and is the path the reply display has always used.
+        /// </summary>
+        private void DisplayReplyText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return;
+
+            if (!DialogueManager.s_instance.TryGetNode(9500000, out _replyNode))
+            {
+                LilithModPlugin.Logger.LogError(
+                    "[LlmChat] Reply node 9500000 disappeared. Cannot display reply.");
+                return;
+            }
+
+            _replyNode.text = text;
+            DialogueManager.s_instance.StartDialogue(9500000);
         }
 
         // Keeps the END of the line visible. TMP_InputField's own horizontal scrolling does
@@ -701,11 +756,15 @@ namespace LilithMod
             if (string.IsNullOrWhiteSpace(ApiKey))
                 throw new InvalidOperationException("API key is not configured.");
 
+            // response_format keeps the model from wrapping the reply in markdown fences.
+            // The parser tolerates fences anyway, because providers that ignore this
+            // field are still expected to work.
             var payload = new
             {
                 model = Model,
                 messages = messages.ConvertAll(m => new { role = m.Role, content = m.Content }),
-                stream = false
+                stream = false,
+                response_format = new { type = "json_object" }
             };
             string jsonPayload = JsonConvert.SerializeObject(payload);
 
@@ -732,28 +791,78 @@ namespace LilithMod
         {
             if (result.Ok)
             {
-                // Append assistant to history.
-                lock (_history) _history.Add(new Message { Role = "assistant", Content = result.Text });
-                TrimHistory();
+                // Abandon anything still queued from the previous reply, otherwise its
+                // audio keeps playing under this reply's subtitles and the two stay
+                // mismatched for the rest of the session.
+                LilithModPlugin.VoiceProcessor?.CancelCurrent();
+                _currentReplyEnglish = null;
 
-                // Update node and start dialogue.
-                if (!DialogueManager.s_instance.TryGetNode(9500000, out _replyNode))
+                var utterances = ParseUtterances(result.Text);
+
+                if (utterances == null)
                 {
-                    LilithModPlugin.Logger.LogError("[LlmChat] Reply node 9500000 disappeared. Cannot display reply.");
+                    // Not the bilingual shape - an older prompt still in the cfg, or a
+                    // model that ignored the format. Speak and show it as-is.
+                    lock (_history) _history.Add(new Message { Role = "assistant", Content = result.Text });
+                    TrimHistory();
+
+                    DisplayReplyText(result.Text);
+                    LilithModPlugin.Logger.LogInfo("[LlmChat] LLM reply displayed (plain text).");
+
+                    if (VoiceConfig.Enabled && LilithModPlugin.VoiceProcessor != null)
+                        LilithModPlugin.VoiceProcessor.Enqueue(result.Text);
                     return;
                 }
 
-                _replyNode.text = result.Text;
-                DialogueManager.s_instance.StartDialogue(9500000);
-                LilithModPlugin.Logger.LogInfo("[LlmChat] LLM reply displayed.");
-
-                // Speak it. Enqueue only - synthesis and playback happen on the
-                // voice thread, so a slow or dead TTS service cannot stall the
-                // reply that has already been displayed above.
-                if (VoiceConfig.Enabled && LilithModPlugin.VoiceProcessor != null)
+                if (utterances.Count == 0)
                 {
-                    LilithModPlugin.VoiceProcessor.Enqueue(result.Text);
+                    LilithModPlugin.Logger.LogWarning("[LlmChat] Model returned an empty sentence list.");
+                    DisplayReplyText(FallbackLines[UnityEngine.Random.Range(0, FallbackLines.Length)]);
+                    return;   // deliberately not added to history
                 }
+
+                // History keeps what she actually said. Storing the raw JSON instead
+                // would feed the model its own markup and triple the token cost of
+                // every later turn.
+                var spoken = new System.Collections.Generic.List<string>();
+                var english = new System.Collections.Generic.List<string>();
+                foreach (var u in utterances)
+                {
+                    spoken.Add(u.JaText);
+                    if (!string.IsNullOrEmpty(u.EnText)) english.Add(u.EnText);
+                }
+
+                lock (_history)
+                    _history.Add(new Message { Role = "assistant", Content = string.Join(" ", spoken) });
+                TrimHistory();
+
+                if (!VoiceConfig.Enabled || LilithModPlugin.VoiceProcessor == null)
+                {
+                    // No audio to pace the subtitles, so show the reply in one piece.
+                    DisplayReplyText(string.Join(" ", english));
+                    LilithModPlugin.Logger.LogInfo("[LlmChat] LLM reply displayed (voice off).");
+                    return;
+                }
+
+                // Kept so a mid-reply synthesis failure can fall back to the full text.
+                _currentReplyEnglish = english;
+
+                // Show the first line now; the rest follow their audio.
+                DisplayReplyText(english.Count > 0 ? english[0] : null);
+
+                foreach (var u in utterances)
+                {
+                    // The first subtitle is already on screen, so it must not be
+                    // re-queued - that would display it a second time.
+                    LilithModPlugin.VoiceProcessor.Enqueue(new Utterance
+                    {
+                        JaText = u.JaText,
+                        EnText = ReferenceEquals(u, utterances[0]) ? null : u.EnText,
+                    });
+                }
+
+                LilithModPlugin.Logger.LogInfo(
+                    $"[LlmChat] LLM reply displayed ({utterances.Count} sentence(s), voice queued).");
             }
             else
             {
@@ -771,6 +880,90 @@ namespace LilithMod
                     LilithModPlugin.Logger.LogError("[LlmChat] Cannot display fallback: node 9500000 missing.");
                 }
                 // Do NOT add fallback to history.
+            }
+        }
+
+        /// <summary>Safety net against a model that returns a wall of sentences.</summary>
+        private const int MaxUtterancesPerReply = 5;
+
+        /// <summary>
+        /// The English lines of the reply being spoken, so a synthesis failure part way
+        /// through can still show the whole thing. Null when nothing is in flight.
+        /// </summary>
+        private System.Collections.Generic.List<string> _currentReplyEnglish;
+
+        /// <summary>
+        /// Pulls the sentence pairs out of a reply. Returns null when the text is not
+        /// the bilingual shape at all, which the caller treats as plain text rather
+        /// than an error - an existing cfg may still hold the older prompt.
+        /// </summary>
+        private System.Collections.Generic.List<Utterance> ParseUtterances(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return null;
+
+            try
+            {
+                // Tolerated shapes, in order of likelihood:
+                //   {"lines":[{"ja":..,"en":..}]}   - what json_object mode returns
+                //   [{"ja":..,"en":..}]             - a bare array
+                //   ```json ... ```                 - a model that fenced it anyway
+                string trimmed = text.Trim();
+
+                if (trimmed.StartsWith("```"))
+                {
+                    int firstBreak = trimmed.IndexOf('\n');
+                    int lastFence = trimmed.LastIndexOf("```", System.StringComparison.Ordinal);
+                    if (firstBreak > 0 && lastFence > firstBreak)
+                        trimmed = trimmed.Substring(firstBreak + 1, lastFence - firstBreak - 1).Trim();
+                }
+
+                Newtonsoft.Json.Linq.JArray array = null;
+
+                if (trimmed.StartsWith("["))
+                {
+                    array = Newtonsoft.Json.Linq.JArray.Parse(trimmed);
+                }
+                else if (trimmed.StartsWith("{"))
+                {
+                    var obj = Newtonsoft.Json.Linq.JObject.Parse(trimmed);
+                    foreach (var property in obj.Properties())
+                    {
+                        if (property.Value is Newtonsoft.Json.Linq.JArray candidate)
+                        {
+                            array = candidate;
+                            break;
+                        }
+                    }
+                }
+
+                if (array == null)
+                    return null;
+
+                var list = new System.Collections.Generic.List<Utterance>();
+                foreach (var item in array)
+                {
+                    string ja = (string)item["ja"];
+                    string en = (string)item["en"];
+                    if (string.IsNullOrWhiteSpace(ja))
+                        continue;
+
+                    list.Add(new Utterance { JaText = ja.Trim(), EnText = (en ?? string.Empty).Trim() });
+                    if (list.Count >= MaxUtterancesPerReply)
+                    {
+                        LilithModPlugin.Logger.LogWarning(
+                            $"[LlmChat] Reply had more than {MaxUtterancesPerReply} sentences; truncated.");
+                        break;
+                    }
+                }
+
+                // Parsed as JSON but carried no usable sentence: an empty list is a
+                // real answer here, so return it rather than falling back to raw JSON.
+                return list;
+            }
+            catch (System.Exception)
+            {
+                return null;
             }
         }
 
