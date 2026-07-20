@@ -118,7 +118,6 @@ Outside the repo, gitignored, **not reproducible cheaply**:
 | `D:\Lilith\voice-runtime\` | GPT-SoVITS + bundled Python + pretrained models | ~2 GB |
 | `D:\Lilith\training\weights\` | **fine-tuned JA voice model** | 1.2 GB |
 | `D:\Lilith\voice-data\` | 752 clips extracted from a second game + transcripts | 337 MB |
-| `D:\Lilith\backup-preinstall-20260720-1508\` | configs incl. API key, dumps, reference WAVs | 7 MB |
 
 ---
 
@@ -269,10 +268,10 @@ Read this section before debugging anything.
 **Open / not started**
 - `Data/SenWords` filter never traced.
 - No automated install - the release zip is copied in by hand per `INSTALL.txt`.
-- `_dirty-bepinex-20260720-1515\` (**556 MB** measured, not the 6.7 GB claimed
-  here previously - the runtime had already been moved out) is leftover and safe
-  to delete. `backup-preinstall-20260720-1508\` is 6.9 MB and holds a copy of the
-  API key config; delete it deliberately, not casually.
+- ~~`_dirty-bepinex-20260720-1515\` and `backup-preinstall-20260720-1508\`~~ -
+  both deleted 2026-07-21, reclaiming 563 MB. Their contents were regenerable
+  (a BepInEx tree, dialogue dumps, TSV inventories, reference WAVs) and the
+  preinstall backup also held a stray copy of the API key config.
 
 ---
 
