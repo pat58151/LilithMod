@@ -105,6 +105,8 @@ namespace LilithMod
                 actionRow, "LilithVoiceFolder",
                 Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
                     new System.Action(OpenVoiceFolder)));
+            Transform voiceFolderRow = view.GetRowOf(_voiceFolderLabel.transform);
+            if (voiceFolderRow != null) voiceFolderRow.gameObject.SetActive(true);
             _pushToTalk = view.CloneToggleRow(toggleRow, "LilithPushToTalk", out TMP_Text pushToTalkLabel);
             _pushToTalkKeyField = view.CloneInputRow(inputRow, "LilithPushToTalkKey",
                 out TMP_Text pushToTalkKeyLabel);
@@ -141,7 +143,8 @@ namespace LilithMod
 
             SetWrappedLabel(deepSeekLabel, "DeepSeek API Key");
             SetWrappedLabel(hotkeyLabel, "Open chat");
-            SetSingleLineLabel(_voiceFolderLabel, "Vocal Synthesis Folder");
+            // Two lines: the row is narrow, so this sits better than one long label.
+            SetWrappedLabel(_voiceFolderLabel, "Open Synth\nVoice Folder");
             SetWrappedLabel(pushToTalkLabel, "Push to talk");
             SetWrappedLabel(pushToTalkKeyLabel, "Push-to-talk");
             SetWrappedLabel(ambientLabel, "Ambient remarks");

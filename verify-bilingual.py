@@ -252,9 +252,14 @@ check("PARTIAL_MARKER" in ptt and "next_partial_at" in ptt and
       "Speech must stream partial recognition into the chat field")
 check("if (!_speechListening) return;" in chat,
       "A partial arriving after listening ends must not overwrite the final transcript")
-check("CloneActionRow" in settings and "Vocal Synthesis Folder" in settings and
+check("CloneActionRow" in settings and "Open Synth" in settings and
       "Vocal Synthesis" in settings and voice_setup,
       "Settings must expose the file-based vocal synthesis setup")
+check("voiceFolderRow.gameObject.SetActive(true)" in settings and
+      "hotkeyRow.gameObject.SetActive(true)" in settings and
+      "pushToTalkRow.gameObject.SetActive(true)" in settings,
+      "Cloned rows inherit the hidden state of the row they clone, so every added "
+      "row must be activated explicitly or it renders as nothing")
 check("SetSettingsInteractive(settingsTyping)" in settings,
       "Settings must only capture the desktop while a text field is focused")
 check("WindowStyle Hidden" in launcher and "/set_gpt_weights" in launcher and
@@ -268,9 +273,9 @@ check("StartCountdown((float)seconds, false)" in chat and
       "TryApplyImmediateNativeAction" in chat and "TryParseDuration" in chat and
       "TryParseAlarmClock" in chat,
       "Native English timer confirmation must stay muted and cancellation must be immediate")
-check('SetSingleLineLabel(_voiceFolderLabel, "Vocal Synthesis Folder")' in settings and
+check('SetWrappedLabel(_voiceFolderLabel, "Open Synth\\nVoice Folder")' in settings and
       'labels[i].enableWordWrapping = false' in settings,
-      "Vocal Synthesis setting labels must stay on one line")
+      "The vocal synthesis folder row must be labelled over two lines")
 check("VocalSynthesisPreferred" in plugin and "Task.WhenAny" in voice_monitor and
       "CfgReplaceGameVoice.Value = effective" in voice_monitor and
       "VoiceServiceMonitor.IsAvailable" in settings and "_jp.enabled = available" in settings,
