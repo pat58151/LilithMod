@@ -1,5 +1,20 @@
 # Handoff: injected callbacks never dispatch (BepInEx IL2CPP)
 
+> **RESOLVED — 2026-07-20. Kept only as a record of the investigation.**
+>
+> Not an Il2CppInterop bug. Steam inherited BepInEx/Doorstop state from an earlier
+> direct launch, and the game process being tested was a **separate vanilla
+> instance** with no BepInEx in it. The modded process logged `Load()`, `Awake()`
+> and `sceneLoaded`, then handed off to the already-running vanilla instance and
+> exited — which is exactly why every deferred callback looked dead while the
+> startup ones looked fine.
+>
+> The investigation below never verified that the process writing the log was the
+> process rendering the game. Section 4's table is therefore measuring a
+> short-lived process, not a broken runtime, and the `Class::Init` warning in
+> section 5 was a red herring — it is benign and near-universal on Unity 2021.2+.
+> **Check process identity first.**
+
 Written for a fresh reader with no prior context. Everything below was observed
 directly on this machine. Where something is inferred rather than measured, it
 says so.

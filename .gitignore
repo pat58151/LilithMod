@@ -15,6 +15,10 @@ voice-data/
 # 6.8 GB of checkpoints. Reproducible from the scripts; never commit it.
 training/
 
+# Local GPT-SoVITS inference stack: third-party code, a bundled Python env and
+# ~2 GB of pretrained models. Runs the voice; never ours to commit.
+voice-runtime/
+
 # Pre-reinstall snapshots of game-folder state (configs, dumps, reference clips).
 backup-preinstall-*/
 
