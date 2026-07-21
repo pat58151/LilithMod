@@ -901,6 +901,21 @@ namespace LilithMod
             // which omits the action and lets her decline in words. Gated by config.
             if (LilithModPlugin.CfgAllowOpenApps != null && LilithModPlugin.CfgAllowOpenApps.Value)
             {
+                // Browser searches are launches, not information requests: this opens
+                // an encoded Google URL and never downloads or reads the result page.
+                Match searchMatch = Regex.Match(text.Trim(),
+                    @"^(?:lilith[\s,.!~]+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:(?:open\s+(?:google|(?:the\s+)?browser)\s+and\s+)?search(?:\s+(?:google|the\s+web))?(?:\s+for)?|google)\s+(?<query>.+?)(?:\s+on\s+google)?[\s.!?~]*$",
+                    RegexOptions.IgnoreCase);
+                if (searchMatch.Success)
+                {
+                    string query = searchMatch.Groups["query"].Value.Trim();
+                    if (AppLauncher.GateOpen && AppLauncher.TrySearch(query))
+                    {
+                        LilithModPlugin.Logger.LogInfo("[NativeAction] Browser search opened.");
+                        return true;
+                    }
+                }
+
                 // Lazy name + trailing punctuation class: a spoken transcript arrives as
                 // "Open Discord." and the period must not become part of the name.
                 Match appMatch = Regex.Match(value.Trim(),
@@ -1066,7 +1081,7 @@ namespace LilithMod
             {
                 try
                 {
-                    if (NeedsLiveInformation(userInput) && !ambient)
+                    if (!nativeActionHandled && NeedsLiveInformation(userInput) && !ambient)
                     {
                         string liveContext = await _liveInformation.BuildContextAsync(userInput, token);
                         messagesSnapshot[0] = new Message
@@ -1549,6 +1564,17 @@ namespace LilithMod
                             throw new InvalidOperationException("App opening is disabled.");
                         if (!AppLauncher.TryOpen(app))
                             throw new InvalidOperationException($"Could not open app '{app}'.");
+                        break;
+                    }
+                    case "search_web":
+                    {
+                        string query = (string)action["query"];
+                        if (string.IsNullOrWhiteSpace(query))
+                            throw new InvalidOperationException("search_web action missing query.");
+                        if (LilithModPlugin.CfgAllowOpenApps == null || !LilithModPlugin.CfgAllowOpenApps.Value)
+                            throw new InvalidOperationException("Browser search is disabled.");
+                        if (!AppLauncher.TrySearch(query))
+                            throw new InvalidOperationException("Could not open browser search.");
                         break;
                     }
                 }

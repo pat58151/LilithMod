@@ -75,7 +75,7 @@ and can answer questions about the weather or look something up.
   WHAT LEAVES YOUR MACHINE
 -------------------------------------------------------------------------------
 
-Only three things ever do, and only when you cause them.
+Only four things ever do, and only when you cause them.
 
   What you type or say    Sent to the DeepSeek API, with the recent
                           conversation, so she can answer.
@@ -85,8 +85,11 @@ Only three things ever do, and only when you cause them.
                           to open-meteo.com. Neither needs an account. Note
                           ip-api.com is contacted over plain HTTP, not HTTPS.
 
-  Asking her to search    The query goes to a public SearXNG instance, and she
+  Asking for web facts    The query goes to a public SearXNG instance, and she
                           reads the pages it returns.
+
+  Asking to search Google Only an encoded Google results URL is opened in your
+                          default browser. The mod does not read the results.
 
 Her voice, her memory and her notes never leave this machine.
 

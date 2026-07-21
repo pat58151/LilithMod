@@ -121,6 +121,40 @@ namespace LilithMod
         }
 
         /// <summary>
+        /// Opens a Google results page in the user's default browser. The query is
+        /// URL-encoded and is never fetched or inspected by the mod.
+        /// </summary>
+        public static bool TrySearch(string query)
+        {
+            query = query?.Trim();
+            if (string.IsNullOrEmpty(query) || query.Length > 500)
+            {
+                LilithModPlugin.Logger.LogWarning(
+                    "[AppLauncher] Refusing browser search: query is empty or too long.");
+                return false;
+            }
+
+            string url = "https://www.google.com/search?q=" + Uri.EscapeDataString(query);
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+                LilithModPlugin.Logger.LogInfo(
+                    $"[AppLauncher] Opened Google search ({query.Length} characters).");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LilithModPlugin.Logger.LogWarning(
+                    "[AppLauncher] Browser search failed: " + ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Returns the current set of allowed app names (lowercased).
         /// </summary>
         public static IReadOnlyList<string> GetAllowedNames()

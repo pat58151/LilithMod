@@ -121,8 +121,10 @@ namespace LilithMod
                     ? "When the player explicitly asks to open or launch an app, also add one top-level action: " +
                       "{\"type\":\"open_app\",\"app\":\"<name>\"}, using an allowed name exactly as written. " +
                       "Allowed names: " + string.Join(", ", AppLauncher.GetAllowedNames()) + ". Never use a name not in this list. " +
+                      "When the player explicitly asks to search Google or open a browser search, use " +
+                      "{\"type\":\"search_web\",\"query\":\"<search terms>\"}. This only opens the Google results URL; it does not read results. " +
                       "In your reply give one short, excited acknowledgement line, varied each time and never the same phrasing twice. " +
-                      "Honor an explicit open request even while you are sleeping - sound drowsy if you like, but still include the action. "
+                      "Honor an explicit open or search request even while you are sleeping - sound drowsy if you like, but still include the action. "
                     : string.Empty) +
                 "Each shown line must mean exactly the same thing as its spoken line. " +
                 // One sentence per object is what lets her voice start on the first
