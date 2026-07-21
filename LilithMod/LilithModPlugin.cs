@@ -26,6 +26,8 @@ namespace LilithMod
         internal static ConfigEntry<int> CfgTimeoutSeconds;
         internal static ConfigEntry<string> CfgHotkey;
         internal static ConfigEntry<bool> CfgLogDiagnostics;
+        internal static ConfigEntry<bool> CfgAutoStartServices;
+        internal static ConfigEntry<string> CfgServiceLauncher;
         internal static ConfigEntry<bool> CfgAmbientEnabled;
         internal static ConfigEntry<int> CfgAmbientMinMinutes;
         internal static ConfigEntry<int> CfgAmbientMaxMinutes;
@@ -164,6 +166,16 @@ namespace LilithMod
                 Config.Save();
             }
 
+            CfgAutoStartServices = Config.Bind("Services", "AutoStart", true,
+                "Start the voice and speech services with the game when nothing else "
+                + "has. Skipped when the Startup shortcut is installed, since login "
+                + "already runs them, and skipped when the voice service is already "
+                + "answering.");
+
+            CfgServiceLauncher = Config.Bind("Services", "LauncherScript", "",
+                "Full path to start-lilith.ps1. Empty means derive it from the voice "
+                + "runtime location in voice-config.ini.");
+
             CfgLogDiagnostics = Config.Bind("Debug", "LogDiagnostics", false,
                 "Verbose per-frame input and window-focus logging. Only needed when "
                 + "diagnosing why a hotkey or the chat box is not responding.");
@@ -223,6 +235,9 @@ namespace LilithMod
 
             // ---- Voice initialisation -----------------------------------------
             InitVoice();
+            // After InitVoice, which loads voice-config.ini and so knows where the
+            // runtime lives and which endpoint to probe.
+            ServiceBootstrap.Run();
 
             try
             {

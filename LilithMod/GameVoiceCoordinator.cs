@@ -20,10 +20,11 @@ namespace LilithMod
 
         /// <summary>
         /// How long to wait for synthesis to come up before accepting that it is not
-        /// going to. Generous: the model load measured tens of seconds, and the cost
-        /// of overshooting is a few dropped native lines rather than wrong audio.
+        /// going to. Short, because in practice this only ever covers the greeting
+        /// that fires as the game opens - overshooting drops native lines that
+        /// should have played.
         /// </summary>
-        private const float StartupVoiceGraceSeconds = 90f;
+        private const float StartupVoiceGraceSeconds = 15f;
 
         private static bool SynthesisPreferred()
         {
