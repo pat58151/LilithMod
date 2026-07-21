@@ -9,19 +9,17 @@ line: present without demanding attention.
 
 ---
 
-## What it does
+## What she can do
 
-- **Talk to her in free text** — F7 to type, F8 to speak. She answers in
-  character, in English subtitles over Japanese speech.
-- **Local voice** — a GPT-SoVITS model on your own machine speaks her replies,
-  and optionally replaces the game's own dialogue audio too.
-- **Memory** — she reads back recent conversations before replying, so she can
-  refer to what you said earlier.
-- **Ambient life** — she comments unprompted now and then, reacts to being
-  touched, and knows the time of day and whether she is awake.
-- **Notes and letters** — rarely, after several real conversations, she leaves
-  something in the in-game inbox.
-- **Live information** — weather and web search, when asked.
+| | |
+|---|---|
+| **Hold a conversation** | Type to her with F7 or speak with F8. She answers in character, in English subtitles over Japanese speech. |
+| **Speak aloud** | A GPT-SoVITS model on your own machine gives her a voice, and can replace the game's own dialogue audio too. |
+| **Remember you** | She reads back recent conversations before replying, so she can pick up what you told her earlier. |
+| **Notice things** | She knows the time of day, whether she is standing or asleep, and reacts to being touched. |
+| **Speak first** | Now and then she says something unprompted, without being asked and without waiting to be. |
+| **Write to you** | Rarely, after several real conversations, she leaves a note in the in-game inbox. A personal stretch may come out as a love letter. |
+| **Look things up** | Weather and web search, when you ask her to. |
 
 Chat needs an API key you supply. Voice and speech input are optional; without
 them she still works, silently and typed-only, and the settings rows that need
