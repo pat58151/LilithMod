@@ -11,14 +11,14 @@ line: present without demanding attention.
 
 ## What she can do
 
-| | |
+| she can | what that looks like |
 |---|---|
 | **Hold a conversation** | Type to her with F7 or speak with F8. She answers in character, in English subtitles over Japanese speech. |
 | **Speak aloud** | A GPT-SoVITS model on your own machine gives her a voice, and can replace the game's own dialogue audio too. |
 | **Remember you** | She reads back recent conversations before replying, so she can pick up what you told her earlier. |
 | **Notice things** | She knows the time of day, whether she is standing or asleep, and reacts to being touched. |
 | **Speak first** | Now and then she says something unprompted, without being asked and without waiting to be. |
-| **Write to you** | Rarely, after several real conversations, she leaves a note in the in-game inbox. A personal stretch may come out as a love letter. |
+| **Write to you** | Rarely, after several real conversations, she might leave a note in the in-game inbox. |
 | **Look things up** | Weather and web search, when you ask her to. |
 
 Chat needs an API key you supply. Voice and speech input are optional; without
