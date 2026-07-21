@@ -91,6 +91,10 @@ namespace LilithMod
         /// </summary>
         private static bool AllowNativeVoice()
         {
+            // A line the coordinator declined keeps its own voice, so its audio has to
+            // be let through even though replacement is otherwise on. Checked first:
+            // suppressing it here is what turned wrong-language speech into silence.
+            if (GameVoiceCoordinator.NativeAudioAllowed) return true;
             return !VoiceReplacementEnabled() && !GameVoiceCoordinator.HoldingForSynthesis;
         }
 

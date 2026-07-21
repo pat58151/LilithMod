@@ -481,6 +481,11 @@ check("DialogueTextCatalog.Available" in game_voice,
 check("text = node.text;" not in game_voice,
       "Native dialogue must never fall back to node.text for synthesis; without a "
       "catalogue entry the original voice has to be kept instead")
+# Declining to replace a line and suppressing its audio anyway leaves it silent.
+# The bubble gate and the audio prefixes have to agree, as they must for the
+# grace window.
+check("NativeAudioAllowed" in game_voice and "NativeAudioAllowed" in integrations,
+      "A line handed back unreplaced must keep its own audio, or it plays silently")
 
 # -- The weather feature discloses what it contacts ---------------------------
 # Asking about the weather sends the player's IP to a third party. That is a

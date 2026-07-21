@@ -19,6 +19,22 @@ namespace LilithMod
         private static float _modSpokeAt = -600f;
 
         /// <summary>
+        /// Set when a native line is handed back unreplaced, so its own audio is let
+        /// through. The four audio prefixes fire separately from the bubble gate and
+        /// cannot tell which line was declined - without this they keep suppressing
+        /// on the assumption the mod is about to speak, and the line plays silently.
+        /// The window only has to outlast the gap between the bubble and its audio.
+        /// </summary>
+        private static float _nativeAudioAllowedUntil = -600f;
+
+        internal static bool NativeAudioAllowed => Time.unscaledTime < _nativeAudioAllowedUntil;
+
+        private static void AllowNativeAudioForThisLine()
+        {
+            _nativeAudioAllowedUntil = Time.unscaledTime + 2f;
+        }
+
+        /// <summary>
         /// How long to wait for synthesis to come up before accepting that it is not
         /// going to. Rarely reached: a successful warm-up marks the service available
         /// during Load(), long before any dialogue. This covers the case where the
@@ -81,6 +97,16 @@ namespace LilithMod
             if (node != null && node.id == 9500000)
             {
                 _modSpokeAt = Time.unscaledTime;
+                // NativeSuppressedAfterModSeconds has never once fired in a session
+                // where the mod plainly spoke, so this assignment is suspected never
+                // to run - meaning her reply is not actually protected from the game
+                // talking over it. If this line is absent from the log while a mod
+                // bubble appears, the reply bubble reaches the screen by some path
+                // other than DialogueBubbleUI.ShowNode and the guard is dead.
+                if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                    LilithModPlugin.Logger.LogInfo(
+                        "[Voice] Mod reply bubble seen; native dialogue held off for " +
+                        $"{NativeSuppressedAfterModSeconds:0.#}s.");
                 return true;
             }
 
@@ -192,6 +218,7 @@ namespace LilithMod
             // supply the line.
             if (string.IsNullOrWhiteSpace(text))
             {
+                AllowNativeAudioForThisLine();
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                     LilithModPlugin.Logger.LogInfo(
                         $"[Voice] Original voice kept for line {node.lineId} (id {node.id}): " +
