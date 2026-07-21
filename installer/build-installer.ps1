@@ -56,7 +56,8 @@ if (Test-Path $Payload) { Remove-Item $Payload -Recurse -Force }
 Expand-Archive -Path $ZipPath -DestinationPath $Payload
 
 # Sanity checks: the injection point, the mod, and the one line that decides
-# whether any of it loads (PORTABILITY.md, "What an installer must do", step 3).
+# whether any of it loads. Steam passes DOORSTOP_DISABLE=TRUE on nearly every
+# launch; without ignore_disable_switch = true the mod silently never loads.
 foreach ($rel in @("winhttp.dll", "doorstop_config.ini", "BepInEx\plugins\LilithMod\LilithMod.dll")) {
     if (-not (Test-Path (Join-Path $Payload $rel))) { throw "Payload is missing $rel - not a valid release zip." }
 }

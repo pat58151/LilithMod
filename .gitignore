@@ -57,11 +57,8 @@ LilithMod/DevHooks.cs
 installer/payload/
 dynamic-lines.ja.json
 
-# Development records. Kept locally, not published: they are handoff notes and
-# solved-problem archives, carry this machine's absolute paths, and
-# DIALOGUE-LOCATIONS.md maps the game developers' own content.
-HANDOFF.md
-DIALOGUE-LOCATIONS.md
-INSTALLER-HANDOFF.md
-INSTALLER-DONE.md
-PROBLEM.md
+# Development records. Kept locally, not published: handoff notes, tuning
+# measurements and solved-problem archives. They carry this machine's absolute
+# paths, and DIALOGUE-LOCATIONS.md maps the game developers' own content.
+# README.md is the only published document.
+document/

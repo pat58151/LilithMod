@@ -123,16 +123,24 @@ own replies are unaffected.
 
 ---
 
-## Documentation
+## Before changing behaviour
 
-| file | what it covers |
-|---|---|
-| [LILITHBEHAVIOR.md](LILITHBEHAVIOR.md) | every timing constant, and the measurement behind it. Read before tuning anything |
-| [PORTABILITY.md](PORTABILITY.md) | what is machine-specific, what an installer has to do, and what must never ship |
+Two rules are load-bearing, and the code defers to them in more places than is
+obvious:
 
-Two things in `LILITHBEHAVIOR.md` are worth knowing before changing code:
-nothing may interrupt a line she is already speaking (four separate paths defer
-for this), and she never rejects affection.
+- **Nothing interrupts a line she is already speaking.** Four separate paths
+  wait on one predicate for this, and the verify suite asserts that at least
+  four call sites do.
+- **She never rejects affection.** Not deflected, not joked away, not
+  qualified. This is in the persona prompt in deliberately absolute language.
+
+Almost every timing constant in the mod was arrived at by watching real
+sessions and being wrong first. The comments in the code carry that reasoning;
+they are worth reading before changing a number.
+
+The longer development notes — timing measurements, the portability audit, the
+installer record, solved problems — are kept in `document\`, which is local
+only and not published.
 
 ---
 
