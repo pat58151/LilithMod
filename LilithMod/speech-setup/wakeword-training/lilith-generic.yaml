@@ -1,0 +1,43 @@
+# "Lilith" wake word - generic model, synthetic voices only. This is the one
+# that ships; it carries no trace of the developer's voice. Paths are relative
+# to training\wakeword, which train.ps1 uses as the working directory.
+
+model_name: "lilith"
+target_phrase:
+  - "lilith"
+
+# Phoneme-adjacent words the detector kept confusing in early listening tests
+# can be added here later; the automatic phoneme-overlap adversarials cover
+# the obvious ones.
+custom_negative_phrases: []
+
+n_samples: 30000
+n_samples_val: 2000
+tts_batch_size: 50
+augmentation_batch_size: 16
+augmentation_rounds: 1
+
+piper_sample_generator_path: "./piper-sample-generator"
+output_dir: "./lilith_generic"
+
+rir_paths:
+  - "./mit_rirs"
+background_paths:
+  - "./audioset_16k"
+background_paths_duplication_rate:
+  - 1
+
+false_positive_validation_data_path: "./data/validation_set_features.npy"
+feature_data_files:
+  "ACAV100M_sample": "./data/openwakeword_features_ACAV100M_2000_hrs_16bit.npy"
+
+batch_n_per_class:
+  "ACAV100M_sample": 1024
+  "adversarial_negative": 50
+  "positive": 50
+
+model_type: "dnn"
+layer_size: 32
+steps: 25000
+max_negative_weight: 1500
+target_false_positives_per_hour: 0.2

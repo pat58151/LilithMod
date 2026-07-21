@@ -1,0 +1,31 @@
+# openWakeWord custom-model training environment (Windows, Python 3.10, CPU).
+# Mirrors the pins in openWakeWord's automatic_model_training notebook, with
+# torch pinned to the era those pins were tested against. tensorflow-cpu and
+# its friends exist only for the .tflite export; the listener uses the .onnx,
+# so a failed tensorflow install is survivable.
+torch==2.1.2
+torchaudio==2.1.2
+numpy==1.23.5
+# piper-phonemize has no official Windows wheel; setup-training.ps1 installs a
+# community win_amd64 build (csukuangfj/piper-phonemize-wheels) instead.
+piper-phonemize @ https://huggingface.co/csukuangfj/piper-phonemize-wheels/resolve/main/piper_phonemize-1.3.0-cp310-cp310-win_amd64.whl
+webrtcvad
+mutagen==1.47.0
+torchinfo==1.8.0
+torchmetrics==1.2.0
+speechbrain==0.5.14
+audiomentations==0.33.0
+torch-audiomentations==0.11.0
+acoustics==0.2.6
+pronouncing==0.2.0
+datasets==2.14.6
+deep-phonemizer==0.0.19
+huggingface_hub
+soundfile
+tqdm
+onnxruntime
+protobuf==3.19.6
+tensorflow-cpu==2.8.1
+tensorflow_probability==0.16.0
+onnx_tf==1.10.0
+pyarrow==12.0.1
