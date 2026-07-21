@@ -530,6 +530,17 @@ check("CjkWeight" in chunker,
 check("SuppressSubtitle" in chunker,
       "When the shown text will not split, later chunks must run silent rather "
       "than repeat the whole subtitle under every piece")
+# Grouping unequal sentence counts proportionally kept the pieces in order but
+# could still put a subtitle over the audio for the next one - reported as the
+# text box and the voice not matching.
+check("shown.Count == spoken.Count" in chunker,
+      "The bubble may only take turns when spoken and shown split into the SAME "
+      "number of sentences; anything else pairs text with the wrong audio")
+check("Put each sentence in its own object" in persona,
+      "One sentence per object is what makes the split exact; splitting a "
+      "multi-sentence object afterwards can only guess where the shown text divides")
+check("A hint is not permission to tell the whole thing" in persona,
+      "A hinted memory must draw an allusion, not the whole anecdote")
 
 # -- The weather feature discloses what it contacts ---------------------------
 # Asking about the weather sends the player's IP to a third party. That is a

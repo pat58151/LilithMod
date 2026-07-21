@@ -47,19 +47,20 @@ namespace LilithMod
 
             List<string> shown = Split(source.EnText ?? string.Empty);
 
-            // Pieces are paired one-for-one, so the count is whichever side splits
-            // into fewer. Grouping the other side to match keeps every subtitle
-            // over the audio that says it - the alternative, pairing by index and
-            // dropping the surplus, drifts text and voice apart.
-            int count = shown.Count >= 2 ? Math.Min(spoken.Count, shown.Count) : spoken.Count;
-            if (count > MaxChunks) count = MaxChunks;
+            // The bubble is only split alongside the audio when the two sides agree
+            // sentence for sentence. Grouping unequal counts proportionally read as
+            // text and voice not matching: the pieces stayed in order, but a
+            // subtitle could sit over audio that said the next thing.
+            bool paired = shown.Count == spoken.Count;
+
+            int count = Math.Min(spoken.Count, MaxChunks);
             if (count < 2) return single;
 
             List<string> spokenParts = Regroup(spoken, count);
-            // Text that would not split (one long sentence, or no shown text at
-            // all) still gets the latency win: it is shown once against the first
-            // piece and the rest run silent rather than repeating it.
-            List<string> shownParts = shown.Count >= 2 ? Regroup(shown, count) : null;
+            // Unequal sides still get the latency win, just without the bubble
+            // taking turns: the reply is shown once against the first piece and
+            // the rest run silent, which is stale but never wrong.
+            List<string> shownParts = paired ? Regroup(shown, count) : null;
 
             var result = new List<Utterance>(count);
             for (int i = 0; i < count; i++)
