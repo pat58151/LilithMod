@@ -289,6 +289,7 @@ namespace LilithMod
             while (processor.ReplyFinishedQueue.TryDequeue(out _))
             {
                 _replyPlaybackActive = false;
+                _speechEndedAt = Time.unscaledTime;
                 _replyHideAt = Time.unscaledTime + 1.0f;
             }
 
@@ -1818,6 +1819,14 @@ namespace LilithMod
 
         private float _replyStartedAt;
 
+        /// <summary>
+        /// Quiet after her voice stops before an interaction reply may follow, so two
+        /// utterances do not run together.
+        /// </summary>
+        private const float InteractionAfterSpeechSeconds = 1f;
+
+        private float _speechEndedAt = -600f;
+
         private static float _lastNativeDialogueAt = -600f;
 
         /// <summary>Called from the dialogue gate whenever the game itself speaks.</summary>
@@ -1853,6 +1862,15 @@ namespace LilithMod
             // reply fired immediately lands on top of it. Held, not dropped - the
             // reply still makes sense a moment after she finishes.
             if (Time.unscaledTime - _lastNativeDialogueAt < NativeDialogueQuietSeconds) return;
+
+            // Let her finish what she is already saying, then leave a beat before
+            // answering the touch. _currentRequest above only covers the API call,
+            // which completes seconds before the audio does - so without this the
+            // interaction reply lands mid-sentence and CancelCurrent drops the rest
+            // of the previous one. Held rather than dropped: the pending interaction
+            // is still waiting when playback ends.
+            if (_replyPlaybackActive) return;
+            if (Time.unscaledTime - _speechEndedAt < InteractionAfterSpeechSeconds) return;
 
             string kind = _pendingInteraction;
             _pendingInteraction = null;

@@ -440,6 +440,16 @@ check("WarmUpSentences" in speech,
       "Warm-up sentences are gone - first synthesis would take the cold-start hit, "
       "and NoteServiceAnswered would never fire early")
 
+# -- An interaction reply waits for her to stop talking -----------------------
+# _currentRequest only covers the API call, which finishes seconds before the
+# audio does. Without a playback gate the interaction reply fires mid-sentence
+# and CancelCurrent drops the rest of the previous one.
+check("_replyPlaybackActive) return;" in chat and "InteractionAfterSpeechSeconds" in chat,
+      "An interaction reply must wait for playback to finish, then a beat, rather "
+      "than cutting off the reply already being spoken")
+check("_speechEndedAt = Time.unscaledTime;" in chat,
+      "The end of playback must be recorded, or the post-speech delay has no anchor")
+
 # -- The distribution build must not replace dialogue it cannot translate -----
 # Release builds omit the game's script for licensing. Without this the
 # replacement path still ran, fell back to the Chinese source string and fed it
