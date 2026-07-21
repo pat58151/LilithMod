@@ -8,6 +8,15 @@ namespace LilithMod
     {
         private static GameVoiceCoordinator _instance;
         private static bool _allowOriginalShow;
+
+        /// <summary>
+        /// How long the game's own dialogue is held off after the mod speaks. The
+        /// mirror of NativeDialogueQuietSeconds, which holds the mod off after the
+        /// game speaks - shorter, because her reply is the one the player asked for.
+        /// </summary>
+        private const float NativeSuppressedAfterModSeconds = 4f;
+
+        private static float _modSpokeAt = -600f;
         private readonly HashSet<long> _pendingNodes = new HashSet<long>();
         private int _dynamicAlarmLine;
         private float _alarmDialogueUntil;
@@ -30,7 +39,34 @@ namespace LilithMod
         {
             // Node 9500000 is the mod's already-synchronised reply bubble. Replacing it
             // again would queue the English subtitle as a second TTS line.
-            if (node != null && node.id == 9500000) return true;
+            if (node != null && node.id == 9500000)
+            {
+                _modSpokeAt = Time.unscaledTime;
+                return true;
+            }
+
+            // The mod just spoke, so hold the game off for a moment. The other
+            // direction already exists - ambient waits 8 s after native dialogue -
+            // and without this the game answers over the top of her reply, which is
+            // what makes handling her produce two overlapping lines.
+            //
+            // _allowOriginalShow is excluded: that is a line already synthesised and
+            // coming back to be displayed, and dropping it would discard audio that
+            // is about to play.
+            if (node != null && bubble != null && !_allowOriginalShow &&
+                Time.unscaledTime - _modSpokeAt < NativeSuppressedAfterModSeconds)
+            {
+                if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                {
+                    LilithModPlugin.Logger.LogInfo(
+                        $"[Voice] Suppressed native line {node.lineId} (id {node.id}); " +
+                        "the mod spoke less than " +
+                        $"{NativeSuppressedAfterModSeconds:0.#}s ago.");
+                }
+                // Dropped, not deferred: the game has no queue to hold it in, and a
+                // reaction shown four seconds late is worse than one not shown.
+                return false;
+            }
             if (_allowOriginalShow || !ModIntegrations.VoiceReplacementEnabled() ||
                 _instance == null || bubble == null || node == null)
             {
