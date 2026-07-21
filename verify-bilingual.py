@@ -475,6 +475,12 @@ check("DialogueTextCatalog.Available" in integrations,
       "the bubble gate and the audio prefixes turn off together")
 check("DialogueTextCatalog.Available" in game_voice,
       "A line must not be held for synthesis that cannot be translated")
+# node.text is the game's own string: Chinese for scripted lines, the UI
+# language for ones built at runtime with lineId 0. Falling back to it fed
+# English to the Japanese voice and she read it aloud.
+check("text = node.text;" not in game_voice,
+      "Native dialogue must never fall back to node.text for synthesis; without a "
+      "catalogue entry the original voice has to be kept instead")
 
 # -- The weather feature discloses what it contacts ---------------------------
 # Asking about the weather sends the player's IP to a third party. That is a

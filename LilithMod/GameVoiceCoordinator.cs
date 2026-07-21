@@ -183,10 +183,21 @@ namespace LilithMod
                 else if (DialogueTextCatalog.TryGet(alarmLineId, subtitleLanguage, out string localized))
                     node.text = localized;
             }
+            // No catalogue text for this line, so there is nothing correct to speak.
+            // node.text is the game's own string: Chinese for scripted lines, and the
+            // UI language - often English - for the ones it builds at runtime with
+            // lineId 0. Handing either to the Japanese voice made her read the wrong
+            // language aloud, which is what a touch reply in English turned out to be.
+            // The original voice is the right answer whenever the catalogue cannot
+            // supply the line.
             if (string.IsNullOrWhiteSpace(text))
-                text = node.text;
-            if (string.IsNullOrWhiteSpace(text))
+            {
+                if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                    LilithModPlugin.Logger.LogInfo(
+                        $"[Voice] Original voice kept for line {node.lineId} (id {node.id}): " +
+                        "no catalogue text, so nothing to synthesise.");
                 return true;
+            }
 
             var cue = new NativeDialogueCue(bubble, node, key);
             _pendingNodes.Add(key);
