@@ -192,9 +192,34 @@ it was tried, which is itself unexplained.
 
 ---
 
-# Open: the first native line of a session is spoken in Chinese
+# Fixed: the first native line of a session was spoken in Chinese
 
-Status: **unresolved, instrumented 2026-07-21.**
+Status: **root cause found and fixed 2026-07-21.** The investigation below is
+kept because one of its dead ends is worth not repeating.
+
+## Resolution
+
+The diagnostic added for this named it on the first launch after deploying:
+
+```
+Original voice kept for line 950703 (id 800003): ReplaceGameVoice off.
+```
+
+`VoiceServiceMonitor.IsAvailable` starts `false`, and its first probe cannot
+succeed until the synthesis service accepts connections - tens of seconds while
+the model loads. Until then `ApplyAvailability(false)` forces
+`CfgReplaceGameVoice` off, so any dialogue in that window plays with the game's
+own voice, which is Chinese. The `EnterGame` greeting fires exactly there, which
+is why it was always the first line and only the first.
+
+The fix distinguishes "has never answered yet" from "is not installed" with
+`VoiceServiceMonitor.EverAvailable`. The fallback to native voice while
+synthesis is down is deliberate and stays - a machine without synthesis depends
+on it. But while synthesis is *preferred and has never answered*, native lines
+are dropped rather than voiced in the wrong language, bounded by a 90 s grace so
+a machine that genuinely has no synthesis still falls back as designed.
+
+## Symptom, as reported
 
 On startup the first thing she says is in Chinese. Only the first - every later
 native line is correct.
