@@ -451,6 +451,11 @@ check("_pendingUserMessage" in chat and "TrySendQueuedUserMessage" in chat,
       "A typed message must queue behind her current reply instead of cancelling it")
 check("QueuedMessageMaxWaitSeconds" in chat,
       "A queued message needs a ceiling, or a stuck playback flag swallows it forever")
+# All three routes that can start a reply - touch, typing, ambient - must wait
+# on the same predicate. Any one of them missing it cancels her mid-sentence.
+check(len(re.findall(r"SpeechStillFinishing", chat)) >= 4,
+      "Every path that starts a reply must wait on SpeechStillFinishing, including "
+      "the ambient remark")
 check("_speechEndedAt = Time.unscaledTime;" in chat,
       "The end of playback must be recorded, or the post-speech delay has no anchor")
 

@@ -1970,6 +1970,13 @@ namespace LilithMod
                 // out by another full interval for an eight second overlap.
                 return;
             }
+            if (SpeechStillFinishing)
+            {
+                // She is still speaking. Held, not rescheduled - for the same reason
+                // as the native-dialogue case above, pushing it out by a full interval
+                // would be a heavy penalty for a few seconds of overlap.
+                return;
+            }
             if (!SpontaneousReady)
             {
                 // Due, but she has spoken unbidden too recently. Push it out rather
