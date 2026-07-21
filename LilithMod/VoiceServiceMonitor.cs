@@ -39,11 +39,20 @@ namespace LilithMod
             if (LilithModPlugin.CfgForceSynthesisUnavailable != null &&
                 LilithModPlugin.CfgForceSynthesisUnavailable.Value)
                 return;
+            bool first = !EverAvailable;
             IsAvailable = true;
             EverAvailable = true;
 
             bool preferred = LilithModPlugin.CfgVoiceSynthesisPreferred != null &&
                              LilithModPlugin.CfgVoiceSynthesisPreferred.Value;
+
+            // Logged where it happens. The probe's own "service available" message
+            // lands hundreds of lines later, after the first dialogue, and reading
+            // that as the moment availability was established is what sent three
+            // separate diagnoses of the Chinese greeting down the wrong path.
+            if (first)
+                LilithModPlugin.Logger.LogInfo(
+                    "[Voice] Synthesis answered a real request; available from here.");
             // Compared before assigning: the setter persists the file, and this runs on
             // the warm-up thread.
             if (preferred && LilithModPlugin.CfgReplaceGameVoice != null &&
