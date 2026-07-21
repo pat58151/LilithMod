@@ -52,3 +52,6 @@ __pycache__/
 # Local development hooks. Never ships; the tracked source uses partial
 # methods so the build is correct with this file absent.
 LilithMod/DevHooks.cs
+
+# Staged release-zip contents for the installer build; recreated every build.
+installer/payload/
