@@ -17,7 +17,9 @@
 param(
     [switch]$Backup,
     [switch]$Restore,
-    [string]$GameDir = "D:\SteamLibrary\steamapps\common\The NOexistenceN of Lilith"
+    # Empty means "ask Steam where the game is". Steam installs to any drive, so
+    # a hardcoded path is right on one machine and wrong everywhere else.
+    [string]$GameDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,7 +28,48 @@ $RepoDir   = $PSScriptRoot
 $BackupDir = Join-Path $RepoDir "backup"
 $BepInZip  = Join-Path $RepoDir "tools\bepinex785.zip"
 $Csproj    = Join-Path $RepoDir "LilithMod\LilithMod.csproj"
-$Dotnet    = "C:\Program Files\dotnet\dotnet.exe"
+
+# PATH first, then the default install location. Hardcoding the second alone
+# fails on any machine that installed the SDK elsewhere.
+$Dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
+if (-not $Dotnet) { $Dotnet = "C:\Program Files\dotnet\dotnet.exe" }
+if (-not (Test-Path $Dotnet)) { throw "Could not find dotnet. Install the .NET SDK, or put dotnet on PATH." }
+
+function Find-GameFolder {
+    $relative = "steamapps\common\The NOexistenceN of Lilith"
+    $steam = $null
+    foreach ($key in @("HKCU:\Software\Valve\Steam", "HKLM:\SOFTWARE\WOW6432Node\Valve\Steam")) {
+        try {
+            $value = Get-ItemProperty -Path $key -ErrorAction Stop
+            if ($value.SteamPath)   { $steam = $value.SteamPath.Replace("/", "\"); break }
+            if ($value.InstallPath) { $steam = $value.InstallPath; break }
+        }
+        catch { }
+    }
+    $roots = New-Object System.Collections.Generic.List[string]
+    if ($steam) {
+        $roots.Add($steam)
+        # Games can live in any additional library, listed in libraryfolders.vdf.
+        $vdf = Join-Path $steam "steamapps\libraryfolders.vdf"
+        if (Test-Path $vdf) {
+            foreach ($line in Get-Content $vdf) {
+                if ($line -match '"path"\s+"(.+?)"') { $roots.Add($Matches[1].Replace("\\", "\")) }
+            }
+        }
+    }
+    foreach ($root in $roots) {
+        $candidate = Join-Path $root $relative
+        if (Test-Path (Join-Path $candidate "Lilith.exe")) { return $candidate }
+    }
+    return $null
+}
+
+if (-not $GameDir) {
+    $GameDir = Find-GameFolder
+    if (-not $GameDir) {
+        throw "Could not find the game. Pass -GameDir ""<path to The NOexistenceN of Lilith>""."
+    }
+}
 
 $ConfigRel = "BepInEx\config\LilithMod.cfg"
 $CustomRel = "BepInEx\plugins\LilithMod\custom"

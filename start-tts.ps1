@@ -16,13 +16,19 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Runtime = "D:\Lilith\voice-runtime",
-    [string]$Config  = "D:\Lilith\voice-runtime\config\ja-finetuned.yaml",
+    # Empty means "derive from where this script lives". $PSScriptRoot is not
+    # populated inside param() defaults on PowerShell 5.1, so these resolve below.
+    [string]$Runtime = "",
+    [string]$Config  = "",
     [string]$Address = "127.0.0.1",
     [int]$Port       = 9880
 )
 
 $ErrorActionPreference = "Stop"
+
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $Runtime) { $Runtime = Join-Path $scriptDir "voice-runtime" }
+if (-not $Config)  { $Config  = Join-Path $Runtime "config\ja-finetuned.yaml" }
 
 $python = Join-Path $Runtime "python\Scripts\python.exe"
 $appDir = Join-Path $Runtime "gpt-sovits"

@@ -44,8 +44,12 @@ namespace LilithMod
             SpokenLanguage = NormalizeLanguage(Read(values, "voice", "spokenlanguage", "ja"));
             SubtitleLanguage = NormalizeLanguage(Read(values, "voice", "subtitlelanguage", "en"));
             Endpoint = Read(values, "voice", "endpoint", "http://127.0.0.1:9880/tts");
-            RuntimePath = ResolvePath(Read(values, "voice", "runtimepath", @"D:\Lilith\voice-runtime"));
-            ServerConfig = ResolvePath(Read(values, "voice", "serverconfig", @"D:\Lilith\voice-runtime\config\ja-finetuned.yaml"));
+            // Empty rather than a developer machine's path. There is no correct
+            // default for where someone installed the voice runtime, and a wrong
+            // absolute path fails less clearly than an unset one: unset is reported
+            // as "complete voice-config.ini", which is the actual next step.
+            RuntimePath = ResolvePath(Read(values, "voice", "runtimepath", string.Empty));
+            ServerConfig = ResolvePath(Read(values, "voice", "serverconfig", string.Empty));
 
             Profiles.Clear();
             foreach (string language in new[] { "ja", "en", "zh" })

@@ -269,11 +269,13 @@ namespace LilithMod
                 "Full URL of the GPT‑SoVITS TTS endpoint.");
 
             // The reference clip is NOT shipped with this mod - it belongs to the
-            // game's rights holders. Point this at a clip you already have locally;
-            // the default is where the GPT-SoVITS installer puts it. The service
-            // reads this path itself, so it must be readable by that process.
+            // game's rights holders. Point this at a clip you already have locally.
+            // The default is relative on purpose: an absolute path here is correct
+            // on exactly one machine and silently wrong on every other install.
+            // The service reads this path itself, so it must be readable by that
+            // process.
             CfgVoiceRefAudioPath = Config.Bind("Voice", "RefAudioPath",
-                @"D:\SteamLibrary\steamapps\common\The NOexistenceN of Lilith\BepInEx\data\LilithTextInjector\voice\jp\calm-reference.wav",
+                @"voice\jp\calm-reference.wav",
                 "Absolute path to the reference WAV the voice is cloned from, as seen "
                 + "by the TTS service. A relative path is resolved against the mod folder. "
                 + "3-10 seconds works best.");

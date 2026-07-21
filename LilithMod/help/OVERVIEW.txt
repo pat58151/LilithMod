@@ -1,0 +1,111 @@
+===============================================================================
+  LilithMod - overview
+===============================================================================
+
+This mod gives Lilith a voice and a memory. She can be talked to in free text,
+answers in her own character, speaks aloud through a local voice model, and
+occasionally leaves you a handwritten note.
+
+Everything runs against services on your own machine except the language model,
+which needs an API key you supply.
+
+
+-------------------------------------------------------------------------------
+  CONTROLS
+-------------------------------------------------------------------------------
+
+  F7        Open the chat bar. Type, press Enter, she answers.
+  F8        Speak instead. It listens, and submits on its own after about
+            2.5 seconds of silence. Press F8 again to cancel.
+  Escape    Close the chat bar.
+
+Both keys can be rebound in Settings / Controls. They cannot be bound to the
+same key.
+
+While F8 is listening you can still type - what you type wins, and the
+transcript is discarded rather than overwriting your words.
+
+
+-------------------------------------------------------------------------------
+  SETUP
+-------------------------------------------------------------------------------
+
+1. API KEY - required for everything below.
+
+   Settings / Me / DeepSeek API Key. Paste a key and it saves itself.
+
+   Without a key, F7 and F8 do nothing at all and their rows appear greyed
+   out. This is deliberate: a chat box whose every message fails is worse than
+   one that plainly is not available.
+
+   The key is stored in BepInEx\config\LilithMod.cfg on this machine only. It
+   is never sent anywhere except to the API you configured.
+
+2. VOICE - optional. She works silently without it.
+
+   Settings / Sound / Open Synth Voice Folder, then follow README.txt. It
+   explains how to install the local speech synthesiser and point the mod at a
+   voice model.
+
+   While the voice service is unavailable the option greys out and she falls
+   back to the game's original voice. It recovers on its own when the service
+   returns.
+
+3. SPEECH INPUT - optional. F8 only.
+
+   Settings / Me / Open Speech Input Folder, then follow README.txt.
+
+   The two folder buttons are never greyed out, because they are how you find
+   out why something is unavailable.
+
+
+-------------------------------------------------------------------------------
+  WHAT SHE REMEMBERS
+-------------------------------------------------------------------------------
+
+She keeps the last handful of conversations and reads them back before
+replying, so she can refer to what you told her earlier. It is stored in
+memory.json beside the mod. Deleting that file makes her forget.
+
+She also knows the time of day, whether she is standing, lying down or asleep,
+and can answer questions about the weather or look something up.
+
+
+-------------------------------------------------------------------------------
+  NOTES
+-------------------------------------------------------------------------------
+
+Now and then she writes you a note, which appears in the in-game inbox.
+
+They are rare on purpose. A note needs several real conversations inside a few
+hours, at least a day and a half since the last one, and then it still has to
+land a roll - so one arriving is meant to feel like something happened, not
+like a notification. Errands do not count toward it: setting a timer, asking
+the forecast or sending her to search the web are using her, not talking to
+her.
+
+If the conversations were personal, a rare note may come out as a love letter.
+
+
+-------------------------------------------------------------------------------
+  IF SOMETHING SEEMS WRONG
+-------------------------------------------------------------------------------
+
+The game looks completely unmodded
+    Fully exit BOTH the game and Steam, restart Steam, then launch the game.
+    Starting the game's .exe directly while Steam is closed can leave Steam in
+    a state where the mod is silently skipped on every later launch, and
+    restarting only the game does not clear it.
+
+She is silent but the text appears
+    The voice service is not running. See SETUP step 2.
+
+F7 or F8 do nothing
+    Almost always a missing API key. See SETUP step 1.
+
+Her voice takes many seconds per line
+    Expected is about two to three seconds. Much longer than that is a known
+    unsolved fault - the log records how long each line took.
+
+Logs are in BepInEx\LogOutput.log. Note that it is overwritten on every
+launch, so capture it before restarting.

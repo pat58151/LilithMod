@@ -27,7 +27,10 @@ namespace LilithMod
     /// Injectable MonoBehaviour that provides free-text LLM chat.
     /// All UI, networking, and dialogue injection are handled here.
     /// </summary>
-    public class LlmChatController : MonoBehaviour
+    // Partial so local-only development hooks can live in an untracked DevHooks.cs
+    // without shipping in a release build. Their call sites are partial methods,
+    // which compile to nothing when that file is absent.
+    public partial class LlmChatController : MonoBehaviour
     {
         // ========== Configuration (populated from LilithModPlugin statics) ==========
         private static string BaseUrl => LilithModPlugin.CfgBaseUrl.Value;
@@ -134,7 +137,6 @@ namespace LilithMod
             _speechCommandPath = Path.Combine(pluginDir, "speech-command.txt");
             _pushToTalkTriggerPath = Path.Combine(pluginDir, "push-to-talk.active");
             SpeechInputService.Initialize();
-            _noteTestPath = Path.Combine(pluginDir, "note-test.txt");
             // A trigger left behind by a crash would make the listener record forever.
             ClearPushToTalkTrigger();
 
@@ -1683,31 +1685,11 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Renders a note from a dropped file, so note layout can be tested without
-        /// waiting on the cadence gates or spending an API call. Write any text to
-        /// note-test.txt beside the plugin and it is rendered and the file removed.
-        /// Only active with LogDiagnostics on.
+        /// Development-only hook, implemented in the untracked DevHooks.cs. With no
+        /// implementation present - any machine but this one, and every release -
+        /// the compiler removes this call entirely.
         /// </summary>
-        private void PollNoteTestFile()
-        {
-            if (!LilithModPlugin.CfgLogDiagnostics.Value || _noteTestPath == null ||
-                Time.unscaledTime < _nextNoteTestPoll) return;
-            _nextNoteTestPoll = Time.unscaledTime + 1f;
-            try
-            {
-                if (!File.Exists(_noteTestPath)) return;
-                string text = File.ReadAllText(_noteTestPath).Trim();
-                File.Delete(_noteTestPath);
-                if (string.IsNullOrEmpty(text)) return;
-                LilithModPlugin.Logger.LogInfo(
-                    $"[Letters] Rendering test note ({text.Length} chars).");
-                SaveLetter(text);
-            }
-            catch (IOException) { }
-        }
-
-        private string _noteTestPath;
-        private float _nextNoteTestPoll;
+        partial void PollNoteTestFile();
 
         /// <summary>
         /// Removes a trailing sign-off. The note image draws her signature itself,

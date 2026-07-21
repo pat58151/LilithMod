@@ -33,7 +33,9 @@ if (-not $ProjectFolder) { $ProjectFolder = Split-Path -Parent $scriptDir }
 
 $project = Join-Path $ProjectFolder "LilithMod\LilithMod.csproj"
 $bepinexZip = Join-Path $ProjectFolder "tools\bepinex785.zip"
-$dotnet = "C:\Program Files\dotnet\dotnet.exe"
+# PATH first, then the default install location, since the SDK can live anywhere.
+$dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
+if (-not $dotnet) { $dotnet = "C:\Program Files\dotnet\dotnet.exe" }
 
 foreach ($required in @($project, $bepinexZip, $dotnet)) {
     if (-not (Test-Path $required)) { throw "Missing: $required" }

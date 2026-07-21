@@ -21,6 +21,7 @@ namespace LilithMod
         private Toggle _deepSeekEye;
         private TMP_Text _voiceFolderLabel;
         private TMP_Text _speechFolderLabel;
+        private TMP_Text _helpLabel;
         private TMP_Text _hotkeyLabel;
         private bool _lastChatAvailability = true;
         private static readonly Color DisabledColor = new Color(0.45f, 0.45f, 0.45f, 1f);
@@ -60,6 +61,7 @@ namespace LilithMod
                 RefreshSynthesisAvailability();
                 RefreshSpeechAvailability();
                 RefreshChatAvailability();
+                RefreshHelpLabel();
             }
 
             bool settingsVisible = _view != null && _view.IsVisible;
@@ -115,6 +117,12 @@ namespace LilithMod
                 actionRow, "LilithSpeechFolder",
                 Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
                     new System.Action(OpenSpeechFolder)));
+            _helpLabel = view.CloneActionRow(
+                actionRow, "LilithHelp",
+                Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
+                    new System.Action(OpenHelp)));
+            Transform helpRow = view.GetRowOf(_helpLabel.transform);
+            if (helpRow != null) helpRow.gameObject.SetActive(true);
             Transform speechFolderRow = view.GetRowOf(_speechFolderLabel.transform);
             if (speechFolderRow != null) speechFolderRow.gameObject.SetActive(true);
             Transform voiceFolderRow = view.GetRowOf(_voiceFolderLabel.transform);
@@ -154,6 +162,11 @@ namespace LilithMod
             SetWrappedLabel(deepSeekLabel, "DeepSeek\nAPI Key");
             _hotkeyLabel = hotkeyLabel;
             SetWrappedLabel(hotkeyLabel, "Open chat");
+            // Underlined so it reads as something to click rather than a setting
+            // name. Rich text is off by default on cloned rows.
+            if (_helpLabel != null) _helpLabel.richText = true;
+            _helpLanguage = null;
+            RefreshHelpLabel();
             SetWrappedLabel(_speechFolderLabel, "Open Speech\nInput Folder");
             // Two lines: the row is narrow, so this sits better than one long label.
             SetWrappedLabel(_voiceFolderLabel, "Open Synth\nVoice Folder");
@@ -178,6 +191,14 @@ namespace LilithMod
             }
 
             view.MapRow(_deepSeekKey, TraySettingView.TabMe);
+            // Ordered by claiming last place before the speech folder row does, so
+            // Me reads: API key, Help, then the folder button at the bottom.
+            if (_helpLabel != null)
+            {
+                view.MapRow(_helpLabel, TraySettingView.TabMe);
+                Transform row = view.GetRowOf(_helpLabel.transform);
+                if (row != null) row.SetAsLastSibling();
+            }
             if (_speechFolderLabel != null)
             {
                 view.MapRow(_speechFolderLabel, TraySettingView.TabMe);
@@ -588,6 +609,86 @@ namespace LilithMod
             catch (Exception ex)
             {
                 LilithModPlugin.Logger.LogWarning("[Settings] Could not open speech input folder: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// The Help label follows the game's display language, and is re-checked on
+        /// the refresh tick so changing language applies without a restart - the
+        /// same contract the speech recogniser uses.
+        /// </summary>
+        private void RefreshHelpLabel()
+        {
+            if (_helpLabel == null) return;
+            string language = HelpLanguage();
+            if (language == _helpLanguage) return;
+            _helpLanguage = language;
+            string text =
+                language == "ja" ? "ヘルプ" :
+                language == "zh" ? "帮助" :
+                "Help";
+            SetWrappedLabel(_helpLabel, "<u>" + text + "</u>");
+        }
+
+        /// <summary>"en", "ja" or "zh" - never null, so it is safe to compare.</summary>
+        private static string HelpLanguage()
+        {
+            try
+            {
+                string language = PersonaPrompt.CurrentDisplayLanguage() ?? "en";
+                if (language.StartsWith("ja", StringComparison.OrdinalIgnoreCase)) return "ja";
+                if (language.StartsWith("zh", StringComparison.OrdinalIgnoreCase)) return "zh";
+                return "en";
+            }
+            catch
+            {
+                return "en";
+            }
+        }
+
+        private string _helpLanguage;
+
+        /// <summary>
+        /// Opens the mod overview in whatever handles .txt. Like the folder buttons
+        /// this is never greyed out - it is where the answer to "why is this
+        /// greyed out" lives, so it has to work when nothing else does.
+        ///
+        /// Prefers a translation matching the game language and falls back to
+        /// English, so OVERVIEW.ja.txt or OVERVIEW.zh.txt can be added by dropping
+        /// the file in - no code change.
+        /// </summary>
+        private static void OpenHelp()
+        {
+            try
+            {
+                string root = Path.GetDirectoryName(
+                    System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".";
+                string helpFolder = Path.Combine(root, "help");
+                string file = Path.Combine(helpFolder, $"OVERVIEW.{HelpLanguage()}.txt");
+                if (!File.Exists(file)) file = Path.Combine(helpFolder, "OVERVIEW.txt");
+                if (!File.Exists(file))
+                {
+                    // Opening the folder still beats doing nothing visible.
+                    string folder = Path.GetDirectoryName(file);
+                    Directory.CreateDirectory(folder);
+                    LilithModPlugin.Logger.LogWarning(
+                        "[Settings] help\\OVERVIEW.txt is missing; opening the folder instead.");
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = folder,
+                        UseShellExecute = true
+                    });
+                    return;
+                }
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = file,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                LilithModPlugin.Logger.LogWarning("[Settings] Could not open help: " + ex.Message);
             }
         }
 

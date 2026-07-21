@@ -8,6 +8,7 @@ import csv
 import hashlib
 import io
 import json
+import re
 import sys
 import time
 import unicodedata
@@ -15,6 +16,52 @@ import urllib.error
 import urllib.request
 import wave
 from pathlib import Path
+
+
+def find_game_folder() -> str:
+    """Ask Steam where the game is, checking every configured library.
+
+    Returns "" when it cannot be found, so --game surfaces as a normal missing
+    argument rather than a wrong path that fails later and less clearly.
+    """
+    relative = r"steamapps\common\The NOexistenceN of Lilith"
+    steam = ""
+    try:
+        import winreg
+
+        for root, key in ((winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam"),
+                          (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam")):
+            try:
+                with winreg.OpenKey(root, key) as handle:
+                    for name in ("SteamPath", "InstallPath"):
+                        try:
+                            steam = winreg.QueryValueEx(handle, name)[0].replace("/", "\\")
+                            break
+                        except OSError:
+                            continue
+                if steam:
+                    break
+            except OSError:
+                continue
+    except ImportError:
+        return ""
+
+    if not steam:
+        return ""
+
+    roots = [steam]
+    vdf = Path(steam) / "steamapps" / "libraryfolders.vdf"
+    if vdf.exists():
+        for line in vdf.read_text(encoding="utf-8", errors="ignore").splitlines():
+            match = re.search(r'"path"\s+"(.+?)"', line)
+            if match:
+                roots.append(match.group(1).replace("\\\\", "\\"))
+
+    for root_path in roots:
+        candidate = Path(root_path) / relative
+        if (candidate / "Lilith.exe").exists():
+            return str(candidate)
+    return ""
 
 
 def read_config(path: Path) -> dict[str, str]:
@@ -90,8 +137,10 @@ def silent_wav(seconds: float = 0.3, sample_rate: int = 32000) -> bytes:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--project", default=r"D:\Lilith")
-    parser.add_argument("--game", default=r"D:\SteamLibrary\steamapps\common\The NOexistenceN of Lilith")
+    # Derived, not hardcoded: this script lives in <project>\runtime, and Steam
+    # installs to whichever drive the user picked.
+    parser.add_argument("--project", default=str(Path(__file__).resolve().parent.parent))
+    parser.add_argument("--game", default=find_game_folder())
     parser.add_argument("--language", choices=("ja", "zh"), default="ja")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--endpoint", default="http://127.0.0.1:9880/tts")
