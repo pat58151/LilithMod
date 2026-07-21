@@ -73,6 +73,15 @@ namespace LilithMod
                    VoiceConfig.Enabled;
         }
         private readonly HashSet<long> _pendingNodes = new HashSet<long>();
+
+        /// <summary>
+        /// The newest node the game genuinely tried to put on each bubble. A held
+        /// cue that is no longer the newest by the time its audio arrives is stale:
+        /// re-showing it put old text and voice over whatever reaction the game is
+        /// animating now, which is how rapid touches produced dialogue running
+        /// across the wrong animation.
+        /// </summary>
+        private readonly Dictionary<long, long> _latestNodeForBubble = new Dictionary<long, long>();
         private int _dynamicAlarmLine;
         private float _alarmDialogueUntil;
         private static readonly string[] AlarmEnglish =
@@ -97,12 +106,10 @@ namespace LilithMod
             if (node != null && node.id == 9500000)
             {
                 _modSpokeAt = Time.unscaledTime;
-                // NativeSuppressedAfterModSeconds has never once fired in a session
-                // where the mod plainly spoke, so this assignment is suspected never
-                // to run - meaning her reply is not actually protected from the game
-                // talking over it. If this line is absent from the log while a mod
-                // bubble appears, the reply bubble reaches the screen by some path
-                // other than DialogueBubbleUI.ShowNode and the guard is dead.
+                // This was suspected dead, because no suppression had ever been
+                // logged in a session where she plainly spoke. Instrumenting it
+                // disproved that: the line fires on every reply, so the guard is
+                // live and the jumbled ordering had another cause.
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                     LilithModPlugin.Logger.LogInfo(
                         "[Voice] Mod reply bubble seen; native dialogue held off for " +
@@ -147,6 +154,12 @@ namespace LilithMod
                 // reaction shown four seconds late is worse than one not shown.
                 return false;
             }
+            // Past every drop gate, so this node will reach the screen - either now
+            // or held until its audio. It supersedes anything still held on the same
+            // bubble. Re-shows are excluded: handing a line back must not mark the
+            // line itself stale.
+            if (!_allowOriginalShow && node != null && bubble != null && _instance != null)
+                _instance._latestNodeForBubble[bubble.Pointer.ToInt64()] = node.Pointer.ToInt64();
             if (_allowOriginalShow || !ModIntegrations.VoiceReplacementEnabled() ||
                 _instance == null || bubble == null || node == null)
             {
@@ -259,6 +272,30 @@ namespace LilithMod
             while (processor.NativeDialogueQueue.TryDequeue(out NativeDialogueCue cue))
             {
                 _pendingNodes.Remove(cue.Key);
+                bool stale = cue.Cancelled;
+                if (!stale && cue.Bubble != null && cue.Node != null &&
+                    _latestNodeForBubble.TryGetValue(cue.Bubble.Pointer.ToInt64(), out long newest) &&
+                    newest != cue.Key)
+                {
+                    stale = true;
+                }
+                if (stale)
+                {
+                    // Superseded or abandoned while it waited for audio. Not
+                    // re-shown - the newer line owns the bubble now. Cancel() keeps
+                    // the voice thread from playing its audio, MarkDisplayed()
+                    // releases that thread, and the pending entry above is already
+                    // cleared, so nothing leaks.
+                    cue.Cancel();
+                    cue.MarkDisplayed();
+                    if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                    {
+                        LilithModPlugin.Logger.LogInfo(
+                            $"[Voice] Skipped held line {(cue.Node == null ? -1 : cue.Node.lineId)}; " +
+                            $"superseded before its audio was ready. {_pendingNodes.Count} still held.");
+                    }
+                    continue;
+                }
                 try
                 {
                     _allowOriginalShow = true;

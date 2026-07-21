@@ -495,6 +495,19 @@ check("DynamicLineCache.TryGet" in game_voice and "RequestTranslation" in game_v
       "The dialogue path must use the cache and request a fill on a miss")
 check("InFlight" in dynamic_cache,
       "A repeating line must not queue one translation request per occurrence")
+# A held native cue that is dropped rather than routed leaks the coordinator's
+# pending entry ("N still held" forever) and leaves that bubble suppressed with
+# no re-show - the long-standing stuck-bubble fault.
+native_cue = read(MOD_DIR, "NativeDialogueCue.cs")
+check("Cancelled" in native_cue and "Cancel()" in native_cue,
+      "A native cue must be cancellable, so a superseded line is neither re-shown "
+      "nor voiced while still clearing its pending entry")
+check("AbandonNativeCue" in speech,
+      "Every path that drops an utterance must route its native cue back, or the "
+      "bubble stays suppressed for the rest of the session")
+check("_latestNodeForBubble" in game_voice,
+      "A held line superseded before its audio arrived must not be re-shown over "
+      "the newer one")
 
 # -- The weather feature discloses what it contacts ---------------------------
 # Asking about the weather sends the player's IP to a third party. That is a

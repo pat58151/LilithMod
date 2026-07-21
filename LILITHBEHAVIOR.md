@@ -183,6 +183,24 @@ independent settings.
 | `StartupVoiceGraceSeconds` | 15 s | services warm since login |
 | `ColdStartVoiceGraceSeconds` | 30 s | this process started them |
 
+### Held lines are dropped when superseded (added 2026-07-21)
+
+A native line is held until its Japanese audio is ready (~2-5 s on a cache
+miss), but the game plays its reaction animation immediately. If a newer line
+reaches the same bubble while one is still held, the held line is now dropped
+whole - subtitle and audio together - instead of re-showing seconds late over
+the wrong animation. Two rules:
+
+- The coordinator tracks the newest node per bubble; a held cue that is no
+  longer the newest is skipped at re-show time, and its audio is cancelled.
+- A chat reply that cancels speech hands held native cues back **cancelled**
+  rather than discarding them. Discarding leaked the pending entry forever
+  (the `1 still held` stuck in old logs) and left that bubble suppressed with
+  no re-show.
+
+Log markers: `Skipped held line ... superseded before its audio was ready`
+pairs with `Holding line ...` the same way `Re-showed line ...` does.
+
 Measured latency, on the development machine:
 
 | stage | time |

@@ -87,19 +87,47 @@ namespace LilithMod
         /// </summary>
         public void CancelCurrent()
         {
-            while (_queue.TryDequeue(out _)) { }
+            // Native cues are never discarded here, only cancelled. Discarding one
+            // left the coordinator's pending entry leaked forever ("1 still held" for
+            // the rest of the session) and its bubble suppressed with no re-show. A
+            // cancelled cue still flows through the coordinator, which clears the
+            // pending entry and releases the voice thread without showing or voicing
+            // the stale line.
+            int held = NativeDialogueQueue.Count;
+            for (int i = 0; i < held && NativeDialogueQueue.TryDequeue(out NativeDialogueCue heldCue); i++)
+            {
+                heldCue.Cancel();
+                NativeDialogueQueue.Enqueue(heldCue);
+            }
+            while (_queue.TryDequeue(out Utterance dropped))
+            {
+                if (dropped.NativeDialogue == null) continue;
+                dropped.NativeDialogue.Cancel();
+                NativeDialogueQueue.Enqueue(dropped.NativeDialogue);
+            }
             while (SubtitleQueue.TryDequeue(out SubtitleCue cue))
             {
                 cue.MarkDisplayed();
             }
-            while (NativeDialogueQueue.TryDequeue(out NativeDialogueCue nativeCue))
-                nativeCue.MarkDisplayed();
             while (VoiceFailureQueue.TryDequeue(out _)) { }
             while (ReplyFinishedQueue.TryDequeue(out _)) { }
             _abandonRun = true;
         }
 
         private volatile bool _abandonRun;
+
+        /// <summary>
+        /// Hand a dropped utterance's native cue back to the coordinator, cancelled:
+        /// the pending entry is cleared and the voice thread released, but the line
+        /// is neither re-shown nor voiced. Every path that discards an utterance the
+        /// queue no longer holds must call this.
+        /// </summary>
+        private void AbandonNativeCue(Utterance utterance)
+        {
+            if (utterance?.NativeDialogue == null) return;
+            utterance.NativeDialogue.Cancel();
+            NativeDialogueQueue.Enqueue(utterance.NativeDialogue);
+        }
 
         /// <summary>Signal that the warm-up batch is done (or timed out).</summary>
         public void SignalWarmUpComplete()
@@ -231,6 +259,7 @@ namespace LilithMod
                 }
                 catch (Exception ex)
                 {
+                    AbandonNativeCue(next);
                     next = null;
                     nextSynth = null;
                     if (current?.NativeDialogue != null)
@@ -246,10 +275,15 @@ namespace LilithMod
                     continue;
                 }
 
-                // A new reply arrived while this one was being synthesised.
+                // A new reply arrived while this one was being synthesised. A native
+                // utterance abandoned here was in the worker's hands, not the queue,
+                // so CancelCurrent could not route its cue - do it now or the
+                // coordinator's pending entry leaks and the bubble stays suppressed.
                 if (_abandonRun)
                 {
                     _abandonRun = false;
+                    AbandonNativeCue(current);
+                    AbandonNativeCue(next);
                     next = null;
                     nextSynth = null;
                     continue;
@@ -280,6 +314,11 @@ namespace LilithMod
                 {
                     NativeDialogueQueue.Enqueue(current.NativeDialogue);
                     current.NativeDialogue.WaitUntilDisplayed(_cts.Token);
+                    // The coordinator declined to re-show this line - superseded by a
+                    // newer one, or abandoned by a cancel. Its audio must not play
+                    // under whatever is on the bubble now.
+                    if (current.NativeDialogue.Cancelled)
+                        continue;
                 }
                 if (!current.SuppressSubtitle && !string.IsNullOrEmpty(current.EnText))
                 {
@@ -296,10 +335,13 @@ namespace LilithMod
                 }
 
                 // Cancellation may have removed the cue before Unity displayed it.
-                // Do not play orphaned audio under the next reply.
+                // Do not play orphaned audio under the next reply. current's cue, if
+                // any, already went through the coordinator above; only next's needs
+                // routing.
                 if (_abandonRun)
                 {
                     _abandonRun = false;
+                    AbandonNativeCue(next);
                     next = null;
                     nextSynth = null;
                     continue;
