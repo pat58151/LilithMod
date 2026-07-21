@@ -19,12 +19,10 @@ namespace LilithMod
         private static float _modSpokeAt = -600f;
 
         /// <summary>
-        /// The gate's decision about the line it just saw, which the four audio
-        /// prefixes cannot work out for themselves - they fire separately and are
-        /// told only a sound id. Declined lines must keep their own audio or they
-        /// play silently; replaced ones must lose it or the game talks over her.
-        /// Last decision wins, and it only has to outlast the gap between a bubble
-        /// and its audio.
+        /// The gate's decision about the line it just saw. The four audio prefixes
+        /// fire separately and are told only a sound id, so they read this instead:
+        /// declined lines keep their audio, replaced ones lose it. Last one wins,
+        /// and it only has to outlast the gap between a bubble and its audio.
         /// </summary>
         private const float NativeAudioDecisionSeconds = 2f;
 
@@ -37,10 +35,8 @@ namespace LilithMod
         internal static bool NativeAudioAllowed => DecisionFresh && _nativeAudioAllow;
 
         /// <summary>
-        /// Set when a line is replaced from cache while synthesis is not reachable.
-        /// The usual suppression rides on VoiceReplacementEnabled, which is false in
-        /// exactly that case, so without this the cached Japanese would play under
-        /// the game's own Chinese audio.
+        /// Set when a line is replaced from cache. The usual suppression rides on
+        /// VoiceReplacementEnabled, which is false in exactly that case.
         /// </summary>
         internal static bool NativeAudioSuppressed => DecisionFresh && !_nativeAudioAllow;
 
@@ -90,12 +86,8 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Everything replacement needs except a reachable service. A line whose
-        /// audio is already cached needs nothing more than this: the cache is read
-        /// from disk and the language switch is a no-op when the weights already
-        /// match. Cached lines are therefore replaceable while the service is still
-        /// loading, or not running at all - which is what used to make the first
-        /// line of a session play in the game's own Chinese.
+        /// Everything replacement needs except a reachable service, which a cached
+        /// line never touches.
         /// </summary>
         private static bool CacheReplacementPossible()
         {
@@ -151,9 +143,7 @@ namespace LilithMod
             // "not up YET", never "not installed".
             if (node != null && bubble != null && HoldingForSynthesis)
             {
-                // Dropping was always the second-best answer. If this line's audio
-                // is already on disk it can be spoken now, with no service at all,
-                // so try that before giving up on it.
+                // Cached audio needs no service, so try that before dropping.
                 if (_instance != null && !_instance.QueueNode(bubble, node, cachedOnly: true))
                     return false;
 
@@ -192,9 +182,7 @@ namespace LilithMod
             // line itself stale.
             if (!_allowOriginalShow && node != null && bubble != null && _instance != null)
                 _instance._latestNodeForBubble[bubble.Pointer.ToInt64()] = node.Pointer.ToInt64();
-            // Replacement is normally gated on the service being reachable. A
-            // cached line does not need it, so the gate falls back to "is this one
-            // already on disk" before handing the line to the game's own voice.
+            // Service unreachable, but a cached line still plays.
             bool replacing = ModIntegrations.VoiceReplacementEnabled();
             if (!replacing && !_allowOriginalShow && node != null && bubble != null &&
                 _instance != null && CacheReplacementPossible() &&
@@ -234,8 +222,8 @@ namespace LilithMod
         /// the line has been held for replacement audio.
         /// </summary>
         /// <param name="cachedOnly">
-        /// Replace only if the audio is already on disk. Set when synthesis is not
-        /// reachable, where anything needing a real request would hang the line.
+        /// Replace only from disk. Set when synthesis is unreachable, where a real
+        /// request would hang the line.
         /// </param>
         private bool QueueNode(DialogueBubbleUI bubble, DialogueNode node, bool cachedOnly = false)
         {
@@ -295,9 +283,8 @@ namespace LilithMod
                 return true;
             }
 
-            // Synthesis is not reachable, so only a line already on disk can be
-            // spoken. Anything else keeps the game's own voice rather than hanging
-            // on a request that cannot be served.
+            // Nothing cached and no service to synthesise it: keep the game's
+            // voice rather than hang on a request that cannot be served.
             if (cachedOnly && !LilithModPlugin.VoiceProcessor.IsCached(text, language))
             {
                 AllowNativeAudioForThisLine();
@@ -310,10 +297,7 @@ namespace LilithMod
 
             var cue = new NativeDialogueCue(bubble, node, key);
             _pendingNodes.Add(key);
-            // The four audio prefixes decide separately and cannot see this line, so
-            // the decision is recorded for them. Without it a cached replacement
-            // plays under the game's own audio, since the flag they usually read is
-            // false in exactly the case this path exists for.
+            // Record the decision for the audio prefixes, which cannot see it.
             SuppressNativeAudioForThisLine();
             LilithModPlugin.VoiceProcessor.Enqueue(new Utterance
             {

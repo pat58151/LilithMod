@@ -36,10 +36,9 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Whether the running service is already on this language, so a cached
-        /// line can be played without contacting it. Cache files are keyed by
-        /// language, but the weights still have to match or she would speak the
-        /// cached audio in the wrong voice.
+        /// Whether the running weights are already this language. Cache files are
+        /// keyed by language, but the weights must match too, or cached audio
+        /// plays in the wrong voice.
         /// </summary>
         internal static bool LanguageIsCurrent(string language)
         {

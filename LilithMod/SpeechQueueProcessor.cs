@@ -54,8 +54,8 @@ namespace LilithMod
         public ConcurrentQueue<bool> ReplyFinishedQueue { get; } = new ConcurrentQueue<bool>();
 
         /// <summary>
-        /// Whether this line's audio is already synthesised on disk. Read from the
-        /// main thread by the dialogue gate, which is a file existence check.
+        /// Whether this line's audio is already on disk. Called from the main
+        /// thread by the dialogue gate; it is a file existence check.
         /// </summary>
         internal bool IsCached(string text, string language) => _ttsClient.IsCached(text, language);
 

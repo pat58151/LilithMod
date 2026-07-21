@@ -150,10 +150,8 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Whether this line's audio is already on disk. A cache hit needs no
-        /// service at all - EnsureLanguage returns immediately when the language
-        /// already matches, and the rest is a file read - so the dialogue gate can
-        /// replace a cached line while synthesis is still starting up.
+        /// Whether this line's audio is already on disk. Needs no service: the
+        /// language switch is a no-op when the weights match, the rest is a read.
         /// </summary>
         internal bool IsCached(string text, string language)
         {
