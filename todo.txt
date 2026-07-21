@@ -1,7 +1,7 @@
-1. test note
-2. remove note generate fn
-3. Lilith please help button
-4. installer
+1. test love letter note
+2. remove note generate fn + other unused fn possibly move to new untracked file
+3. help? with underline in setting/me on the left side open a note pad for mod overview
+4. code sweep to make sure this mod will work on other machine
 
 unrelated task
 import lilith ost to music folder

@@ -1751,7 +1751,33 @@ namespace LilithMod
         /// ambient remark produced back-to-back spontaneous speech. One shared
         /// timestamp is what actually bounds how often she speaks unbidden.
         /// </summary>
-        private const float SpontaneousGapSeconds = 210f;
+        private const float SpontaneousGapSeconds = 180f;
+
+        /// <summary>
+        /// Quiet window after the game's own dialogue. Measured, the game speaks far
+        /// more than this mod does - drag and idle nodes dominate - so a remark
+        /// landing right on top of a native line is the most likely way she reads as
+        /// talking over herself.
+        /// </summary>
+        private const float NativeDialogueQuietSeconds = 8f;
+
+        /// <summary>
+        /// Rolled each time an ambient remark comes due. A miss skips that turn
+        /// rather than delaying it, so the timing stays unpredictable instead of
+        /// arriving on a schedule the player can feel.
+        /// </summary>
+        private const float AmbientChance = 0.7f;
+
+        /// <summary>Minimum wait after an ambient remark actually fires.</summary>
+        private const float AmbientCooldownSeconds = 180f;
+
+        private static float _lastNativeDialogueAt = -600f;
+
+        /// <summary>Called from the dialogue gate whenever the game itself speaks.</summary>
+        internal static void NoteNativeDialogue()
+        {
+            _lastNativeDialogueAt = Time.unscaledTime;
+        }
 
         private float _lastSpontaneousAt = -600f;
 
@@ -1804,6 +1830,13 @@ namespace LilithMod
             }
             if (Time.unscaledTime < _nextAmbientAt ||
                 (_currentRequest != null && !_currentRequest.IsCompleted)) return;
+            if (Time.unscaledTime - _lastNativeDialogueAt < NativeDialogueQuietSeconds)
+            {
+                // The game is mid-sentence. Deliberately NOT rescheduled: hold the
+                // remark and let it through a moment later, rather than pushing it
+                // out by another full interval for an eight second overlap.
+                return;
+            }
             if (!SpontaneousReady)
             {
                 // Due, but she has spoken unbidden too recently. Push it out rather
@@ -1811,7 +1844,16 @@ namespace LilithMod
                 ScheduleNextAmbient();
                 return;
             }
+            if (UnityEngine.Random.value >= AmbientChance)
+            {
+                // Rolled off: skip this turn entirely.
+                ScheduleNextAmbient();
+                return;
+            }
             ScheduleNextAmbient();
+            // A floor, not a replacement for the configured interval - it only binds
+            // if that interval is ever set shorter than the cooldown.
+            _nextAmbientAt = Mathf.Max(_nextAmbientAt, Time.unscaledTime + AmbientCooldownSeconds);
             _lastSpontaneousAt = Time.unscaledTime;
             SendUserMessage("Make one spontaneous remark suited to the current time, posture, and recent memory.", true);
         }

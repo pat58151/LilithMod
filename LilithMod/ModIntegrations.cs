@@ -84,8 +84,15 @@ namespace LilithMod
 
         public static bool GateDialogueNode(DialogueBubbleUI __instance, DialogueNode node)
         {
+            // Every node the game puts on screen passes through here, so this is
+            // where "the game just said something" is observable. 9500000 is this
+            // mod's own reply node and must not count as the game speaking.
+            if (node != null && node.id != ModReplyNodeId)
+                LlmChatController.NoteNativeDialogue();
             return GameVoiceCoordinator.AllowShowNode(__instance, node);
         }
+
+        private const int ModReplyNodeId = 9500000;
 
         public static bool ReplaceVoiceBySoundId(string soundId)
         {
