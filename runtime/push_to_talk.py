@@ -38,7 +38,8 @@ RATE = 16_000
 FRAME = 512                      # 32 ms; Silero requires exactly this at 16 kHz
 FRAME_SECONDS = FRAME / RATE
 PARTIAL_INTERVAL = 0.25          # seconds between interim decodes
-SILENCE_SECONDS = 1.2            # trailing silence that ends an utterance
+SILENCE_SECONDS = 1.5            # trailing silence that ends an utterance
+NO_SPEECH_SECONDS = 2.5          # give up if the key was pressed but nothing was said
 MAX_SECONDS = 60.0               # hard cap, so a stuck trigger cannot grow without bound
 MIN_SPEECH_SECONDS = 0.45        # total voiced audio required before decoding at all
 SPEECH_PAD_SECONDS = 0.3         # keep this much either side of the voiced region
@@ -341,6 +342,8 @@ def main() -> None:
                         help="faster-whisper only.")
     parser.add_argument("--silence", type=float, default=SILENCE_SECONDS,
                         help="Seconds of trailing silence that end an utterance.")
+    parser.add_argument("--no-speech", type=float, default=NO_SPEECH_SECONDS,
+                        help="Give up and close if nothing is said after listening starts.")
     parser.add_argument("--vocabulary", default="Lilith, リリス, 莉莉丝, 莉莉絲",
                         help="Words to bias recognition toward - names and terms the "
                              "model would otherwise mangle. Keep it short: the model "
@@ -365,6 +368,9 @@ def main() -> None:
     # this handoff is already files, and it survives the process being killed.
     heartbeat = trigger.with_name("push-to-talk.alive")
     silence_limit = max(0.5, args.silence)
+    # Floored above the trailing-silence window: giving up sooner than an utterance
+    # is allowed to end would cut off anyone who pauses before starting.
+    no_speech_limit = max(silence_limit, args.no_speech)
     language = args.language.strip()
     save_last = Path(args.save_last) if args.save_last else None
 
@@ -623,8 +629,11 @@ def main() -> None:
 
             ended = had_speech and silent_for >= silence_limit
             over_cap = now - started_at >= MAX_SECONDS
+            # Keyed by mistake, or keyed and then not spoken into. Closing on its
+            # own beats leaving the microphone open and the chat bar waiting.
+            gave_up = not had_speech and now - started_at >= no_speech_limit
 
-            if not ended and not over_cap:
+            if not ended and not over_cap and not gave_up:
                 # Interim text into the chat field, so the user can see they are
                 # being heard before the utterance ends. Greedy: these are
                 # thrown away as soon as the next one lands.
@@ -649,7 +658,8 @@ def main() -> None:
             voiced = []
             energies = []
             awaiting_reset = True
-            finalise(frames, flags, levels, "cap" if over_cap else "silence")
+            finalise(frames, flags, levels,
+                     "cap" if over_cap else "no speech" if gave_up else "silence")
 
 
 if __name__ == "__main__":

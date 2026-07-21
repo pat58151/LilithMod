@@ -189,3 +189,89 @@ hours gone. On a recurrence, capture *while it is still slow*:
 Answering 4 is the most valuable, because it distinguishes accumulated process
 state from anything configuration-level - and it was answered *no* the one time
 it was tried, which is itself unexplained.
+
+---
+
+# Open: the first native line of a session is spoken in Chinese
+
+Status: **unresolved, instrumented 2026-07-21.**
+
+On startup the first thing she says is in Chinese. Only the first - every later
+native line is correct.
+
+## What is established
+
+`lineId 1000510` (node `700525`, the `EnterGame` greeting, "又见面啦~想我了吗？")
+is the only native line in a session never held for voice replacement. Every
+later one is: `2050007`, `2200002`, `1000019`, `1000020`, `1000018` all logged
+`Holding line ... until ja audio`. A line that is not held keeps the game's own
+voice, and the game's voice is Chinese - so this is one line escaping the mod,
+not a language setting being wrong.
+
+## Ruled out
+
+- **Voice processor not ready yet.** The obvious theory, given Harmony patches
+  install at `LilithModPlugin.cs:229` while `VoiceSetup.Load()` runs at 308.
+  Disproved by log ordering: `[Voice] Voice processor started` appears at
+  character offset 14,582 and the offending line at 49,908, tens of thousands of
+  characters later. The processor was up well before.
+
+## Next step
+
+`GameVoiceCoordinator.AllowShowNode` has five early-outs and the log could not
+say which one fired. It now names it: `re-show of a line already replaced`,
+`coordinator not awake`, `ReplaceGameVoice off`, `voice disabled`, `voice
+processor not ready`, or `unknown`. Launch with `LogDiagnostics` on, let the
+greeting play, and read:
+
+```
+[Voice] Original voice kept for line 1000510 (id 700525): <reason>.
+```
+
+Current guess, unverified: `re-show of a line already replaced`.
+`_allowOriginalShow` is a static flag, and a stale `true` at startup would
+produce exactly this shape - one line through, correct behaviour thereafter.
+
+---
+
+# Open: a dialogue bubble sometimes never closes
+
+Status: **unresolved, instrumented 2026-07-21.**
+
+Occasionally the text above her head persists indefinitely. Intermittent; no
+reproduction yet.
+
+## How the path works
+
+Native dialogue is *gated*: `AllowShowNode` returns false so the game does not
+display the node, the line is queued for synthesis, and when audio is ready
+`GameVoiceCoordinator.Update` sets `_allowOriginalShow = true` and calls
+`bubble.ShowNode(node)` to hand it back to the game, which then displays and
+closes it normally.
+
+So a bubble that never closes is a line that was handed back but whose close
+never ran, or one that was displayed outside this path.
+
+## Leading hypothesis, untested
+
+The mod suppresses the game's original audio (`ReplaceGameVoice` returns false
+when replacement is enabled). If the game's bubble auto-close is driven by its
+own voice clip finishing, that event never arrives and the bubble waits forever.
+This is consistent with the mod having needed explicit close handling for its own
+replies, and with the six second fallback close that already exists for
+synthesis-failure and voice-off paths.
+
+## Next step
+
+Every held line now logs its matching re-show:
+
+```
+[Voice] Holding line X until ja audio is ready.
+[Voice] Re-showed line X after audio; N still held.
+```
+
+A `Holding line X` with no matching `Re-showed line X` is a bubble the game was
+never handed back - that identifies the stall as being before the handoff
+(synthesis failed, or the cue was dropped). If both lines are present and the
+bubble is still stuck, the fault is after the handoff and the hypothesis above
+becomes the thing to test.
