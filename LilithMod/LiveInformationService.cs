@@ -99,10 +99,8 @@ namespace LilithMod
         {
             try
             {
-                // Configured coordinates skip the IP lookup rather than overriding its
-                // result: a player who pinned a location did so to stop their address
-                // being sent anywhere, and a request made and then discarded would
-                // have defeated the point.
+                // Skips the lookup rather than overriding its result: a request made
+                // and then discarded would still have sent the address.
                 if (!_latitude.HasValue || !_longitude.HasValue)
                 {
                     double configuredLat = LilithModPlugin.CfgWeatherLatitude?.Value ?? 0.0;

@@ -94,9 +94,9 @@ To avoid the location lookup, set your own coordinates in
 BepInEx\config\LilithMod.cfg:
 
     [Weather]
-    Latitude = 13.7563
-    Longitude = 100.5018
-    LocationName = Bangkok
+    Latitude = 51.5074
+    Longitude = -0.1278
+    LocationName = London
 
 With both set, ip-api.com is never contacted at all. This is also the fix if a
 VPN gives her the weather for the wrong country.

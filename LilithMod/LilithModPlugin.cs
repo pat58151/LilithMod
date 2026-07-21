@@ -182,10 +182,9 @@ namespace LilithMod
                 "Full path to start-lilith.ps1. Empty means derive it from the voice "
                 + "runtime location in voice-config.ini.");
 
-            // Weather needs coordinates from somewhere. By default they are derived
-            // from the public IP, which means contacting a third party and telling it
-            // roughly where the player is. Setting these skips that lookup entirely -
-            // it is the privacy escape hatch as much as the VPN fix.
+            // Coordinates are otherwise derived from the public IP, which means
+            // telling a third party roughly where the player is. Setting these skips
+            // that entirely.
             CfgWeatherLatitude = Config.Bind("Weather", "Latitude", 0.0,
                 "Your latitude, if you would rather not have it detected from your IP address. "
                 + "Set both this and Longitude to skip the location lookup. 0 means detect.");
