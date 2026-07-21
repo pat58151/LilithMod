@@ -133,3 +133,59 @@ foreach($i in 1..3){
 Change one variable at a time, three runs minimum, and **record whether the game
 was running** - single measurements and unrecorded load each produced a wrong
 conclusion during this investigation.
+
+## Follow-up 2026-07-21, later: the slow state stopped reproducing
+
+The resolution above stands as written - it records real measurements taken
+while the problem was live. This section adds what a later attempt to confirm
+the mechanism found, and does not replace it.
+
+**The contention theory is dead, and structurally so.** Controlled concurrent
+bursts against the service, idle game:
+
+| mode | concurrency | ms/req |
+|---|---|---|
+| parallel | 1 | 2,881 |
+| serial | 1 | 3,148 |
+| parallel | 4 | 3,262 |
+| serial | 4 | 2,962 |
+
+Four simultaneous requests cost about four times one request in **both** modes,
+so the service serializes across requests internally. `parallel_infer` batches
+*within* a request, not across them - concurrent load was never a mechanism it
+could explain. Rules out reading 2 in the caveat above.
+
+**But the slow state no longer reproduces in any configuration.** Parallel,
+serial, idle, game running, concurrency 4 - everything now lands at 2-3 s. An
+interleaved A/B with the game running measured median 3,048 ms parallel against
+2,803 ms serial, indistinguishable. Note that run recorded *zero* game-driven
+synthesis during the window: the game was running but idle, so "game running" is
+not the same condition as "game actively synthesizing", which is what the
+original slow measurements had.
+
+So the honest status is weaker than a solved bug:
+
+- The original 19-30 s measurements were real, and so was the 6,600 vs 1,541 ms
+  A/B. Both are reproduced in this document.
+- Something about the system state changed afterwards. Everything is fast now,
+  including parallel.
+- `parallel_infer: false` correlates with the recovery. It has not been shown to
+  have caused it, and cannot be while the pathological state is absent.
+
+Keep the fix regardless: serial is no slower in any measurement taken here, so
+it costs nothing and removes one variable.
+
+**What to do if it returns.** `TtsClient` now logs synthesis latency on every
+cache miss, and warns above 8 s. That exists because this regression was
+invisible until it was bad enough to hear, by which time the conditions were
+hours gone. On a recurrence, capture *while it is still slow*:
+
+1. `Get-Process Lilith` and whether voice-cache files are being written - i.e.
+   is the game actually synthesizing, or merely open.
+2. The A/B in "How to time a request", parallel and serial, interleaved.
+3. The TTS process environment and start time.
+4. Whether restarting only the TTS service clears it.
+
+Answering 4 is the most valuable, because it distinguishes accumulated process
+state from anything configuration-level - and it was answered *no* the one time
+it was tried, which is itself unexplained.

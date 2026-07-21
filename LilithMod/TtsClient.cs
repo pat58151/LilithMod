@@ -85,6 +85,8 @@ namespace LilithMod
             };
 
             string json = JsonConvert.SerializeObject(requestBody);
+            // Cache hits returned above, so this only ever times real synthesis.
+            var timer = System.Diagnostics.Stopwatch.StartNew();
 
             using (var request = new HttpRequestMessage(HttpMethod.Post, _cfg.Endpoint))
             {
@@ -111,6 +113,8 @@ namespace LilithMod
                     }
 
                     byte[] audio = await response.Content.ReadAsByteArrayAsync();
+                    timer.Stop();
+                    ReportLatency(text, effectiveLanguage, audio.Length, timer.ElapsedMilliseconds);
                     try
                     {
                         Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
@@ -120,6 +124,30 @@ namespace LilithMod
                     return audio;
                 }
             }
+        }
+
+        /// <summary>
+        /// A warm sentence synthesises in roughly 2-3 s. Past this it is slow
+        /// enough to hear, and the 2026-07-21 regression sat at 19-30 s.
+        /// </summary>
+        private const long SlowSynthesisMs = 8000;
+
+        /// <summary>
+        /// Records how long synthesis took. This exists because that regression
+        /// was invisible until it was bad enough to notice by ear, hours after
+        /// the conditions that caused it were gone - and it was never
+        /// reproduced. A line per synthesis means a recurrence is timestamped
+        /// while it is happening rather than reconstructed afterwards.
+        /// </summary>
+        private static void ReportLatency(string text, string language, int bytes, long ms)
+        {
+            string detail =
+                $"{ms} ms for {text?.Length ?? 0} chars ({language}), {bytes / 1024} KB audio";
+            if (ms >= SlowSynthesisMs)
+                LilithModPlugin.Logger.LogWarning(
+                    $"[Voice] Slow synthesis: {detail}. Expected 2-3 s; see PROBLEM.md.");
+            else
+                LilithModPlugin.Logger.LogInfo($"[Voice] Synthesized in {detail}.");
         }
 
         private string CachePath(string text, string language)

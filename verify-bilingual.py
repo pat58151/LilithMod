@@ -26,8 +26,12 @@ def check(condition, message):
 
 # -- 1. Build -----------------------------------------------------------------
 proj = os.path.join(MOD_DIR, "LilithMod.csproj")
+# Build somewhere harmless. The csproj's OutputPath is the live plugin folder,
+# so a plain build deploys - which locks against a running game and made this
+# suite impossible to run at the moment it was most useful.
 r = subprocess.run(
-    [DOTNET, "build", proj, "-c", "Release"],
+    [DOTNET, "build", proj, "-c", "Release",
+     "-p:OutputPath=" + os.path.join(ROOT, "build-test") + os.sep],
     capture_output=True, text=True, cwd=MOD_DIR,
 )
 if r.returncode != 0:
