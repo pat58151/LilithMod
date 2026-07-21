@@ -28,6 +28,7 @@ namespace LilithMod
         private static readonly Color DisabledColor = new Color(0.45f, 0.45f, 0.45f, 1f);
         private TMP_Text _pushToTalkLabel;
         private bool _lastSpeechAvailability = true;
+        private bool? _lastWakeWordAvailability;
         private TMP_InputField _pushToTalkKeyField;
         private Slider _opacity;
         private TMP_Text _opacityLabel;
@@ -43,6 +44,11 @@ namespace LilithMod
         private bool _deepSeekRevealed;
         private bool? _lastSynthesisAvailability;
         private static Sprite _eyeSprite;
+        private static Sprite _hintSprite;
+        private RectTransform _wakeWordHintRect;
+        private Image _wakeWordHintImage;
+        private RectTransform _wakeWordTipRect;
+        private TMP_Text _wakeWordTipText;
 
         internal static void QueueBuild(TraySettingView view)
         {
@@ -65,9 +71,14 @@ namespace LilithMod
                 ApplyLilithOpacity(LilithModPlugin.CfgLilithOpacity.Value);
                 RefreshSynthesisAvailability();
                 RefreshSpeechAvailability();
+                RefreshWakeWordAvailability();
                 RefreshChatAvailability();
                 RefreshLabels();
             }
+
+            // Per frame, unlike the availability refreshes above: a tooltip that
+            // trailed the cursor by up to half a second would read as broken.
+            RefreshWakeWordTooltip();
 
             bool settingsVisible = _view != null && _view.IsVisible;
             if (_settingsVisible != settingsVisible)
@@ -326,7 +337,9 @@ namespace LilithMod
             if (_wakeWordLabel != null)
             {
                 TraySettingView.StripLabelLocalizer(_wakeWordLabel);
-                SetWrappedLabel(_wakeWordLabel, "Wake word\n(call her name)");
+                SetWrappedLabel(_wakeWordLabel, "Wake word");
+                if (_wakeWordToggle != null)
+                    BuildWakeWordHint(_wakeWordToggle, _wakeWordLabel);
             }
             wakeRowObj.SetActive(true);
             if (_wakeWordToggle != null)
@@ -374,8 +387,7 @@ namespace LilithMod
             // Fresh clones arrive default-coloured; style for current availability
             // now instead of waiting for an availability flip that may never come.
             StyleToggleRow(_allowOpenAppsToggle, _allowOpenAppsLabel, HasApiKey);
-            StyleToggleRow(_wakeWordToggle, _wakeWordLabel,
-                SpeechInputService.IsAvailable && HasApiKey);
+            StyleToggleRow(_wakeWordToggle, _wakeWordLabel, WakeWordAvailable);
         }
 
         /// <summary>
@@ -585,6 +597,148 @@ namespace LilithMod
             eye.isOn = false;
         }
 
+        /// <summary>
+        /// A "?" disc trailing the toggle, and the panel it reveals on hover. Anchored
+        /// to the toggle's right edge rather than placed at a fixed offset, so it
+        /// follows whatever width the cloned row settles on.
+        /// </summary>
+        private void BuildWakeWordHint(ButtonToggle toggle, TMP_Text label)
+        {
+            BuildWakeWordTooltip(label);
+
+            var hint = new GameObject("LilithWakeWordHint");
+            hint.transform.SetParent(toggle.transform, false);
+            _wakeWordHintRect = hint.AddComponent<RectTransform>();
+            _wakeWordHintRect.anchorMin = new Vector2(1f, 0.5f);
+            _wakeWordHintRect.anchorMax = new Vector2(1f, 0.5f);
+            _wakeWordHintRect.pivot = new Vector2(0f, 0.5f);
+            _wakeWordHintRect.sizeDelta = new Vector2(HintSize, HintSize);
+            _wakeWordHintRect.anchoredPosition = new Vector2(8f, 0f);
+
+            _wakeWordHintImage = hint.AddComponent<Image>();
+            _wakeWordHintImage.sprite = GetHintSprite();
+            _wakeWordHintImage.preserveAspect = true;
+            _wakeWordHintImage.raycastTarget = false;
+        }
+
+        private void BuildWakeWordTooltip(TMP_Text sourceLabel)
+        {
+            // Parented to the view root and drawn last: a row-level parent would let
+            // the next row's background cover it.
+            var panel = new GameObject("LilithWakeWordTip");
+            panel.transform.SetParent(_view.transform, false);
+            _wakeWordTipRect = panel.AddComponent<RectTransform>();
+            // Grows left and up from the mark, which sits at the row's right edge -
+            // the other way would push it off the panel.
+            _wakeWordTipRect.pivot = new Vector2(1f, 0f);
+            _wakeWordTipRect.sizeDelta = new Vector2(236f, 52f);
+
+            var background = panel.AddComponent<Image>();
+            background.color = new Color(0.05f, 0.05f, 0.07f, 0.94f);
+            background.raycastTarget = false;
+
+            // Cloned from the row's own label so the tooltip inherits a font that can
+            // render at all - the game's is not one of TMP's defaults.
+            var textObject = UnityEngine.Object.Instantiate(sourceLabel.gameObject, panel.transform);
+            textObject.name = "Text";
+            var text = textObject.GetComponent<TMP_Text>();
+            TraySettingView.StripLabelLocalizer(text);
+            var textRect = text.rectTransform;
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.pivot = new Vector2(0.5f, 0.5f);
+            textRect.offsetMin = new Vector2(10f, 6f);
+            textRect.offsetMax = new Vector2(-10f, -6f);
+            text.alignment = TextAlignmentOptions.Center;
+            text.enableAutoSizing = false;
+            text.enableWordWrapping = true;
+            text.fontSize = Mathf.Max(10f, sourceLabel.fontSize * 0.85f);
+            text.color = Color.white;
+            text.raycastTarget = false;
+            _wakeWordTipText = text;
+
+            panel.transform.SetAsLastSibling();
+            panel.SetActive(false);
+        }
+
+        /// <summary>
+        /// Hover is polled rather than handled: this window runs WS_EX_NOACTIVATE, so
+        /// Unity's pointer events never fire and the cursor has to come from Win32.
+        /// </summary>
+        private void RefreshWakeWordTooltip()
+        {
+            if (_wakeWordTipRect == null || _wakeWordHintRect == null) return;
+
+            bool hovering = false;
+            if (_settingsVisible && _wakeWordHintImage != null && _wakeWordHintImage.isActiveAndEnabled &&
+                PointerFocus.TryGetUnityScreenPoint(out Vector2 point))
+                hovering = RectTransformUtility.RectangleContainsScreenPoint(_wakeWordHintRect, point, null);
+
+            if (hovering == _wakeWordTipRect.gameObject.activeSelf) return;
+            if (hovering)
+            {
+                _wakeWordTipRect.position = _wakeWordHintRect.position;
+                _wakeWordTipRect.anchoredPosition += new Vector2(HintSize, HintSize * 0.5f);
+            }
+            _wakeWordTipRect.gameObject.SetActive(hovering);
+        }
+
+        private const float HintSize = 26f;
+
+        /// <summary>
+        /// A ring with a "?" cut through it, drawn once and reused. Rendered at 64px
+        /// for a mark displayed at 26, so the curve stays clean when the UI scales up.
+        /// </summary>
+        private static Sprite GetHintSprite()
+        {
+            if (_hintSprite != null) return _hintSprite;
+
+            const int size = 64;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var pixels = new Color32[size * size];
+            Color32 clear = new Color32(0, 0, 0, 0);
+            Color32 white = new Color32(255, 255, 255, 235);
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = clear;
+
+            float centre = (size - 1) * 0.5f;
+            const float outer = 30f;
+            const float inner = 24f;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = x - centre;
+                    float dy = y - centre;
+                    float distance = Mathf.Sqrt(dx * dx + dy * dy);
+                    if (distance > outer || distance < inner) continue;
+                    // Feathered by the half-pixel the edge falls short of a full one,
+                    // so the ring does not read as a staircase.
+                    float edge = Mathf.Min(outer - distance, distance - inner);
+                    byte alpha = (byte)(white.a * Mathf.Clamp01(edge));
+                    pixels[y * size + x] = new Color32(white.r, white.g, white.b, alpha);
+                }
+            }
+
+            // The glyph, as three strokes in texture space: hook, stem, dot.
+            MarkRect(pixels, size, 24, 42, 40, 48, white);   // hook, top bar
+            MarkRect(pixels, size, 36, 34, 40, 44, white);   // hook, descending side
+            MarkRect(pixels, size, 24, 34, 28, 40, white);   // hook, ascending side
+            MarkRect(pixels, size, 28, 24, 36, 36, white);   // stem
+            MarkRect(pixels, size, 28, 14, 36, 20, white);   // dot
+
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            _hintSprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+            return _hintSprite;
+        }
+
+        private static void MarkRect(Color32[] pixels, int size, int x0, int y0, int x1, int y1, Color32 colour)
+        {
+            for (int y = Mathf.Max(0, y0); y < Mathf.Min(size, y1); y++)
+                for (int x = Mathf.Max(0, x0); x < Mathf.Min(size, x1); x++)
+                    pixels[y * size + x] = colour;
+        }
+
         private static Sprite GetEyeSprite()
         {
             if (_eyeSprite != null) return _eyeSprite;
@@ -704,6 +858,13 @@ namespace LilithMod
         private static bool HasApiKey =>
             !string.IsNullOrWhiteSpace(LilithModPlugin.CfgApiKey.Value);
 
+        /// <summary>
+        /// All three are load-bearing: the listener carries the audio, the model
+        /// recognises her name in it, and the key turns what follows into a reply.
+        /// </summary>
+        private static bool WakeWordAvailable =>
+            SpeechInputService.IsAvailable && SpeechInputService.WakeWordModelAvailable && HasApiKey;
+
         private void RefreshChatAvailability()
         {
             if (_hotkeyField == null) return;
@@ -717,8 +878,6 @@ namespace LilithMod
             if (_hotkeyLabel != null) _hotkeyLabel.color = color;
             // Everything she does with a reply needs the key too.
             StyleToggleRow(_allowOpenAppsToggle, _allowOpenAppsLabel, available);
-            StyleToggleRow(_wakeWordToggle, _wakeWordLabel,
-                available && SpeechInputService.IsAvailable);
         }
 
         /// <summary>
@@ -740,8 +899,25 @@ namespace LilithMod
             if (_pushToTalkKeyField.textComponent != null)
                 _pushToTalkKeyField.textComponent.color = color;
             if (_pushToTalkLabel != null) _pushToTalkLabel.color = color;
-            // The wake word rides the same listener as push-to-talk.
+        }
+
+        /// <summary>
+        /// Tracked apart from the push-to-talk and chat rows because it depends on a
+        /// third thing they do not: the model file, which an install run can drop in
+        /// while the game is already up. Sharing their cached state would swallow
+        /// that arrival whenever the listener and key had not also changed.
+        /// </summary>
+        private void RefreshWakeWordAvailability()
+        {
+            if (_wakeWordToggle == null) return;
+            bool available = WakeWordAvailable;
+            if (_lastWakeWordAvailability == available) return;
+            _lastWakeWordAvailability = available;
             StyleToggleRow(_wakeWordToggle, _wakeWordLabel, available);
+            // The hint greys with the row, but keeps answering on hover: knowing what
+            // the setting does is most useful while it is out of reach.
+            if (_wakeWordHintImage != null)
+                _wakeWordHintImage.color = available ? Color.white : DisabledColor;
         }
 
         private void RefreshSynthesisAvailability()
@@ -853,8 +1029,12 @@ namespace LilithMod
                 ja ? "不透明度" : zh ? "不透明度" : "Opacity");
             SetWrappedLabel(_allowOpenAppsLabel,
                 ja ? "アプリ起動を\n許可" : zh ? "允许莉莉丝\n打开应用" : "Allow Lilith\nto open Apps");
+            // No parenthetical: the hint mark beside the toggle carries that now.
             SetWrappedLabel(_wakeWordLabel,
-                ja ? "ウェイクワード\n(名前で呼ぶ)" : zh ? "唤醒词\n(呼唤名字)" : "Wake word\n(call her name)");
+                ja ? "ウェイクワード" : zh ? "唤醒词" : "Wake word");
+            SetWrappedLabel(_wakeWordTipText,
+                ja ? "名前を呼ぶと応えてくれる。" : zh ? "呼唤她的名字，她就会回应。"
+                   : "She answers when you call her name.");
             // Native row, relabelled by this mod and localiser-stripped, so it needs
             // the same treatment as the cloned ones.
             ApplySynthesisLabel(language);

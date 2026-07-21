@@ -1800,7 +1800,7 @@ namespace LilithMod
                 return;
 
             _letterInFlight = true;
-            string letterMemory = MemoryStore.Context();
+            string letterMemory = MemoryStore.ConversationContext();
             float noteRoll = UnityEngine.Random.value;
             string lengthRule;
             int letterMaxTokens;
@@ -1857,6 +1857,7 @@ namespace LilithMod
                         // Only now: a failed request must not consume the cooldown,
                         // or a transient outage silently costs a keepsake.
                         NoteJournal.MarkWritten();
+                        await RecordLongTermSummaryAsync(letterMemory);
                     }
                 }
                 catch (Exception ex)
@@ -1865,6 +1866,43 @@ namespace LilithMod
                 }
                 finally { _letterInFlight = false; }
             });
+        }
+
+        /// <summary>
+        /// Distils the stretch of talking a note came out of into one line of
+        /// long-term memory. Written in the third person and about the player, not
+        /// about her feelings: this is the record she is later allowed to allude to,
+        /// and prose in her own voice would come back out as a quotation.
+        ///
+        /// Runs after the note is queued and never blocks it - failing here costs a
+        /// memory, not the keepsake the player is about to receive.
+        /// </summary>
+        private async Task RecordLongTermSummaryAsync(string letterMemory)
+        {
+            if (string.IsNullOrWhiteSpace(letterMemory)) return;
+            try
+            {
+                string summary = await RequestTextCompletionAsync(
+                    "You summarise conversations into a single line for later recall.",
+                    "From the exchanges below, write ONE sentence in English, under 30 words, " +
+                    "naming what the player talked about and anything they revealed about their " +
+                    "life, mood, or circumstances. Third person, factual, no quotes, no roleplay, " +
+                    "no commentary on Lilith. If nothing personal was said, reply exactly NOTHING.\n" +
+                    letterMemory,
+                    120,
+                    CancellationToken.None);
+
+                if (string.IsNullOrWhiteSpace(summary)) return;
+                summary = summary.Trim();
+                if (summary.StartsWith("NOTHING", StringComparison.OrdinalIgnoreCase)) return;
+
+                MemoryStore.RecordLongTerm(summary);
+                LilithModPlugin.Logger.LogInfo("[Memory] Long-term entry written alongside the note.");
+            }
+            catch (Exception ex)
+            {
+                LilithModPlugin.Logger.LogWarning($"[Memory] Could not summarise for long-term memory: {ex.Message}");
+            }
         }
 
         /// <summary>

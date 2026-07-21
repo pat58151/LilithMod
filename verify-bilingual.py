@@ -190,8 +190,14 @@ for marker, why in [
 check("IsSleep" in dynamic and "IsLieDown" in dynamic and "NightSleepStartTime" in dynamic,
       "Persona context must include live posture and the native bedtime")
 check("DateTime.Now" in dynamic, "Persona context must use local system time")
-check("MaxRecent = 5" in memory and "MEMORY.md" in memory,
-      "Lightweight memory must retain exactly five recent interactions")
+check("MaxConversations" in memory and "MaxInteractions" in memory and "MEMORY.md" in memory,
+      "Conversations and interactions must be capped separately, or pats evict talking")
+check("RecordLongTerm" in memory and "MaxLongTerm" in memory,
+      "Notes must be able to leave a long-term entry")
+check("StartsWith(\"[\")" in memory,
+      "The legacy single-list memory.json must still load, or existing installs forget")
+check("ConversationContext" in memory and "ConversationContext" in chat,
+      "Notes must be written from conversations only, not from pats")
 check("SearXNG" in live_info and "SmartReader" in live_info and
       "api.open-meteo.com" in live_info and "ip-api.com/json" in live_info and
       "NeedsLiveInformation" in chat,

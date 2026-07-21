@@ -18,15 +18,25 @@ namespace LilithMod
         private static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(12);
 
         private static string _heartbeatPath;
+        private static string _wakeWordModelPath;
         private static float _nextCheck;
         private static bool _available;
+        private static bool _wakeWordModel;
 
         internal static bool IsAvailable => _available;
+
+        /// <summary>
+        /// Whether the wake word model is on disk. Separate from the listener: the
+        /// listener runs fine without it and push-to-talk still works, but nothing
+        /// answers to her name, so the setting would be a switch wired to nothing.
+        /// </summary>
+        internal static bool WakeWordModelAvailable => _wakeWordModel;
 
         internal static void Initialize()
         {
             string root = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".";
             _heartbeatPath = Path.Combine(root, "push-to-talk.alive");
+            _wakeWordModelPath = Path.Combine(root, "speech-setup", "lilith.onnx");
         }
 
         /// <summary>Cheap enough to call every frame; the stat is throttled.</summary>
@@ -53,6 +63,21 @@ namespace LilithMod
                     available
                         ? "[Speech] Listener detected; push-to-talk enabled."
                         : "[Speech] Listener not responding; push-to-talk disabled.");
+            }
+
+            // Re-stat rather than cache once: the model can arrive from an install
+            // run after the game is already up.
+            bool model = false;
+            try { model = _wakeWordModelPath != null && File.Exists(_wakeWordModelPath); }
+            catch (IOException) { model = false; }
+
+            if (model != _wakeWordModel)
+            {
+                _wakeWordModel = model;
+                LilithModPlugin.Logger.LogInfo(
+                    model
+                        ? "[Speech] Wake word model found; the setting is live."
+                        : "[Speech] No wake word model; the setting stays greyed.");
             }
         }
     }

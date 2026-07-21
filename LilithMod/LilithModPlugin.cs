@@ -158,8 +158,12 @@ namespace LilithMod
                 "Persona instructions sent with every request. Replaces the older "
                 + "'SystemPrompt' entry, which is now ignored - copy your own wording "
                 + "across if you had customised it.");
-            CfgMaxHistoryTurns = Config.Bind("LLM", "MaxHistoryTurns", 8,
-                "How many past exchanges to keep as context.");
+            // A new key rather than a new default on the old one: Config.Bind keeps
+            // whatever an existing cfg already holds, so raising 8 to 15 in place
+            // would ship to nobody who had run the mod before.
+            CfgMaxHistoryTurns = Config.Bind("LLM", "HistoryTurns", 15,
+                "How many past exchanges to keep as context. Replaces the older "
+                + "'MaxHistoryTurns' entry, which is now ignored.");
             CfgTimeoutSeconds = Config.Bind("LLM", "TimeoutSeconds", 30, "Request timeout.");
             CfgHotkey = Config.Bind("LLM", "Hotkey", "F7",
                 "Key that opens the chat box. A letter (A-Z), digit (0-9), or F1-F12. "

@@ -40,10 +40,12 @@ UninstallDisplayIcon={uninstallexe}
 WizardStyle=modern
 
 [Tasks]
-; Both unchecked: the mod runs chat-only with neither, and each is a
-; multi-gigabyte download nobody should get by accident.
+; Speech input is on by default because it works the moment it lands - F8 and
+; nothing else to supply. Voice synthesis stays off: its runtime is useless
+; until the user brings a voice model, so a default-on multi-gigabyte download
+; would buy them nothing.
 Name: "voicesynth"; Description: "Download the voice synthesis base (GPT-SoVITS runtime, several GB). No voice is included - you add one later."; Flags: unchecked
-Name: "speechinput"; Description: "Download speech input - talk to her with F8 (local speech recognition, about 2 GB)."; Flags: unchecked
+Name: "speechinput"; Description: "Download speech input - talk to her with F8 (local speech recognition, about 2 GB)."
 
 [Messages]
 SelectDirDesc=Where is {#GameFolderName} installed?
