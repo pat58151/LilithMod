@@ -205,19 +205,42 @@ The diagnostic added for this named it on the first launch after deploying:
 Original voice kept for line 950703 (id 800003): ReplaceGameVoice off.
 ```
 
-`VoiceServiceMonitor.IsAvailable` starts `false`, and its first probe cannot
-succeed until the synthesis service accepts connections - tens of seconds while
-the model loads. Until then `ApplyAvailability(false)` forces
-`CfgReplaceGameVoice` off, so any dialogue in that window plays with the game's
-own voice, which is Chinese. The `EnterGame` greeting fires exactly there, which
-is why it was always the first line and only the first.
+`VoiceServiceMonitor` learned the service was up only from the probe in
+`Update()`, which cannot tick before the Unity player loop starts - the same
+frame the `EnterGame` greeting fires. The probe is async, so it lost that race
+on every launch: `CfgReplaceGameVoice` was still false when the greeting went
+through, and the game's own Chinese voice played.
 
-The fix distinguishes "has never answered yet" from "is not installed" with
-`VoiceServiceMonitor.EverAvailable`. The fallback to native voice while
-synthesis is down is deliberate and stays - a machine without synthesis depends
-on it. But while synthesis is *preferred and has never answered*, native lines
-are dropped rather than voiced in the wrong language, bounded by a 90 s grace so
-a machine that genuinely has no synthesis still falls back as designed.
+The fix is that a successful warm-up marks the service available directly
+(`VoiceServiceMonitor.NoteServiceAnswered`). Warm-up completes during `Load()`,
+~800 log lines before any dialogue, and a finished synthesis is stronger
+evidence than a socket connect.
+
+Confirmed on the next launch: `Holding line 1000510 until ja audio is ready`
+followed by `Re-showed line 1000510 after audio`, with no `Dropped native line`
+anywhere and the greeting audibly Japanese.
+
+### The first three explanations were all wrong
+
+Worth recording, because each was asserted from reading code while the log that
+disproved it was already on disk:
+
+1. **"The model takes tens of seconds to load."** The original resolution, and
+   the rationale written into the grace-window comments. Refuted by
+   `Warm-up phase finished` at log line 182 - a complete synthesis, during
+   `Load()`. The service was never slow; uptime was irrelevant.
+2. **"The game has not applied its language yet on the first frame."** Refuted
+   within a minute by `BeginDialogue` entries showing *every* native line
+   arriving as Chinese source text, not just the greeting.
+3. **"The subtitle will therefore be Chinese too."** Refuted by the user:
+   `node.text` is the raw source string, and the game localises it at display
+   time from `lineId`. The subtitle was never broken.
+
+The grace window built on (1) survives, but it now covers only a genuine cold
+start under `ServiceBootstrap`, which is rarer than the case it was written for.
+
+The lesson is narrow and specific: `LogOutput.log` had the answer before any of
+these were proposed. Read it first.
 
 ## Symptom, as reported
 
@@ -240,63 +263,3 @@ not a language setting being wrong.
   Disproved by log ordering: `[Voice] Voice processor started` appears at
   character offset 14,582 and the offending line at 49,908, tens of thousands of
   characters later. The processor was up well before.
-
-## Next step
-
-`GameVoiceCoordinator.AllowShowNode` has five early-outs and the log could not
-say which one fired. It now names it: `re-show of a line already replaced`,
-`coordinator not awake`, `ReplaceGameVoice off`, `voice disabled`, `voice
-processor not ready`, or `unknown`. Launch with `LogDiagnostics` on, let the
-greeting play, and read:
-
-```
-[Voice] Original voice kept for line 1000510 (id 700525): <reason>.
-```
-
-Current guess, unverified: `re-show of a line already replaced`.
-`_allowOriginalShow` is a static flag, and a stale `true` at startup would
-produce exactly this shape - one line through, correct behaviour thereafter.
-
----
-
-# Open: a dialogue bubble sometimes never closes
-
-Status: **unresolved, instrumented 2026-07-21.**
-
-Occasionally the text above her head persists indefinitely. Intermittent; no
-reproduction yet.
-
-## How the path works
-
-Native dialogue is *gated*: `AllowShowNode` returns false so the game does not
-display the node, the line is queued for synthesis, and when audio is ready
-`GameVoiceCoordinator.Update` sets `_allowOriginalShow = true` and calls
-`bubble.ShowNode(node)` to hand it back to the game, which then displays and
-closes it normally.
-
-So a bubble that never closes is a line that was handed back but whose close
-never ran, or one that was displayed outside this path.
-
-## Leading hypothesis, untested
-
-The mod suppresses the game's original audio (`ReplaceGameVoice` returns false
-when replacement is enabled). If the game's bubble auto-close is driven by its
-own voice clip finishing, that event never arrives and the bubble waits forever.
-This is consistent with the mod having needed explicit close handling for its own
-replies, and with the six second fallback close that already exists for
-synthesis-failure and voice-off paths.
-
-## Next step
-
-Every held line now logs its matching re-show:
-
-```
-[Voice] Holding line X until ja audio is ready.
-[Voice] Re-showed line X after audio; N still held.
-```
-
-A `Holding line X` with no matching `Re-showed line X` is a bubble the game was
-never handed back - that identifies the stall as being before the handoff
-(synthesis failed, or the cue was dropped). If both lines are present and the
-bubble is still stuck, the fault is after the handoff and the hypothesis above
-becomes the thing to test.
