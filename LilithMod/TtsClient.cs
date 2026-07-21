@@ -133,11 +133,10 @@ namespace LilithMod
         private const long SlowSynthesisMs = 8000;
 
         /// <summary>
-        /// Records how long synthesis took. This exists because that regression
-        /// was invisible until it was bad enough to notice by ear, hours after
-        /// the conditions that caused it were gone - and it was never
-        /// reproduced. A line per synthesis means a recurrence is timestamped
-        /// while it is happening rather than reconstructed afterwards.
+        /// Records how long synthesis took. The slowdown that prompted this was
+        /// invisible until bad enough to hear, hours after the conditions causing it
+        /// were gone, and was never reproduced. A line per synthesis timestamps a
+        /// recurrence while it happens instead of reconstructing it afterwards.
         /// </summary>
         private static void ReportLatency(string text, string language, int bytes, long ms)
         {

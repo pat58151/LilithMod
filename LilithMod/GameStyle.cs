@@ -8,12 +8,10 @@ namespace LilithMod
 {
     /// <summary>
     /// Makes the mod's chat box look like the game's own dialogue bar rather than a
-    /// hand-built grey rectangle.
-    ///
-    /// The donor is <c>DialogueBubbleUI</c> - the wide, thin, softly-lit strip Lilith speaks
-    /// through - not one of the settings input fields. The single most important thing
-    /// copied is <c>fontSharedMaterial</c>: TMP keeps outline, glow and face colour on the
-    /// material, so copying only the font asset yields plain text with none of the look.
+    /// hand-built grey rectangle. The donor is <c>DialogueBubbleUI</c>, the strip Lilith
+    /// speaks through, not a settings input field. The critical part is
+    /// <c>fontSharedMaterial</c>: TMP keeps outline, glow and face colour on the material,
+    /// so copying only the font asset yields plain text with none of the look.
     /// </summary>
     public static class GameStyle
     {

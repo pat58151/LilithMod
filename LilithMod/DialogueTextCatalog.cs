@@ -16,13 +16,11 @@ namespace LilithMod
         private static bool _warnedMissing;
 
         /// <summary>
-        /// Whether there is a catalogue to translate native dialogue with.
-        ///
-        /// False in distribution builds, where the game's script is deliberately not
-        /// compiled in. Without this check the replacement path still ran, fell back
-        /// to node.text - the game's Chinese source string - and handed that to the
-        /// Japanese voice. Every release install did it; local builds never could,
-        /// because they always have the catalogue.
+        /// Whether there is a catalogue to translate native dialogue with. False in
+        /// distribution builds, where the game's script is deliberately not compiled
+        /// in. Without this check the replacement path ran anyway, fell back to
+        /// node.text - the game's Chinese string - and handed it to the Japanese
+        /// voice. Release installs only; local builds always have the catalogue.
         /// </summary>
         internal static bool Available
         {

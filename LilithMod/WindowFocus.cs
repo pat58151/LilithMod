@@ -123,17 +123,13 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Makes the window able to receive keystrokes WITHOUT taking the mouse.
-        ///
-        /// Only WS_EX_NOACTIVATE is cleared, because that is all keyboard delivery
-        /// needs - hit-testing is a separate concern. The per-pixel click-through the
-        /// game runs is deliberately left alone, so the desktop stays usable while the
-        /// chat bar is open, and clicks still land on the bar itself because it is
-        /// opaque.
-        ///
-        /// The settings path still uses EnterInteractiveMode, which additionally
-        /// clears WS_EX_TRANSPARENT and suspends click-through. Doing that for chat is
-        /// what made opening the bar capture the entire screen.
+        /// Makes the window able to receive keystrokes WITHOUT taking the mouse. Only
+        /// WS_EX_NOACTIVATE is cleared, since that is all keyboard delivery needs; the
+        /// game's per-pixel click-through is left alone, so the desktop stays usable
+        /// while the bar is open and clicks still land on the bar because it is opaque.
+        /// The settings path uses EnterInteractiveMode, which also clears
+        /// WS_EX_TRANSPARENT - doing that for chat made opening the bar capture the
+        /// entire screen.
         /// </summary>
         private static void EnterKeyboardMode()
         {

@@ -518,12 +518,6 @@ namespace LilithMod
                 synthesis ? "[Voice] Vocal synthesis selected." : "[Voice] Native Chinese voice selected.");
         }
 
-        /// <summary>
-        /// Greys the push-to-talk row while its listener is not running, matching
-        /// how Vocal Synthesis behaves when its server is down. The saved preference
-        /// is left untouched, so it comes back on by itself once the listener
-        /// returns rather than needing to be re-enabled by hand.
-        /// </summary>
         /// <summary>Chat is useless without a key, so the binding reflects that.</summary>
         private static bool HasApiKey =>
             !string.IsNullOrWhiteSpace(LilithModPlugin.CfgApiKey.Value);
@@ -541,6 +535,11 @@ namespace LilithMod
             if (_hotkeyLabel != null) _hotkeyLabel.color = color;
         }
 
+        /// <summary>
+        /// Greys the push-to-talk row while its listener is not running, as Vocal
+        /// Synthesis does when its server is down. The saved preference is left
+        /// alone, so it returns by itself rather than needing re-enabling by hand.
+        /// </summary>
         private void RefreshSpeechAvailability()
         {
             if (_pushToTalkKeyField == null) return;
@@ -635,13 +634,10 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Labels on the rows this mod adds follow the game's display language, and
-        /// are re-checked on the refresh tick so switching language applies without
-        /// a restart - the same contract the speech recogniser uses.
-        ///
-        /// The native rows are localised by the game itself. These are clones with
-        /// their localiser stripped, so nothing else will ever set their text.
-        /// Help is excluded on purpose; see where it is assigned.
+        /// Labels on the rows this mod adds follow the game's display language,
+        /// re-checked on the refresh tick so switching applies without a restart.
+        /// These are clones of native rows with their localiser stripped, so nothing
+        /// else will ever set their text. Help is excluded; see where it is assigned.
         /// </summary>
         private void RefreshLabels()
         {
@@ -673,13 +669,10 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// The game's own UI language - "en", "ja" or "zh", never null so it is safe
-        /// to compare.
-        ///
-        /// Deliberately NOT PersonaPrompt.CurrentDisplayLanguage(). That returns her
-        /// *subtitle* language, which voice-config.ini pins independently of the game
-        /// so she can speak Japanese under English subtitles. Using it here meant the
-        /// settings labels never moved when the game language changed.
+        /// The game's own UI language - "en", "ja" or "zh", never null. Deliberately
+        /// NOT PersonaPrompt.CurrentDisplayLanguage(), which returns her *subtitle*
+        /// language: voice-config.ini pins that independently, so using it here left
+        /// the settings labels unmoved when the game language changed.
         /// </summary>
         private static string UiLanguage()
         {
@@ -699,13 +692,10 @@ namespace LilithMod
         private string _labelLanguage;
 
         /// <summary>
-        /// Opens the mod overview in whatever handles .txt. Like the folder buttons
-        /// this is never greyed out - it is where the answer to "why is this
-        /// greyed out" lives, so it has to work when nothing else does.
-        ///
-        /// Prefers a translation matching the game language and falls back to
-        /// English, so OVERVIEW.ja.txt or OVERVIEW.zh.txt can be added by dropping
-        /// the file in - no code change.
+        /// Opens the mod overview in whatever handles .txt. Never greyed out: it is
+        /// where the answer to "why is this greyed out" lives, so it has to work when
+        /// nothing else does. Prefers a translation matching the game language and
+        /// falls back to English, so OVERVIEW.ja.txt drops in with no code change.
         /// </summary>
         private static void OpenHelp()
         {

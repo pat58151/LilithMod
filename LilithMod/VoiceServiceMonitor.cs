@@ -14,10 +14,9 @@ namespace LilithMod
         /// <summary>
         /// Whether the service has answered even once this session. "Not up yet" and
         /// "not installed" both read as unavailable, but only the first is worth
-        /// waiting through: dialogue firing in that window would otherwise use the
-        /// game's own voice, which is Chinese. Usually set by NoteServiceAnswered
-        /// during Load(); the probe below only establishes it on a genuine cold
-        /// start, where the model does take tens of seconds.
+        /// waiting through - dialogue in that window would use the game's Chinese
+        /// voice. Usually set by NoteServiceAnswered during Load(); the probe below
+        /// only establishes it on a genuine cold start.
         /// </summary>
         internal static bool EverAvailable { get; private set; }
 
@@ -27,13 +26,11 @@ namespace LilithMod
 
         /// <summary>
         /// Records that the service answered a real request, from whichever thread saw
-        /// it. Availability was previously discovered only by the probe in Update(),
-        /// which does not tick until the Unity player loop starts - and the EnterGame
-        /// greeting fires on that same first frame. The probe lost that race every
-        /// launch, so the opening line always kept the game's Chinese voice, however
-        /// long the service had already been up. Warm-up finishes during Load(), well
-        /// before any dialogue, and a completed synthesis is stronger evidence than a
-        /// socket connect.
+        /// it. Availability used to come only from the probe in Update(), which cannot
+        /// tick before the first frame - when the EnterGame greeting fires. The probe
+        /// lost that race every launch, so the opening line kept the game's Chinese
+        /// voice however long the service had been up. Warm-up finishes during Load(),
+        /// and a completed synthesis beats a socket connect as evidence.
         /// </summary>
         internal static void NoteServiceAnswered()
         {

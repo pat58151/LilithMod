@@ -29,6 +29,7 @@ namespace LilithMod
         internal static ConfigEntry<double> CfgWeatherLongitude;
         internal static ConfigEntry<string> CfgWeatherLocationName;
         internal static ConfigEntry<bool> CfgLogDiagnostics;
+        internal static ConfigEntry<bool> CfgDumpDialogueDatabase;
         internal static ConfigEntry<bool> CfgForceSynthesisUnavailable;
         internal static ConfigEntry<bool> CfgForceSleeping;
         internal static ConfigEntry<bool> CfgIgnoreStartupShortcut;
@@ -198,6 +199,11 @@ namespace LilithMod
                 "Verbose per-frame input and window-focus logging. Only needed when "
                 + "diagnosing why a hotkey or the chat box is not responding.");
 
+            CfgDumpDialogueDatabase = Config.Bind("Debug", "DumpDialogueDatabase", false,
+                "Write the game's dialogue databases to plugins/LilithMod/dump as JSON. "
+                + "An authoring aid for writing custom nodes against the real ids; "
+                + "leave off for normal play.");
+
             // Three behaviours only occur in conditions that cannot be arranged on
             // demand: synthesis failing to start, Lilith asleep, and no Startup
             // shortcut installed. Each shipped untested because reaching it meant
@@ -263,7 +269,7 @@ namespace LilithMod
             // Load() runs before the first scene exists, so a hand-made GameObject does
             // not survive DontDestroyOnLoad and its Update() never ticks. BepInEx attaches
             // to its persistent BepInEx_Manager object and registers the type for us.
-            AddComponent<DumpDatabaseBehaviour>();
+            AddComponent<DialogueInjector>();
             AddComponent<LlmChatController>();
             AddComponent<SettingsBridge>();
             AddComponent<GameVoiceCoordinator>();

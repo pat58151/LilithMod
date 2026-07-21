@@ -5,13 +5,10 @@ using System.Reflection;
 namespace LilithMod
 {
     /// <summary>
-    /// Whether the external push-to-talk listener is running.
-    ///
-    /// The listener touches a heartbeat file every couple of seconds; if it has
-    /// gone stale the process is gone. Checked rather than assumed because the
-    /// listener is a separate process that can be closed, crash, or simply never
-    /// have been installed - and without this the key would still open the bar,
-    /// show "Listening~", and wait forever for a transcript nobody is producing.
+    /// Whether the external push-to-talk listener is running. It touches a heartbeat
+    /// file every couple of seconds; stale means the process is gone. Checked rather
+    /// than assumed: without it the key still opens the bar, shows "Listening~", and
+    /// waits forever for a transcript nobody is producing.
     /// </summary>
     internal static class SpeechInputService
     {
