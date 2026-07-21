@@ -1839,8 +1839,19 @@ namespace LilithMod
             // Rolled once, at the moment of firing, and a miss discards the pending
             // interaction. Rolling every frame while it waits would come up true
             // eventually and make the chance meaningless.
-            float replyChance = IsSleeping() ? SleepingInteractionReplyChance : InteractionReplyChance;
-            if (UnityEngine.Random.value >= replyChance) return;
+            bool sleeping = IsSleeping();
+            float replyChance = sleeping ? SleepingInteractionReplyChance : InteractionReplyChance;
+            float roll = UnityEngine.Random.value;
+            // Which branch was taken, not just the outcome. The chance itself cannot
+            // practically be sampled - a miss costs 11 s before the next attempt but
+            // a hit costs the 180 s cooldown - so whether the sleeping path was
+            // chosen has to be readable from a single poke.
+            if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                LilithModPlugin.Logger.LogInfo(
+                    $"[Ambient] Interaction '{kind}': sleeping={sleeping}, " +
+                    $"chance={replyChance:0.##}, roll={roll:0.##}, " +
+                    $"{(roll < replyChance ? "replying" : "staying quiet")}.");
+            if (roll >= replyChance) return;
             _lastSpontaneousAt = Time.unscaledTime;
             SendUserMessage("The player just interacted with Lilith: " + kind, true);
         }
