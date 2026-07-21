@@ -546,6 +546,11 @@ check("A hint is not permission to tell the whole thing" in persona,
 check("describes one past occasion, not how the world is now" in persona,
       "A memory's details must not be carried into a present-tense mention of the "
       "same subject")
+# Known but never volunteered - a stricter tier than the other memories, which
+# are allowed the allusion this one forbids.
+check("This one is an exception to everything above" in persona,
+      "The band's hidden layer must be exempt from the allusion rule, or the "
+      "restraint above licences the hinting it is supposed to forbid")
 
 # -- The weather feature discloses what it contacts ---------------------------
 # Asking about the weather sends the player's IP to a third party. That is a
