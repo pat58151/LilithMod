@@ -10,6 +10,18 @@ if (-not $ProjectFolder) { $ProjectFolder = Split-Path -Parent $scriptDir }
 $launcher = Join-Path $ProjectFolder "runtime\start-lilith.ps1"
 $shell = New-Object -ComObject WScript.Shell
 
+# Older installs could leave a Run entry that starts Lilith.exe directly. That
+# races the service shortcut at sign-in and can leave the visible instance
+# running without the launcher-managed mod startup. The launcher owns startup
+# now, so remove only the known direct-game entry and leave unrelated values
+# untouched.
+$runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+$legacyStartup = (Get-ItemProperty -LiteralPath $runKey -Name "Lilith" -ErrorAction SilentlyContinue).Lilith
+if ($legacyStartup -and $legacyStartup -match '(?i)(?:^|[\\/])Lilith\.exe(?:"|\s|$)') {
+    Remove-ItemProperty -LiteralPath $runKey -Name "Lilith"
+    Write-Host "Removed legacy direct-game startup entry."
+}
+
 $desktop = [Environment]::GetFolderPath("Desktop")
 $gameShortcut = $shell.CreateShortcut((Join-Path $desktop "Lilith AI.lnk"))
 $gameShortcut.TargetPath = "powershell.exe"

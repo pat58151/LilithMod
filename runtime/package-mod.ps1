@@ -71,6 +71,14 @@ try {
     Write-Host "Unpacking BepInEx..."
     Expand-Archive -Path $bepinexZip -DestinationPath $staging -Force
 
+    # A direct first launch can restart through Steam and leak
+    # DOORSTOP_DISABLE=TRUE into the visible game. The proxy must still inject
+    # into that Steam-spawned process.
+    $doorstopConfig = Join-Path $staging "doorstop_config.ini"
+    $doorstopText = Get-Content -LiteralPath $doorstopConfig -Raw
+    $doorstopText = $doorstopText -replace '(?m)^ignore_disable_switch\s*=\s*false\s*$', 'ignore_disable_switch = true'
+    Set-Content -LiteralPath $doorstopConfig -Value $doorstopText -Encoding utf8
+
     Copy-Item (Join-Path $PSScriptRoot "INSTALL.txt") (Join-Path $staging "INSTALL.txt") -Force
 
     if (-not $OutputZip) {

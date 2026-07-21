@@ -601,37 +601,61 @@ interaction is still recorded to memory when the reply is skipped.
 
 ### Incident: "the mod unapplied itself", 2026-07-21
 
-**Not reproduced, and not explained.** Recorded because the next person to see
-it should not re-derive the search.
+**Root cause confirmed.** The visible Steam-launched process inherited
+`DOORSTOP_DISABLE=TRUE` and `DOORSTOP_INITIALIZED=TRUE`, so Doorstop loaded its
+local `WINHTTP.dll` proxy but deliberately skipped BepInEx. The clean BepInEx log
+belonged to the short-lived bootstrap process, not the game on screen.
 
-Symptom: the game came up looking vanilla. Every artifact contradicted that.
-`LilithMod.dll` was the current build, `doorstop_config.ini` had `enabled = true`
-with the right target assembly, `LilithMod.cfg` still held the API key and
-bindings, and `LogOutput.log` showed a clean `Loading [LilithMod 1.0.0]` ->
-`Loaded.` -> all Harmony patches installed -> `integrations installed`. The two
-duplicated-looking `python.exe` pairs were checked and are innocent: parent and
-child (a launcher stub re-execing the real interpreter), with a single owner on
-port 9880.
+Evidence from the reproduced failure:
 
-What the search did turn up is a **stray `HKCU\...\Run\Lilith` entry pointing at
-`Lilith.exe` directly.** `install-startup.ps1` never creates it - that script
-installs a desktop shortcut running the full launcher, and a Startup shortcut
-running it with `-ServicesOnly`. So on that machine login started the game by one
-path while the services started by another, which is why the BepInEx log
-timestamp *preceded* the services the launcher starts before the game. That
-ordering is impossible for the launcher to produce and was the thread worth
-pulling.
+- Visible `Lilith.exe` PID 22044 started at 12:34:41. `LogOutput.log` was last
+  written at 12:29:35, so it could not describe that process.
+- The visible process loaded the game-local `WINHTTP.dll`, but did not load
+  CoreCLR or any BepInEx assemblies.
+- Reading the process environment with `psutil.Process(pid).environ()` showed
+  `DOORSTOP_DISABLE=TRUE`, `DOORSTOP_INITIALIZED=TRUE`, and the expected Doorstop
+  paths.
+- Its parent `steam.exe` had the same variables and was itself started as
+  `steam.exe steam://run/4643090`.
 
-Whether it caused the vanilla window is **unproven**. The plausible mechanism is
-that a directly-launched Steam game restarts itself through Steam and the two
-processes collide over BepInEx's startup mutex - which is gotcha 6, and there is
-an `AbandonedMutexException` preloader log from an earlier date. Suggestive only.
+The causal chain is: starting `Lilith.exe` while Steam is closed first injects
+Doorstop, the game asks Steam to relaunch it, and Steam inherits Doorstop's
+disable variables from that first process. Steam then persists with the poisoned
+environment and every later game launch from that Steam session is vanilla.
 
-The fix applied was to the launcher rather than to one machine's registry: it now
-refuses to start a second copy. Evidence to capture if this recurs, since
-`LogOutput.log` is overwritten every launch and the last one is unrecoverable:
+The stale `HKCU\...\Run\Lilith` entry pointing directly at `Lilith.exe` made this
+chain happen at sign-in, but it was a trigger rather than the injection failure
+itself. `install-startup.ps1` now removes only that known legacy direct-game
+entry. Unrelated Run values are preserved.
+
+Fixes applied:
+
+- Installed `doorstop_config.ini` now has `ignore_disable_switch = true`.
+- `runtime/package-mod.ps1` and `reapply-mod.ps1` enforce that setting for clean
+  packages and restored installs.
+- `runtime/start-lilith.ps1` launches `steam://run/4643090`, never `Lilith.exe`
+  directly, and still refuses to start a second game process.
+- The current machine's legacy Run entry was removed and both managed shortcuts
+  were reinstalled.
+
+The package build and packaged Doorstop setting were verified, and **a live
+post-fix launch is now verified**: after a full Steam restart the mod loads and
+runs correctly. To recover, fully exit both the game and Steam, restart Steam,
+then launch the game. Restarting only the game leaves the poisoned Steam
+environment alive - which looks exactly like the fix having failed.
+
+If this recurs, capture process identity, module state, and environment before
+restarting because `LogOutput.log` may belong to a different process:
 
 ```powershell
-Get-Process Lilith | Select-Object Id,StartTime          # more than one is the answer
-Get-Content "$game\BepInEx\LogOutput.log" -Wait -Tail 5  # is it growing?
+Get-Process Lilith | Select-Object Id,StartTime,Path
+Get-Item "$game\BepInEx\LogOutput.log" | Select-Object LastWriteTime,Length
+@'
+import psutil
+for name in ("Lilith.exe", "steam.exe"):
+    for p in psutil.process_iter(["name"]):
+        if p.info["name"] == name:
+            print(name, p.pid, {k: v for k, v in p.environ().items()
+                                if "DOORSTOP" in k.upper()})
+'@ | python -
 ```

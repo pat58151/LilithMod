@@ -227,7 +227,11 @@ if (-not $ServicesOnly) {
         Write-StartupLog "Game already running (PID $($running[0].Id)); not starting a second copy."
     }
     else {
-        Start-Process $gameExe
-        Write-StartupLog "Game started."
+        # Starting Lilith.exe while Steam is closed makes the first process
+        # relaunch through Steam. Steam then inherits Doorstop's disable flags
+        # and starts a second, vanilla process. Enter through Steam so its
+        # environment stays clean and BepInEx initializes in the visible game.
+        Start-Process "steam://run/4643090"
+        Write-StartupLog "Game start requested through Steam."
     }
 }
