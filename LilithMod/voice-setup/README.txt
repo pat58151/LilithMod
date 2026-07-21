@@ -86,6 +86,10 @@ CONFIG REFERENCE
 [Voice]
   Enabled            false disables synthesis entirely. Chat still works.
   ReplaceGameVoice   also replace the game's own scripted dialogue voice.
+                     Has no effect in a released build: replacing that dialogue
+                     needs a translation of the game's script, which is the
+                     developers' content and is not distributed. Her own replies
+                     are unaffected and are spoken normally either way.
   SpokenLanguage     ja, en, or zh - what she says aloud.
   SubtitleLanguage   ja, en, or zh - what appears on screen.
   Endpoint           default http://127.0.0.1:9880/tts
@@ -115,12 +119,34 @@ TROUBLESHOOTING
 400 tts failed, or the server dies on Japanese text
   The console is not UTF-8. Set PYTHONIOENCODING=utf-8 before starting it.
 
-The first line takes 10+ seconds, later ones are fast
-  Normal. The model compiles per sentence length, so new lengths are slow once
-  each. It settles as you use it.
+The first line after starting the server is slow
+  Loading the model takes around 40 seconds, and the first synthesis after that
+  is slower than the rest. After that, expect roughly two to five seconds for a
+  short line, longer for a long one - cost scales with the length of the text.
+
+  If it is much slower than that and stays slow, see the note on parallel
+  inference below.
+
+Lines she has said before are instant, new ones are not
+  Expected. Synthesised audio is cached on disk under voice-cache\, keyed by the
+  text and the voice, so a repeated line is read from the file rather than
+  generated again. Her chat replies are new text every time and can never be
+  cached, so those always pay full synthesis time.
+
+Everything is several times slower than the timings above
+  On some GPU stacks - AMD/ROCm in particular - batched inference falls back to
+  undersized workspaces and is many times slower than serial. The mod already
+  sends parallel_infer=false on every request for this reason. If you drive the
+  server yourself with your own script, send it too.
 
 Still the old voice after changing weights
-  Change CacheIdentity. Cached audio is reused until you do.
+  Change CacheIdentity. Cached audio is reused until you do. The cache key
+  covers the model name, the reference audio and its transcript, so changing
+  any of those without changing CacheIdentity leaves you hearing the old voice
+  for every line you have already heard.
+
+  Old cache files are never deleted. If you change voices often, voice-cache\
+  is safe to empty by hand - it only costs the time to generate lines again.
 
 The voice sounds wrong, flat, or unstable
   Replace the reference audio. Short, clean, calm, correct transcript. This is
