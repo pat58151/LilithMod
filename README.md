@@ -48,6 +48,10 @@ game. Do not force-quit it; that can break the next launch too.
 Steam, and launch again. Starting `Lilith.exe` directly while Steam is closed
 poisons the environment for every later launch.
 
+That is chat working. Her voice and speaking to her are separate installs, and
+neither is bundled — **[SETUP.md](SETUP.md)** covers those, where to get an API
+key, and how to start everything by itself.
+
 ---
 
 ## Controls
@@ -78,19 +82,6 @@ Only three things, and only when you cause them.
 | asking her to search | a public SearXNG instance | the query, then she reads the results |
 
 Her voice, her memory and her notes never leave this machine.
-
-`ip-api.com` is contacted over plain HTTP. To skip that lookup entirely, set
-your own coordinates in `LilithMod.cfg`:
-
-```ini
-[Weather]
-Latitude = 51.5074
-Longitude = -0.1278
-LocationName = London
-```
-
-With both set it is never contacted at all. This is also the fix when a VPN
-gives her the wrong country's weather.
 
 Voice setup is optional and documented separately: **Settings / Sound / Open
 Synth Voice Folder**. No synthesiser and no voice model are bundled — that
