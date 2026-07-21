@@ -1298,6 +1298,20 @@ namespace LilithMod
                             $"[LlmChat] Empty API content on attempt {attempt + 1}/3; "
                             + $"finish={lastFinishReason}, completion_tokens={lastCompletionTokens}, "
                             + $"reasoning_chars={reasoningLength}.");
+
+                        // Tokens are billed but content and reasoning are both empty,
+                        // so something was generated and is not in either field this
+                        // reads. Reading two fields and inferring the rest cannot tell
+                        // "landed elsewhere" from "generated then stripped"; the whole
+                        // body can. Diagnostics-only, and a response body carries no
+                        // credentials - the key travels in the request header.
+                        if (LilithModPlugin.CfgLogDiagnostics != null &&
+                            LilithModPlugin.CfgLogDiagnostics.Value)
+                            LilithModPlugin.Logger.LogInfo(
+                                "[LlmChat] Empty-content response body: " +
+                                (responseBody.Length > 2000
+                                    ? responseBody.Substring(0, 2000) + "...<truncated>"
+                                    : responseBody));
                     }
                 }
             }
