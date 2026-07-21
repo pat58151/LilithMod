@@ -7,8 +7,6 @@ occasional handwritten note.
 She is a companion, not an assistant. Everything in the tuning is aimed at one
 line: present without demanding attention.
 
-![chat](image/ui1.png)
-
 ---
 
 ## What it does
@@ -31,6 +29,23 @@ them grey out rather than failing.
 
 ---
 
+## Controls
+
+**F7** opens the chat bar. Type, press Enter, she answers.
+
+![the chat bar](image/f7.png)
+
+**F8** listens instead, and submits on its own after about 2.5 seconds of
+silence. Press it again to cancel.
+
+![listening](image/f8.png)
+
+Typing while F8 listens wins — what you type is used and the transcript
+discarded. Escape closes the bar. Both keys rebind under Settings / Controls,
+and cannot be bound to the same key.
+
+---
+
 ## Install
 
 Download the latest release and run `LilithMod-Setup-<version>.exe`. It finds
@@ -39,6 +54,8 @@ Steam otherwise silently breaks.
 
 Then, in game: **Settings / Me / DeepSeek API Key**. Paste a key. Without one,
 F7 and F8 do nothing by design.
+
+![Settings / Me](image/ui1.png)
 
 The key lives in `BepInEx\config\LilithMod.cfg` on your machine and goes
 nowhere except the API you configured. It is never logged and never committed.
@@ -49,11 +66,6 @@ game. Do not force-quit it; that can break the next launch too.
 **If the game looks unmodded**, fully exit both the game and Steam, restart
 Steam, and launch again. Starting `Lilith.exe` directly while Steam is closed
 poisons the environment for every later launch.
-
-Voice setup is optional and documented separately: **Settings / Sound / Open
-Synth Voice Folder**. Speech input likewise, under **Settings / Me**.
-
-![settings](image/ui2.png)
 
 ---
 
@@ -81,6 +93,11 @@ LocationName = London
 
 With both set it is never contacted at all. This is also the fix when a VPN
 gives her the wrong country's weather.
+
+Voice setup is optional and documented separately: **Settings / Sound / Open
+Synth Voice Folder**. Speech input likewise, under **Settings / Me**. Neither
+folder button ever greys out — they are how you find out why something is
+unavailable.
 
 ---
 
