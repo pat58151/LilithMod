@@ -509,6 +509,28 @@ check("_latestNodeForBubble" in game_voice,
       "A held line superseded before its audio arrived must not be re-shown over "
       "the newer one")
 
+# -- A long reply is split before it is queued --------------------------------
+# Synthesis returns one WAV for whatever text it is handed, so an unsplit long
+# line means the player hears nothing until the entire reply has been generated.
+chunker = read(MOD_DIR, "UtteranceChunker.cs")
+check(chunker, "UtteranceChunker.cs is missing; long replies would be one silence")
+check("UtteranceChunker.Chunk" in chat,
+      "The reply path must chunk before enqueueing, or splitting never happens")
+check(chat.count("UtteranceChunker.Chunk") >= 2,
+      "The plain-text reply path needs chunking too - it carries the same long lines")
+check("NativeDialogue != null" in chunker,
+      "A native game line must never be chunked: its cue is a one-per-line "
+      "handshake and splitting it would leak the coordinator's pending entry")
+check("EndOfReply = i == queued.Count - 1" in chat,
+      "EndOfReply must move to the LAST chunk, or the reply is reported finished "
+      "while pieces are still queued")
+check("CjkWeight" in chunker,
+      "Thresholds must be weighted by script: a raw Length test splits English "
+      "far too eagerly and Japanese almost never")
+check("SuppressSubtitle" in chunker,
+      "When the shown text will not split, later chunks must run silent rather "
+      "than repeat the whole subtitle under every piece")
+
 # -- The weather feature discloses what it contacts ---------------------------
 # Asking about the weather sends the player's IP to a third party. That is a
 # reasonable default but not an obvious one, so every language's help must say

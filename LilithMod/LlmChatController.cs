@@ -296,6 +296,19 @@ namespace LilithMod
                 _replyHideAt = Time.unscaledTime + 1.0f;
             }
 
+            // Before the subtitle drain, so a sentence arriving this frame wins over
+            // the restored one.
+            if (_restoreReplyBubble)
+            {
+                _restoreReplyBubble = false;
+                if (_replyPlaybackActive && !string.IsNullOrEmpty(_lastDisplayedSentence))
+                {
+                    DisplayReplyText(_lastDisplayedSentence);
+                    LilithModPlugin.Logger.LogInfo(
+                        "[LlmChat] Reply bubble restored after a native dialogue displaced it mid-reply.");
+                }
+            }
+
             while (processor.SubtitleQueue.TryDequeue(out SubtitleCue cue))
             {
                 DisplayReplyText(cue.Text);
@@ -321,8 +334,26 @@ namespace LilithMod
             }
 
             _replyNode.text = text;
+            _lastDisplayedSentence = text;
             DialogueManager.s_instance.StartDialogue(9500000);
             _replyHideAt = 0f;
+        }
+
+        private string _lastDisplayedSentence;
+        private bool _restoreReplyBubble;
+
+        /// <summary>
+        /// The game's own dialogue start tears the reply bubble down before the mod's
+        /// gate can decline the line, so a touch mid-reply leaves her voice playing
+        /// under an empty bubble. The coordinator requests a restore; it runs on the
+        /// next Update rather than inside the ShowNode prefix, because a nested
+        /// StartDialogue from inside the game's own StartDialogue corrupts the
+        /// manager's current-dialogue state.
+        /// </summary>
+        internal static void RequestReplyBubbleRestore()
+        {
+            if (_instance != null)
+                _instance._restoreReplyBubble = true;
         }
 
         private void TryHideReplyBubble()
@@ -1293,6 +1324,10 @@ namespace LilithMod
                 LilithModPlugin.VoiceProcessor?.CancelCurrent();
                 _currentReplyEnglish = null;
                 _replyPlaybackActive = false;
+                // A restore fired now must not resurrect a sentence from the reply
+                // that was just cancelled.
+                _lastDisplayedSentence = null;
+                _restoreReplyBubble = false;
 
                 if (!result.NativeActionHandled)
                     ExecuteNativeAction(result.Text);
@@ -1314,8 +1349,21 @@ namespace LilithMod
                     {
                         _currentReplyEnglish = new System.Collections.Generic.List<string> { result.Text };
                         _replyPlaybackActive = true;
-                        LilithModPlugin.VoiceProcessor.Enqueue(result.Text);
-                        LilithModPlugin.Logger.LogInfo("[LlmChat] Plain-text reply queued for synchronized voice.");
+                        // Chunked for the same reason as the bilingual path: without
+                        // it a long plain-text reply is one long silence.
+                        var plain = UtteranceChunker.Chunk(new Utterance
+                        {
+                            JaText = result.Text,
+                            EnText = result.Text,
+                            Language = PersonaPrompt.CurrentVoiceLanguage(),
+                        });
+                        for (int i = 0; i < plain.Count; i++)
+                        {
+                            plain[i].EndOfReply = i == plain.Count - 1;
+                            LilithModPlugin.VoiceProcessor.Enqueue(plain[i]);
+                        }
+                        LilithModPlugin.Logger.LogInfo(
+                            $"[LlmChat] Plain-text reply queued for synchronized voice ({plain.Count} piece(s)).");
                     }
                     else
                     {
@@ -1368,21 +1416,23 @@ namespace LilithMod
                 _currentReplyEnglish = english;
                 _replyPlaybackActive = true;
 
-                for (int i = 0; i < utterances.Count; i++)
+                // A long line is one synthesis request, so the player waits through
+                // the whole reply before hearing any of it. Split first, then queue:
+                // the first piece is all the wait, and the rest are synthesised
+                // while she is already speaking.
+                var queued = new System.Collections.Generic.List<Utterance>();
+                foreach (var u in utterances)
+                    queued.AddRange(UtteranceChunker.Chunk(u));
+
+                for (int i = 0; i < queued.Count; i++)
                 {
-                    var u = utterances[i];
-                    LilithModPlugin.VoiceProcessor.Enqueue(new Utterance
-                    {
-                        JaText = u.JaText,
-                        EnText = u.EnText,
-                        Language = u.Language,
-                        EndOfReply = i == utterances.Count - 1,
-                    });
+                    queued[i].EndOfReply = i == queued.Count - 1;
+                    LilithModPlugin.VoiceProcessor.Enqueue(queued[i]);
                 }
 
                 LilithModPlugin.Logger.LogInfo(
-                    $"[LlmChat] LLM reply queued ({utterances.Count} synchronized sentence(s)) " +
-                    $"after {Time.unscaledTime - _replyStartedAt:0.0}s.");
+                    $"[LlmChat] LLM reply queued ({queued.Count} synchronized piece(s) " +
+                    $"from {utterances.Count} line(s)) after {Time.unscaledTime - _replyStartedAt:0.0}s.");
             }
             else
             {
