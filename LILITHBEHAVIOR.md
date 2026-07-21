@@ -242,9 +242,14 @@ Typing while F8 listens wins: what is typed is used and the transcript discarded
 
 ## 8. Open faults, honestly
 
-- **Empty API content** on roughly half of replies, costing an extra round trip.
-  `finish=stop`, `completion_tokens` 12-52, `reasoning_chars=0` - so it is not
-  reasoning consuming the budget. Unexplained.
+- **Empty API content**, costing an extra round trip when it happens.
+  `finish=stop`, tokens billed, `reasoning_chars=0` - so it is not reasoning
+  consuming the budget. Unexplained.
+  **Frequency unmeasured.** This was written up as "roughly half of replies";
+  that came from a two-reply sample and does not support a rate. BepInEx
+  overwrites its log each launch, so the history is gone. The whole response
+  body is now logged under `LogDiagnostics` when it recurs, which will settle
+  both how often and where the billed tokens went.
 - **The wrong-language correction** is legitimate: the model really does put
   Japanese in the English `shown` field sometimes. Costs another round trip when
   it happens. A bad exchange is four calls and ~4-5 s.
