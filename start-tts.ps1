@@ -7,9 +7,14 @@
     Nothing is uploaded; the service reads the reference clip from disk and the
     mod POSTs text to it over loopback.
 
-    Leave this window open while playing. The first request after startup is slow
-    (~30-60 s) because kernel compilation happens per sequence length; the mod
-    warms it up in the background on launch.
+    Normally you do not run this yourself. runtime\start-lilith.ps1 launches it
+    hidden and redirects its output to gpt-sovits.log and gpt-sovits-error.log
+    in the plugin folder; those logs are where a startup failure shows up.
+
+    Run it directly to watch it live, which is the reason to do so at all. It
+    stays in the foreground until Ctrl+C. The first request after startup is
+    slow (~30-60 s) because kernel compilation happens per sequence length; the
+    mod warms it up in the background on launch.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\start-tts.ps1
