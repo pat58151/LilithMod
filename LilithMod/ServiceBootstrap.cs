@@ -5,21 +5,12 @@ using System.Net.Sockets;
 
 namespace LilithMod
 {
-    /// <summary>
-    /// Starts the voice and speech services when nothing else has. The Startup
-    /// shortcut is the better route - synthesis takes tens of seconds to load, so
-    /// warm-before-launch decides whether her greeting is spoken at all. Without it
-    /// the services never ran, which read as the voice being broken.
-    /// </summary>
+    /// <summary>Starts optional voice services when no instance is available.</summary>
     internal static class ServiceBootstrap
     {
         private const string StartupShortcutName = "Lilith AI services.lnk";
 
-        /// <summary>
-        /// True when this process launched the services itself, meaning synthesis is
-        /// loading its model right now rather than having been warm since login. The
-        /// startup grace for native dialogue is longer in that case.
-        /// </summary>
+        /// <summary>Whether this process started a cold voice service.</summary>
         internal static bool StartedServices { get; private set; }
 
         internal static void Run()
@@ -89,10 +80,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// A plain TCP probe, matching what VoiceServiceMonitor does. Answers "is
-        /// something already listening" without waiting on a model to load.
-        /// </summary>
+        /// <summary>Checks whether the configured endpoint is listening.</summary>
         private static bool VoiceServiceReachable()
         {
             try
@@ -114,11 +102,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// The configured launcher, or the one beside the voice runtime. Derived
-        /// rather than hardcoded: the runtime can be installed anywhere, and an
-        /// absolute path here would be right on one machine only.
-        /// </summary>
+        /// <summary>Resolves the configured or runtime-relative launcher.</summary>
         private static string LauncherPath()
         {
             string configured = LilithModPlugin.CfgServiceLauncher.Value;

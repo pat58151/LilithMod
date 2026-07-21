@@ -76,8 +76,7 @@ namespace LilithMod
                 RefreshLabels();
             }
 
-            // Per frame, unlike the availability refreshes above: a tooltip that
-            // trailed the cursor by up to half a second would read as broken.
+            // Tooltips follow the cursor every frame.
             RefreshWakeWordTooltip();
 
             bool settingsVisible = _view != null && _view.IsVisible;
@@ -96,8 +95,7 @@ namespace LilithMod
             bool settingsTyping = settingsVisible &&
                 ((_deepSeekKey != null && _deepSeekKey.isFocused) ||
                  capturingHotkey || capturingPushToTalk);
-            // Both bindings capture the next key press, so both must suppress the live
-            // hotkey and push-to-talk polling while focused.
+            // Suppress live hotkeys while either binding captures input.
             CapturingChatKey = capturingHotkey || capturingPushToTalk;
             if (CapturingChatKey) CaptureChatKey(capturingPushToTalk);
             if (_settingsInteractive != settingsTyping)
@@ -120,9 +118,7 @@ namespace LilithMod
             _hotkeyField = view.CloneInputRow(inputRow, "LilithChatKey", out TMP_Text hotkeyLabel);
             Transform deepSeekRow = view.GetRowOf(_deepSeekKey.transform);
             if (deepSeekRow != null) deepSeekRow.gameObject.SetActive(true);
-            // Cloned rows inherit the hidden state of the row they came from, so the
-            // key bindings have to be activated explicitly or the Controls tab looks
-            // like it has no settings at all.
+            // Activate cloned rows that inherited a hidden state.
             Transform hotkeyRow = view.GetRowOf(_hotkeyField.transform);
             if (hotkeyRow != null) hotkeyRow.gameObject.SetActive(true);
             _voiceFolderLabel = view.CloneActionRow(
@@ -149,8 +145,7 @@ namespace LilithMod
             if (pushToTalkRow != null)
             {
                 pushToTalkRow.gameObject.SetActive(true);
-                // Clone order does not match reading order: put the chat key first,
-                // since F7 before F8 is what the defaults imply.
+                // Keep chat before speech in reading order.
                 if (hotkeyRow != null && pushToTalkRow.parent == hotkeyRow.parent)
                     pushToTalkRow.SetSiblingIndex(hotkeyRow.GetSiblingIndex() + 1);
             }
@@ -180,8 +175,7 @@ namespace LilithMod
             _deepSeekLabel = deepSeekLabel;
             _hotkeyLabel = hotkeyLabel;
             _pushToTalkLabel = pushToTalkKeyLabel;
-            // Underlined so it reads as something to click rather than a setting
-            // name. Rich text is off by default on cloned rows.
+            // Underline action rows to distinguish them from settings.
             if (_helpLabel != null)
             {
                 _helpLabel.richText = true;
@@ -189,8 +183,7 @@ namespace LilithMod
                 // language this game ships, and the file it opens is English anyway.
                 SetWrappedLabel(_helpLabel, "<u>Help</u>");
             }
-            // Force a re-apply: the rows were just rebuilt, so whatever language was
-            // applied to the previous set does not describe these.
+            // Reapply localization to rebuilt rows.
             _labelLanguage = null;
             RefreshLabels();
 
@@ -249,15 +242,7 @@ namespace LilithMod
             LilithModPlugin.Logger.LogInfo("[Settings] API, voice, memory, and display rows ready.");
         }
 
-        /// <summary>
-        /// The two Lilith-tab rows for the "open apps" feature: a toggle cloned from the
-        /// native Lock Move row, and a "Lilith's list" action row cloned from the native
-        /// action-row template (the same one Help uses). Placed before the forced label
-        /// refresh in BuildRows, so RefreshLabels localises the toggle label immediately.
-        /// The toggle's native listener is severed and its state is polled in Sync(),
-        /// matching the reveal-eye toggle rather than marshalling a managed delegate onto
-        /// an Il2Cpp UnityEvent.
-        /// </summary>
+        /// <summary>Builds the app-launch and wake-word settings rows.</summary>
         private void BuildAppRows(TraySettingView view)
         {
             // --- Toggle row (Allow open apps) ---
@@ -270,10 +255,7 @@ namespace LilithMod
             GameObject toggleRowObj = UnityEngine.Object.Instantiate(lockRow.gameObject, lockRow.parent);
             toggleRowObj.name = "LilithAllowOpenApps";
 
-            // The game's settings toggles are ButtonToggle (UI.Common), not
-            // UnityEngine.UI.Toggle. Its OnValueChanged is a plain C# event wired at
-            // runtime, so the clone arrives unsubscribed - clicking it cannot drive
-            // the native movement lock, and there is nothing to sever.
+            // Cloned ButtonToggle rows arrive without the native event subscription.
             _allowOpenAppsToggle = toggleRowObj.GetComponentInChildren<ButtonToggle>(true);
             if (_allowOpenAppsToggle != null)
             {
@@ -346,8 +328,7 @@ namespace LilithMod
                 view.MapRow(_wakeWordToggle, TraySettingView.TabLilith);
 
             // --- Action row (Lilith's list) ---
-            // Cloned from the native action-row template, exactly like Help - not from
-            // the Help clone - so its click listener is only the open-list action.
+            // Clone the native action template to avoid inherited click handlers.
             Transform actionRow = view.GetRowOf(view._openMusicFolderLabel.transform);
             Transform listRow = null;
             if (actionRow != null)
@@ -359,8 +340,7 @@ namespace LilithMod
                 if (listLabel != null)
                 {
                     listLabel.richText = true;
-                    // English only, deliberately never localised and never greyed: it is
-                    // how the player reaches the file that defines everything else here.
+                    // Keep the editable app list reachable in every state.
                     SetWrappedLabel(listLabel, "<u>Lilith's list</u>");
                     listRow = view.GetRowOf(listLabel.transform);
                     if (listRow != null)

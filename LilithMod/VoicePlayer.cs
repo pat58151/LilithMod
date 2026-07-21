@@ -5,19 +5,13 @@ using NAudio.Wave;
 
 namespace LilithMod
 {
-    /// <summary>
-    /// Plays raw WAV bytes synchronously using NAudio's <see cref="WaveOutEvent"/>.
-    /// Safe to call from any thread; blocks until playback completes.
-    /// </summary>
+    /// <summary>Plays WAV data synchronously through NAudio.</summary>
     public class VoicePlayer : IDisposable
     {
         private readonly object _gate = new object();
         private WaveOutEvent _currentOutput;
 
-        /// <summary>
-        /// Play the given WAV bytes and block until audio finishes.
-        /// Returns only after the sound has fully played or an error occurs.
-        /// </summary>
+        /// <summary>Blocks until playback finishes or fails.</summary>
         public void PlaySync(byte[] wavBytes)
         {
             if (wavBytes == null || wavBytes.Length == 0)
@@ -43,10 +37,7 @@ namespace LilithMod
                 {
                     output.Play();
 
-                    // Never wait unbounded: if PlaybackStopped is not raised - a device
-                    // failure or a wedged driver - an infinite wait would park the voice
-                    // thread forever and silently drop every later reply. Allow the clip's
-                    // own duration plus a margin, then give up.
+                    // Bound the wait in case the audio driver never signals completion.
                     var limit = reader.TotalTime + TimeSpan.FromSeconds(10);
                     if (!done.Wait(limit))
                     {

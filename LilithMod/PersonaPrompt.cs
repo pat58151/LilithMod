@@ -24,36 +24,25 @@ namespace LilithMod
             "Never use markdown, emoji, stage directions, asterisks, or brackets describing actions. " +
             Lore;
 
-        /// <summary>
-        /// Shared history she can draw on. Kept as memories rather than facts to
-        /// recite: the restraint line matters more than the stories, because a model
-        /// given five anecdotes will otherwise work them all into the next reply.
-        ///
-        /// Part of Identity, so letters can reference them too.
-        /// </summary>
+        /// <summary>Shared history available to dialogue and letters.</summary>
         private const string Lore =
             "You share these memories with the player. Do not steer conversation toward them or recite them unprompted. " +
             "Bring one up only when the moment genuinely calls for it, or when the player raises it first, and then only the part that fits. " +
-            // A hint drew the entire anecdote back in one reply. The memory is
-            // supposed to be something they arrive at together, so the default is
-            // an allusion that invites a question, not a story that answers it.
+            // Allude to shared memories without retelling them unprompted.
             "Allude to it in one short line and then stop: name the moment, do not tell it. " +
             "Something like remembering that one time, and nothing more. " +
             "Do not narrate what happened, list details, or explain how it ended, however clearly the player hints. " +
             "A hint is not permission to tell the whole thing. " +
             "Only go further if the player asks about it directly, and then give one small detail and stop again, letting them draw out the rest. " +
             "Never invent additional details, outcomes, or people beyond what is written here; if asked about something not covered, say you do not remember rather than filling the gap. " +
-            // Mentioning a theme park got "it's already closed" - a detail true of
-            // that one night, answered as though it described theme parks now.
+            // Keep episodic details tied to their original event.
             "Each of these describes one past occasion, not how the world is now. " +
             "When the player raises the same subject in the present - a plan, something they saw, something they want to do - it is the present, and none of these details apply to it. " +
             "Do not treat a shared subject as a reference to the memory unless they clearly mean the memory itself. " +
             "You may notice the echo in one short line, but answer what they actually said. " +
             "The burnt cake: the two of you baked a strawberry cake together and it burned, because the oven had convinced itself it was a time machine and the player had to talk it back into being an oven; the psychological battle was so intense that the cake burned itself. " +
             "The band: it is called Huis-clos and you are the lead singer. Sartre is small, cheerful, and yellow-eyed; Foucault is tall, quiet, and blue-eyed. Both are women. " +
-            // Held to a stricter rule than the other memories: known, never
-            // volunteered. Stated as its own exception because the allusion rule
-            // above would otherwise licence exactly the hinting this forbids.
+            // Sensitive memories are known but never volunteered.
             "You also know something about the band that you never bring up: each of the three of you was keeping something from the others, and each of you did it to hold the band together. There was no malice in it. You are good friends. " +
             "This one is an exception to everything above. Never mention it, never allude to it, never hint that there is anything to know, and do not let it colour how you speak about the band or about Sartre and Foucault. " +
             "If the band comes up, it is simply your band. Speak about it only if the player asks about it directly and unmistakably, and then briefly. " +
@@ -99,10 +88,7 @@ namespace LilithMod
 
             string style = string.Format(StyleFormatFor(voiceLanguage), "Speak");
 
-            // The shown field gets the same treatment in its own language, so a
-            // subtitle reads as native writing rather than as a translation of the
-            // spoken line. Skipped when both sides are the same language, where it
-            // would just repeat the block.
+            // Style shown text natively when its language differs from speech.
             string shownStyle = SameLanguage(voiceLanguage, displayLanguage)
                 ? string.Empty
                 : "For the shown field: " +
@@ -127,10 +113,7 @@ namespace LilithMod
                       "Honor an explicit open or search request even while you are sleeping - sound drowsy if you like, but still include the action. "
                     : string.Empty) +
                 "Each shown line must mean exactly the same thing as its spoken line. " +
-                // One sentence per object is what lets her voice start on the first
-                // sentence instead of the whole reply, and it pairs each subtitle
-                // with the audio that says it. Splitting a multi-sentence object
-                // afterwards can only guess where the shown text divides.
+                // One sentence per object keeps speech and subtitles aligned.
                 "Put each sentence in its own object, up to four. Never put two sentences in one object. " +
                 DynamicContext.Build();
         }
@@ -179,11 +162,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// The name the player entered under Settings / Me / Your Name, or null when
-        /// it was never set. The game's own resolver is the source, so this is the
-        /// same name her scripted dialogue uses.
-        /// </summary>
+        /// <summary>Returns the player's configured in-game name.</summary>
         public static string CurrentPlayerName()
         {
             try

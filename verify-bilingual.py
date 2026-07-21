@@ -26,9 +26,7 @@ def check(condition, message):
 
 # -- 1. Build -----------------------------------------------------------------
 proj = os.path.join(MOD_DIR, "LilithMod.csproj")
-# Build somewhere harmless. The csproj's OutputPath is the live plugin folder,
-# so a plain build deploys - which locks against a running game and made this
-# suite impossible to run at the moment it was most useful.
+# Build outside the live plugin folder.
 r = subprocess.run(
     [DOTNET, "build", proj, "-c", "Release",
      "-p:OutputPath=" + os.path.join(ROOT, "build-test") + os.sep],
@@ -42,8 +40,7 @@ if r.returncode != 0:
     sys.exit(1)
 print("[verify-bilingual] Build succeeded")
 
-# Exercise the memory store itself in an isolated output folder. Source-shape
-# assertions cannot catch broken caps, duplicate exclusion, or backup recovery.
+# Exercise memory behavior in an isolated output folder.
 memory_harness = os.path.join(ROOT, "tests", "MemoryStoreHarness", "MemoryStoreHarness.csproj")
 r = subprocess.run(
     [DOTNET, "run", "--project", memory_harness, "-c", "Release"],
@@ -108,9 +105,7 @@ check("VoiceFailureQueue" in speech and "VoiceFailureQueue" in chat,
 check("CancelCurrent" in speech and "CancelCurrent" in chat,
       "A new reply must abandon the previous reply's queued sentences")
 
-# -- 4. The overlap, which is the whole point of the change -------------------
-# Synthesis of the next sentence must be started BEFORE PlaySync blocks on the
-# current one; if it is started after, there is no overlap at all.
+# -- 4. Synthesis and playback overlap ----------------------------------------
 check("Task.Run" in speech,
       "The next sentence must be synthesised on a task so it overlaps playback")
 if "Task.Run" in speech and "PlaySync" in speech:
@@ -148,14 +143,10 @@ check("2951001" in game_voice and "2951002" in game_voice and "_alarmDialogueUnt
 check("nameof(AudioManager.PlayVoice)" in integrations and
       "new[] { typeof(string), typeof(bool) }" in integrations,
       "Both native PlayVoice overloads must be suppressed during replacement")
-# The bubble and the audio reach the player by different routes. Gating one but
-# not the other yielded the game's Chinese voice under no subtitle at all, so
-# assert the single shared predicate rather than either call site.
+# Bubble and audio routes must share one gate.
 check("HoldingForSynthesis" in game_voice and "EverAvailable" in game_voice,
       "The synthesis grace window must be one predicate in GameVoiceCoordinator")
-# The Update() probe cannot run before the first frame, which is when the
-# EnterGame greeting fires. Availability has to be establishable off that loop
-# or the opening line keeps the game's own Chinese voice on every launch.
+# Voice availability must be known before the first-frame greeting.
 check("NoteServiceAnswered" in voice_monitor and "NoteServiceAnswered" in speech,
       "A successful warm-up must mark the service available, not wait for the probe")
 check(len(re.findall(r"return AllowNativeVoice\(\);", integrations)) >= 3 and
@@ -216,7 +207,7 @@ check("Path.GetFileName(executable)" in foreground and '"app:" + executableName'
       "Unknown foreground applications must fall back to their executable filename")
 check('processName.Equals("Code"' in foreground and "Visual Studio Code" in foreground,
       "VS Code must be reported by its friendly name instead of Code.exe")
-check("GetWindowText" not in foreground and "Window titles are never read" in foreground,
+check("GetWindowText" not in foreground and "MainWindowTitle" not in foreground,
       "Foreground awareness must never inspect sensitive window, channel, or document titles")
 check("ModInputActive" in foreground and "__keep_previous__" in foreground and
       "ModInputActive" in window_focus,
@@ -267,9 +258,7 @@ check("InitializeAsync" in chat and "LiveInformationService" in chat,
 check(not os.path.exists(os.path.join(MOD_DIR, "AnthropicClient.cs")) and
       "CfgAnthropic" not in plugin and "Claude API key" not in plugin,
       "Anthropic and Claude dependencies must be removed")
-# Tolerates wrapping and extra arguments: BuildLetter grew a loveLetter
-# parameter and wrapped across two lines, which failed a literal-substring check
-# while the code was correct. What matters is which language is passed.
+# Check the language argument without depending on formatting.
 check(re.search(r"BuildLetter\(\s*PersonaPrompt\.CurrentDisplayLanguage\(\)", chat) and
       "current game display language" in persona and
       "Use only the current game display language" in chat and
@@ -319,8 +308,7 @@ check("trigger.exists()" in ptt and "--trigger" in ptt and "--trigger" in launch
 check("WindowFocus.IsKeyDown(_vkPushToTalk)" in chat and "StartListening" in chat and
       "StopListening" in chat,
       "The speech key must toggle listening on its rising edge")
-# Asserts the mechanism and a sane bound, not the exact tuning value. Pinning the
-# literal made retuning the timeout fail a check named for the behaviour.
+# Check bounded playback without pinning its tuning value.
 _silence = re.search(r"^SILENCE_SECONDS = ([\d.]+)", ptt, re.M)
 check(_silence is not None and 0.5 <= float(_silence.group(1)) <= 5.0 and
       "silent_for >= silence_limit" in ptt and "energy_threshold" in ptt,
@@ -396,9 +384,7 @@ check("StartCountdown((float)seconds, false)" in chat and
       "TryApplyImmediateNativeAction" in chat and "TryParseDuration" in chat and
       "TryParseAlarmClock" in chat,
       "Native English timer confirmation must stay muted and cancellation must be immediate")
-# Checks the property, not the call's formatting: whatever the folder labels are
-# set to, in every language, must break over two lines. A literal-match version of
-# this broke the moment the labels became a per-language expression.
+# Check wrapped folder labels without depending on call formatting.
 def _folder_label_args(field):
     match = re.search(r"SetWrappedLabel\(" + field + r",(.*?)\);", settings, re.S)
     return re.findall(r'"((?:[^"\\]|\\.)*)"', match.group(1)) if match else []
@@ -409,29 +395,23 @@ check(len(_voice_labels) >= 3 and all("\\n" in v for v in _voice_labels) and
       len(_speech_labels) >= 3 and all("\\n" in v for v in _speech_labels),
       "The folder rows must be labelled over two lines in every language")
 
-# Separate concern, separate check: the native synthesis row is one line and must
-# not wrap. Bundling this into the folder-label check above made a rename there
-# look like a labelling regression here.
+# The native synthesis row remains single-line.
 check(re.search(r"_synthesisLabels\[i\]\.enableWordWrapping = false", settings)
       is not None,
       "The vocal synthesis row must not word-wrap")
 
-# Relabelled by this mod with its localiser stripped, so only this mod can
-# translate it - the same trap as the cloned rows.
+# The mod owns localization after replacing the native label.
 check(re.search(r"ApplySynthesisLabel\(language\)", settings) is not None and
       "音声合成" in settings,
       "The vocal synthesis row must follow the game's UI language")
 
-# The rows this mod adds are clones with their localiser stripped, so nothing but
-# this refresh will ever translate them.
-# TextVariableResolver, not PersonaPrompt: the latter reports her subtitle
-# language, which voice-config.ini pins independently of the game's UI language.
+# Cloned rows use the game UI language, not the configured subtitle language.
 check("RefreshLabels()" in settings and "_labelLanguage" in settings and
       re.search(r"UiLanguage\(\).*?TextVariableResolver\.CurrentLanguage\(\)",
                 settings, re.S) is not None,
       "Added settings rows must follow the game's own UI language at runtime")
 
-# Deliberate exception, and easy to 'fix' by mistake later.
+# Help intentionally stays in English.
 check(re.search(r'SetWrappedLabel\(_helpLabel,\s*"<u>Help</u>"\)', settings) is not None,
       "The Help label stays English; it reads as itself in every shipped language")
 check("NoteJournal" in chat and "notes.json" in note_journal and
@@ -484,9 +464,7 @@ check(os.path.exists(os.path.join(out_dir, "voice-setup", "README.txt")) and
       os.path.exists(os.path.join(out_dir, "voice-setup", "voice-config.example.ini")),
       "Voice setup README/config were not deployed")
 
-# -- Invariants inherited from verify-step3.py and verify-voice.py -------------
-# Those two scripts were folded into this one. They duplicated the build and the
-# NAudio check already here; what follows is the coverage that was theirs alone.
+# -- Voice and interaction invariants -----------------------------------------
 check("GetAsyncKeyState" in chat or "GetAsyncKeyState" in window_focus,
       "Hotkeys must poll Win32 directly - this game's window delivers no Unity "
       "keyboard input, so Input.GetKeyDown silently never fires")
@@ -506,10 +484,7 @@ check("WarmUpSentences" in speech,
       "Warm-up sentences are gone - first synthesis would take the cold-start hit, "
       "and NoteServiceAnswered would never fire early")
 
-# -- An interaction reply waits for her to stop talking -----------------------
-# _currentRequest only covers the API call, which finishes seconds before the
-# audio does. Without a playback gate the interaction reply fires mid-sentence
-# and CancelCurrent drops the rest of the previous one.
+# -- Interaction replies wait for playback -----------------------------------
 check("SpeechStillFinishing" in chat and "InteractionAfterSpeechSeconds" in chat,
       "An interaction reply must wait for playback to finish, then a beat, rather "
       "than cutting off the reply already being spoken")
@@ -517,8 +492,7 @@ check("_pendingUserMessage" in chat and "TrySendQueuedUserMessage" in chat,
       "A typed message must queue behind her current reply instead of cancelling it")
 check("QueuedMessageMaxWaitSeconds" in chat,
       "A queued message needs a ceiling, or a stuck playback flag swallows it forever")
-# All three routes that can start a reply - touch, typing, ambient - must wait
-# on the same predicate. Any one of them missing it cancels her mid-sentence.
+# Touch, typed, and ambient replies share the playback gate.
 check(len(re.findall(r"SpeechStillFinishing", chat)) >= 4,
       "Every path that starts a reply must wait on SpeechStillFinishing, including "
       "the ambient remark")
@@ -528,11 +502,7 @@ check("if (!ambient) ScheduleNextAmbient();" in chat,
 check("_speechEndedAt = Time.unscaledTime;" in chat,
       "The end of playback must be recorded, or the post-speech delay has no anchor")
 
-# -- The distribution build must not replace dialogue it cannot translate -----
-# Release builds omit the game's script for licensing. Without this the
-# replacement path still ran, fell back to the Chinese source string and fed it
-# to the Japanese voice - broken for every stranger, and invisible here, because
-# a local build always has the catalogue.
+# -- Distribution builds require translated dialogue -------------------------
 catalog = read(MOD_DIR, "DialogueTextCatalog.cs")
 check("internal static bool Available" in catalog,
       "DialogueTextCatalog must expose whether a catalogue exists at all")
@@ -541,21 +511,14 @@ check("DialogueTextCatalog.Available" in integrations,
       "the bubble gate and the audio prefixes turn off together")
 check("DialogueTextCatalog.Available" in game_voice,
       "A line must not be held for synthesis that cannot be translated")
-# node.text is the game's own string: Chinese for scripted lines, the UI
-# language for ones built at runtime with lineId 0. Falling back to it fed
-# English to the Japanese voice and she read it aloud.
+# Never send untranslated node text to Japanese synthesis.
 check("text = node.text;" not in game_voice,
       "Native dialogue must never fall back to node.text for synthesis; without a "
       "catalogue entry the original voice has to be kept instead")
-# Declining to replace a line and suppressing its audio anyway leaves it silent.
-# The bubble gate and the audio prefixes have to agree, as they must for the
-# grace window.
+# Declined replacement must preserve native audio.
 check("NativeAudioAllowed" in game_voice and "NativeAudioAllowed" in integrations,
       "A line handed back unreplaced must keep its own audio, or it plays silently")
-# Cached audio needs no service: the language switch is a no-op when the weights
-# already match and the rest is a file read. Gating replacement on the service
-# alone left 1800 cached lines unusable while it started, which is what made the
-# first line of a session play in the game's own Chinese.
+# Cached audio remains available while the synthesis service starts.
 check("CacheReplacementPossible" in game_voice and "IsCached" in tts and
       "IsCached" in speech and "cachedOnly" in game_voice,
       "A line whose audio is already cached must be replaceable while synthesis "
@@ -563,8 +526,7 @@ check("CacheReplacementPossible" in game_voice and "IsCached" in tts and
 check("LanguageIsCurrent" in switcher and "LanguageIsCurrent" in tts,
       "A cache hit must confirm the running weights match the language, or she "
       "speaks cached audio in the wrong voice")
-# The bubble gate and the four audio prefixes have to agree, and in the cached
-# case the flag they normally read is false - so the decision is recorded instead.
+# Bubble and native audio callbacks share the cached-replacement decision.
 check("NativeAudioSuppressed" in game_voice and "NativeAudioSuppressed" in integrations,
       "A cached replacement must suppress the game's own audio, or both play at once")
 check("SynthVoiceSelected" in chat and chat.count("SynthVoiceSelected") >= 3,
@@ -575,8 +537,7 @@ check("StopSynthPlaybackForNativeVoice" in settings and "CancelCurrent(true)" in
 check("PlaybackActive" in speech and "PlaybackActive" in game_voice and
       "SuppressNativeAudioForThisLine();" in game_voice,
       "Native Chinese audio must remain suppressed for the full active synth clip")
-# Runtime-built lines carry no id, so the catalogue cannot reach them. Their
-# Japanese is fetched once and kept, never awaited on the dialogue path.
+# Runtime dialogue translation is cached asynchronously.
 dynamic_cache = read(MOD_DIR, "DynamicLineCache.cs")
 check(dynamic_cache and "TranslateLineToJapaneseAsync" in chat,
       "Runtime-built dialogue needs a Japanese translation path, or it is silent")
@@ -584,9 +545,7 @@ check("DynamicLineCache.TryGet" in game_voice and "RequestTranslation" in game_v
       "The dialogue path must use the cache and request a fill on a miss")
 check("InFlight" in dynamic_cache,
       "A repeating line must not queue one translation request per occurrence")
-# A held native cue that is dropped rather than routed leaks the coordinator's
-# pending entry ("N still held" forever) and leaves that bubble suppressed with
-# no re-show - the long-standing stuck-bubble fault.
+# Cancelled native cues must return to the coordinator.
 native_cue = read(MOD_DIR, "NativeDialogueCue.cs")
 check("Cancelled" in native_cue and "Cancel()" in native_cue,
       "A native cue must be cancellable, so a superseded line is neither re-shown "
@@ -598,9 +557,7 @@ check("_latestNodeForBubble" in game_voice,
       "A held line superseded before its audio arrived must not be re-shown over "
       "the newer one")
 
-# -- A long reply is split before it is queued --------------------------------
-# Synthesis returns one WAV for whatever text it is handed, so an unsplit long
-# line means the player hears nothing until the entire reply has been generated.
+# -- Long replies are split before synthesis ---------------------------------
 chunker = read(MOD_DIR, "UtteranceChunker.cs")
 check(chunker, "UtteranceChunker.cs is missing; long replies would be one silence")
 check("UtteranceChunker.Chunk" in chat,
@@ -619,9 +576,7 @@ check("CjkWeight" in chunker,
 check("SuppressSubtitle" in chunker,
       "When the shown text will not split, later chunks must run silent rather "
       "than repeat the whole subtitle under every piece")
-# Grouping unequal sentence counts proportionally kept the pieces in order but
-# could still put a subtitle over the audio for the next one - reported as the
-# text box and the voice not matching.
+# Unequal bilingual sentence counts must not misalign subtitles.
 check("shown.Count == spoken.Count" in chunker,
       "The bubble may only take turns when spoken and shown split into the SAME "
       "number of sentences; anything else pairs text with the wrong audio")
@@ -630,21 +585,16 @@ check("Put each sentence in its own object" in persona,
       "multi-sentence object afterwards can only guess where the shown text divides")
 check("A hint is not permission to tell the whole thing" in persona,
       "A hinted memory must draw an allusion, not the whole anecdote")
-# "The theme park is closed" was true of that one night and got answered as
-# though it described theme parks now.
+# Episodic events must not become permanent facts.
 check("describes one past occasion, not how the world is now" in persona,
       "A memory's details must not be carried into a present-tense mention of the "
       "same subject")
-# Known but never volunteered - a stricter tier than the other memories, which
-# are allowed the allusion this one forbids.
+# Sensitive memories are never volunteered.
 check("This one is an exception to everything above" in persona,
       "The band's hidden layer must be exempt from the allusion rule, or the "
       "restraint above licences the hinting it is supposed to forbid")
 
-# -- The weather feature discloses what it contacts ---------------------------
-# Asking about the weather sends the player's IP to a third party. That is a
-# reasonable default but not an obvious one, so every language's help must say
-# so, and the config escape hatch must exist to make the disclosure actionable.
+# -- Weather privacy disclosure ----------------------------------------------
 for help_file in ("OVERVIEW.txt", "OVERVIEW.ja.txt", "OVERVIEW.zh.txt"):
     body = read(MOD_DIR, "help", help_file)
     check(body and "ip-api.com" in body and "open-meteo.com" in body,

@@ -3,19 +3,10 @@ using System.Collections.Generic;
 
 namespace LilithMod
 {
-    /// <summary>
-    /// Splits a long reply line into several shorter ones. Synthesis returns a
-    /// single WAV for whatever text it is given, so a long line means the player
-    /// waits through the whole reply before hearing any of it. Chunking makes the
-    /// wait proportional to the FIRST piece: the queue overlaps synthesis of N+1
-    /// with playback of N, so the rest arrive while she is already speaking, and
-    /// the bubble takes a turn per piece.
-    /// </summary>
+    /// <summary>Splits replies for lower-latency synthesis and aligned subtitles.</summary>
     internal static class UtteranceChunker
     {
-        // Thresholds are weighted, not raw character counts: one kana or han
-        // character is roughly two Latin characters' worth of speech, so a plain
-        // Length test splits English far too eagerly and Japanese almost never.
+        // Weighted lengths keep Latin and CJK splitting comparable.
         private const int CjkWeight = 2;
         // Below this the line already synthesises fast enough that splitting only
         // adds request overhead and chops her delivery into fragments.
@@ -28,12 +19,7 @@ namespace LilithMod
         private const int SoftTargetWeight = 50;
         private const int MaxChunks = 4;
 
-        /// <summary>
-        /// One utterance in, one or more out. EndOfReply and the native cue are
-        /// deliberately not carried over: the caller re-applies EndOfReply to the
-        /// last piece, and native game lines are never chunked (their cue is a
-        /// one-per-line handshake with the coordinator).
-        /// </summary>
+        /// <summary>Splits one utterance into synthesis-ready pieces.</summary>
         public static List<Utterance> Chunk(Utterance source)
         {
             var single = new List<Utterance> { source };
@@ -47,19 +33,14 @@ namespace LilithMod
 
             List<string> shown = Split(source.EnText ?? string.Empty);
 
-            // The bubble is only split alongside the audio when the two sides agree
-            // sentence for sentence. Grouping unequal counts proportionally read as
-            // text and voice not matching: the pieces stayed in order, but a
-            // subtitle could sit over audio that said the next thing.
+            // Split subtitles only when both languages have matching sentence counts.
             bool paired = shown.Count == spoken.Count;
 
             int count = Math.Min(spoken.Count, MaxChunks);
             if (count < 2) return single;
 
             List<string> spokenParts = Regroup(spoken, count);
-            // Unequal sides still get the latency win, just without the bubble
-            // taking turns: the reply is shown once against the first piece and
-            // the rest run silent, which is stale but never wrong.
+            // Unequal sides keep one subtitle while audio remains chunked.
             List<string> shownParts = paired ? Regroup(shown, count) : null;
 
             var result = new List<Utterance>(count);
@@ -77,11 +58,7 @@ namespace LilithMod
             return result;
         }
 
-        /// <summary>
-        /// Splits on sentence ends. A run of terminators is one boundary, and an
-        /// ellipsis is a pause rather than an end - it only closes a piece once
-        /// the piece is already substantial.
-        /// </summary>
+        /// <summary>Splits at sentence endings while preserving short ellipses.</summary>
         private static List<string> Split(string text)
         {
             var parts = new List<string>();
@@ -145,11 +122,7 @@ namespace LilithMod
             return merged;
         }
 
-        /// <summary>
-        /// Contiguous, near-even grouping into exactly <paramref name="count"/>
-        /// pieces. Contiguity is the point: reordering would put a subtitle over
-        /// the wrong audio.
-        /// </summary>
+        /// <summary>Groups contiguous sentences into near-even pieces.</summary>
         private static List<string> Regroup(List<string> parts, int count)
         {
             var result = new List<string>(count);

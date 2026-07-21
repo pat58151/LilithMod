@@ -6,11 +6,7 @@ using Newtonsoft.Json;
 
 namespace LilithMod
 {
-    /// <summary>
-    /// Recent conversations and interactions stay in separate rolling windows.
-    /// Durable memory separates sourced episodes from replaceable semantic facts.
-    /// An internal buffer feeds both note writing and periodic consolidation.
-    /// </summary>
+    /// <summary>Stores recent context, episodes, and stable facts.</summary>
     internal static class MemoryStore
     {
         private const int MaxConversations = 8;
@@ -128,11 +124,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// Reads either shape. Before the rings were split the file was a bare array
-        /// of items; those are sorted into the new lists by their Kind rather than
-        /// discarded, so an existing install keeps what she remembered.
-        /// </summary>
+        /// <summary>Loads current and legacy memory formats.</summary>
         private static void Load(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return;
@@ -205,10 +197,7 @@ namespace LilithMod
             Add(_state.Interactions, MaxInteractions, "interaction", Compact(kind, 120));
         }
 
-        /// <summary>
-        /// Keeps what a note was about, once the note itself is written. This is the
-        /// only thing that survives past the rolling windows above.
-        /// </summary>
+        /// <summary>Promotes a note summary to long-term memory.</summary>
         public static void RecordLongTerm(string summary)
         {
             RecordEpisode(new EpisodeData { Summary = summary }, new List<string>());
@@ -281,8 +270,7 @@ namespace LilithMod
                     }
                     else
                     {
-                        // A stable key is an update slot. Newer information replaces an
-                        // older value instead of leaving contradictory facts in recall.
+                        // Stable keys replace outdated facts.
                         existing.AtUtc = DateTime.UtcNow;
                         existing.Statement = Compact(input.Statement, 300);
                         existing.Confidence = Clamp01(input.Confidence);
@@ -296,11 +284,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// The block appended to the system prompt. The long-term section carries its
-        /// own restraint instruction: without one she opens every conversation by
-        /// reciting what she remembers, which reads as a database, not a person.
-        /// </summary>
+        /// <summary>Builds restrained, query-relevant memory context.</summary>
         public static string Context(int conversationsAlreadyInHistory, string currentMessage)
         {
             lock (Gate)
@@ -372,10 +356,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// What a note is written from: talking only. Pats are not what a keepsake is
-        /// supposed to be about, and they used to crowd out the conversations here.
-        /// </summary>
+        /// <summary>Returns conversation-only context for notes.</summary>
         public static string QualifyingConversationContext(DateTime cutoffUtc)
         {
             return QualifyingConversationSnapshot(cutoffUtc).Context;

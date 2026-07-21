@@ -11,10 +11,7 @@ using Newtonsoft.Json.Linq;
 
 namespace LilithMod
 {
-    /// <summary>
-    /// Talks to the local GPT-SoVITS HTTP service at the configured endpoint.
-    /// Uses a single static HttpClient; all methods are thread-safe.
-    /// </summary>
+    /// <summary>Thread-safe client for the local GPT-SoVITS service.</summary>
     public class TtsClient : IDisposable
     {
         private readonly HttpClient _httpClient;
@@ -51,10 +48,7 @@ namespace LilithMod
             _httpClient.Timeout = TimeSpan.FromSeconds(VoiceConfig.TimeoutSeconds);
         }
 
-        /// <summary>
-        /// POST the text to the TTS endpoint and return the synthesised WAV bytes.
-        /// Throws on any failure (network, timeout, HTTP error, unexpected content type).
-        /// </summary>
+        /// <summary>Synthesizes text and returns WAV data.</summary>
         public async Task<byte[]> SynthesizeAsync(string text, CancellationToken token = default)
         {
             return await SynthesizeAsync(text, null, token);
@@ -126,18 +120,10 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// A warm sentence synthesises in roughly 2-3 s. Past this it is slow
-        /// enough to hear, and the 2026-07-21 regression sat at 19-30 s.
-        /// </summary>
+        /// <summary>Threshold for slow-synthesis diagnostics.</summary>
         private const long SlowSynthesisMs = 8000;
 
-        /// <summary>
-        /// Records how long synthesis took. The slowdown that prompted this was
-        /// invisible until bad enough to hear, hours after the conditions causing it
-        /// were gone, and was never reproduced. A line per synthesis timestamps a
-        /// recurrence while it happens instead of reconstructing it afterwards.
-        /// </summary>
+        /// <summary>Records synthesis latency for diagnostics.</summary>
         private static void ReportLatency(string text, string language, int bytes, long ms)
         {
             string detail =
@@ -149,10 +135,7 @@ namespace LilithMod
                 LilithModPlugin.Logger.LogInfo($"[Voice] Synthesized in {detail}.");
         }
 
-        /// <summary>
-        /// Whether this line's audio is already on disk. Needs no service: the
-        /// language switch is a no-op when the weights match, the rest is a read.
-        /// </summary>
+        /// <summary>Checks the local audio cache without contacting the service.</summary>
         internal bool IsCached(string text, string language)
         {
             if (string.IsNullOrWhiteSpace(text)) return false;

@@ -6,15 +6,15 @@ namespace LilithMod
 {
     public static class WindowFocus
     {
-        // Edge-triggered state: maps virtual-key to whether the key was down on the previous call.
+        // Previous key state for edge detection.
         private static readonly Dictionary<int, bool> s_prevKeyDown = new Dictionary<int, bool>();
 
-        // Saved original extended window style, so EnableTyping() is idempotent.
+        // Original style restored when input closes.
         private static IntPtr? s_originalExStyle = null;
         private static bool s_chatInputActive;
         private static bool s_settingsInputActive;
         internal static bool ModInputActive => s_chatInputActive || s_settingsInputActive;
-        // Whether click-through is currently suspended, so Begin/End stay balanced.
+        // Tracks balanced click-through suspension.
         private static bool s_beganKeyboardInput;
 
         private const int GWL_EXSTYLE = -20;
@@ -24,10 +24,7 @@ namespace LilithMod
         private const uint SW_SHOW = 5;
         private const uint WS_EX_TRANSPARENT = 0x00000020;
 
-        /// <summary>
-        /// Returns true only on the frame the key transitions from up to down.
-        /// Uses Windows <c>GetAsyncKeyState</c> directly.
-        /// </summary>
+        /// <summary>Returns true on the up-to-down transition.</summary>
         public static bool IsKeyDown(int vKey)
         {
             try
@@ -38,7 +35,6 @@ namespace LilithMod
                 if (s_prevKeyDown.TryGetValue(vKey, out bool prev) && prev == isDown)
                     return false;
 
-                // Rising edge: not down last time, down now
                 bool pressed = !prev && isDown;
 
                 s_prevKeyDown[vKey] = isDown;
@@ -51,11 +47,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// Returns true for as long as the key is physically down, with no edge
-        /// detection. Push-to-talk needs the held state, not the transition, and it
-        /// must not disturb the edge history <see cref="IsKeyDown"/> keeps per key.
-        /// </summary>
+        /// <summary>Returns the physical key state without changing edge history.</summary>
         public static bool IsKeyHeld(int vKey)
         {
             try
@@ -69,10 +61,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// Converts a config string to a Win32 virtual-key code.
-        /// Supports A-Z, 0-9, and F1-F12 (case-insensitive). Returns -1 if unknown.
-        /// </summary>
+        /// <summary>Converts a supported key name to a Win32 virtual-key code.</summary>
         public static int VirtualKeyFromName(string name)
         {
             if (string.IsNullOrEmpty(name))
@@ -82,19 +71,16 @@ namespace LilithMod
             {
                 string upper = name.ToUpperInvariant().Trim();
 
-                // Single letter A-Z
                 if (upper.Length == 1 && upper[0] >= 'A' && upper[0] <= 'Z')
                 {
                     return 0x41 + (upper[0] - 'A');
                 }
 
-                // Single digit 0-9
                 if (upper.Length == 1 && upper[0] >= '0' && upper[0] <= '9')
                 {
                     return 0x30 + (upper[0] - '0');
                 }
 
-                // F1-F12
                 if (upper.StartsWith("F") && upper.Length >= 2 && upper.Length <= 3)
                 {
                     if (int.TryParse(upper.Substring(1), out int num) && num >= 1 && num <= 12)
@@ -112,26 +98,14 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// Removes <c>WS_EX_NOACTIVATE</c> and <c>WS_EX_TRANSPARENT</c> from the game window
-        /// so it can receive keystrokes. Idempotent: calling it multiple times does not
-        /// overwrite the saved original style.
-        /// </summary>
+        /// <summary>Makes the game window interactive and focusable.</summary>
         public static void EnableTyping()
         {
             s_chatInputActive = true;
             EnterKeyboardMode();
         }
 
-        /// <summary>
-        /// Makes the window able to receive keystrokes WITHOUT taking the mouse. Only
-        /// WS_EX_NOACTIVATE is cleared, since that is all keyboard delivery needs; the
-        /// game's per-pixel click-through is left alone, so the desktop stays usable
-        /// while the bar is open and clicks still land on the bar because it is opaque.
-        /// The settings path uses EnterInteractiveMode, which also clears
-        /// WS_EX_TRANSPARENT - doing that for chat made opening the bar capture the
-        /// entire screen.
-        /// </summary>
+        /// <summary>Enables keyboard input while preserving desktop click-through.</summary>
         private static void EnterKeyboardMode()
         {
             try
@@ -150,9 +124,7 @@ namespace LilithMod
                 long newStyle = current & ~(long)WS_EX_NOACTIVATE;
                 WindowsNativeAPI.SetWindowLongPtrSafe(hWnd, GWL_EXSTYLE, (IntPtr)newStyle);
 
-                // Same foreground rule as EnterInteractiveMode: Windows refuses
-                // SetForegroundWindow unless we own the foreground or sent the last
-                // input event, so synthesise an ALT tap to qualify.
+                // An ALT tap satisfies Windows foreground activation rules.
                 if (!WindowsNativeAPI.SetForegroundWindow(hWnd))
                 {
                     WindowsNativeAPI.keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
@@ -205,13 +177,7 @@ namespace LilithMod
 
                 WindowsNativeAPI.SetWindowLongPtrSafe(hWnd, GWL_EXSTYLE, (IntPtr)newStyle);
 
-                // Windows only grants SetForegroundWindow to a process that already owns
-                // the foreground or received the last input event. Once the pet loses
-                // foreground, plain SetForegroundWindow is refused (returns false) and the
-                // window can never take keyboard focus again - which is exactly why typing
-                // worked on the first open and never after. Synthesising an ALT keypress
-                // makes our process the last input source, lifting that restriction. This
-                // is the long-standing documented workaround for the rule.
+                // Windows may require recent input before granting foreground focus.
                 bool fg = true;
                 if (takeFocus)
                 {
@@ -247,10 +213,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// Restores the original extended window style that was saved by <c>EnableTyping</c>.
-        /// Safe to call when nothing was saved (no-op).
-        /// </summary>
+        /// <summary>Restores the saved window style.</summary>
         public static void RestoreWindow()
         {
             s_chatInputActive = false;
@@ -277,9 +240,7 @@ namespace LilithMod
 
                 WindowsNativeAPI.SetWindowLongPtrSafe(hWnd, GWL_EXSTYLE, s_originalExStyle.Value);
                 s_originalExStyle = null;
-                // Resume character click-through only after the last interactive panel
-                // closes, and only if it was ever suspended. The chat bar's keyboard
-                // mode never suspends it, so ending it here would be unbalanced.
+                // Resume click-through only when this class suspended it.
                 if (s_beganKeyboardInput)
                 {
                     TransparentWindowNew.EndKeyboardInput();
@@ -289,15 +250,12 @@ namespace LilithMod
             catch (Exception ex)
             {
                 LilithModPlugin.Logger.LogWarning($"[WindowFocus] RestoreWindow failed: {ex}");
-                // To avoid leaving the mod in an inconsistent state, discard the saved style on error.
+                // Do not reuse a style after a failed restore.
                 s_originalExStyle = null;
             }
         }
 
-        /// <summary>
-        /// Tries to get the game window handle, preferring <c>GetActiveWindow</c> with a fallback
-        /// to <c>FindWindow(null, "Lilith")</c>.
-        /// </summary>
+        /// <summary>Finds the active or named game window.</summary>
         private static IntPtr GetGameWindowHandle()
         {
             IntPtr hWnd = WindowsNativeAPI.GetActiveWindow();

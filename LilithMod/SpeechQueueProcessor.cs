@@ -7,11 +7,7 @@ using System.Threading.Tasks;
 
 namespace LilithMod
 {
-    /// <summary>
-    /// Owns the speech queue and a dedicated background thread that drains it.
-    /// Blocks on a warm-up signal before processing real utterances.
-    /// All synthesis and playback happen off the Unity main thread.
-    /// </summary>
+    /// <summary>Runs queued synthesis and playback outside Unity's main thread.</summary>
     public class SpeechQueueProcessor : IDisposable
     {
         private readonly ConcurrentQueue<Utterance> _queue = new ConcurrentQueue<Utterance>();
@@ -36,27 +32,16 @@ namespace LilithMod
             _playbackLockPath = Path.Combine(pluginDirectory, "voice-output.active");
         }
 
-        /// <summary>
-        /// Subtitles to show, in the order their audio plays. Written by the voice
-        /// thread, drained by LlmChatController on the Unity main thread.
-        /// </summary>
+        /// <summary>Audio-ordered subtitles for Unity's main thread.</summary>
         public ConcurrentQueue<SubtitleCue> SubtitleQueue { get; } = new ConcurrentQueue<SubtitleCue>();
         internal ConcurrentQueue<NativeDialogueCue> NativeDialogueQueue { get; } =
             new ConcurrentQueue<NativeDialogueCue>();
 
-        /// <summary>
-        /// Raised once when synthesis fails and the remaining sentences are abandoned,
-        /// so the main thread can fall back to showing the whole reply. Kept separate
-        /// from SubtitleQueue: a magic string in a queue of user-visible text is a
-        /// defect waiting to be displayed.
-        /// </summary>
+        /// <summary>Signals that the full reply should be shown after voice failure.</summary>
         public ConcurrentQueue<bool> VoiceFailureQueue { get; } = new ConcurrentQueue<bool>();
         public ConcurrentQueue<bool> ReplyFinishedQueue { get; } = new ConcurrentQueue<bool>();
 
-        /// <summary>
-        /// Whether this line's audio is already on disk. Called from the main
-        /// thread by the dialogue gate; it is a file existence check.
-        /// </summary>
+        /// <summary>Checks whether a line is cached.</summary>
         internal bool IsCached(string text, string language) => _ttsClient.IsCached(text, language);
 
         /// <summary>Thread-safe enqueue for the Unity main thread.</summary>
@@ -68,10 +53,7 @@ namespace LilithMod
             _queueAvailable.Set();
         }
 
-        /// <summary>
-        /// Convenience overload for the malformed-reply fallback, where there is no
-        /// Japanese/English split and the text is simply spoken as-is.
-        /// </summary>
+        /// <summary>Queues plain text when no bilingual pair is available.</summary>
         public void Enqueue(string text)
         {
             if (string.IsNullOrEmpty(text))
@@ -86,17 +68,11 @@ namespace LilithMod
             _queueAvailable.Set();
         }
 
-        /// <summary>
-        /// Abandon whatever is still queued for the previous reply. The sentence
-        /// already inside PlaySync is allowed to finish - cutting audio mid-word is
-        /// worse than a short overlap, and cancellation is observed between sentences.
-        /// </summary>
+        /// <summary>Cancels queued speech between sentences.</summary>
         public void CancelCurrent(bool stopPlayback = false)
         {
             if (stopPlayback) _voicePlayer.Stop();
-            // Cancelled, never discarded: a discarded cue leaked the coordinator's
-            // pending entry forever and left its bubble suppressed with no re-show.
-            // A cancelled one still flows through and clears that entry.
+            // Route cancelled native cues so the coordinator can release them.
             int held = NativeDialogueQueue.Count;
             for (int i = 0; i < held && NativeDialogueQueue.TryDequeue(out NativeDialogueCue heldCue); i++)
             {
@@ -121,11 +97,7 @@ namespace LilithMod
         private volatile bool _abandonRun;
         internal bool PlaybackActive { get; private set; }
 
-        /// <summary>
-        /// Hands a dropped utterance's cue back cancelled: pending entry cleared and
-        /// thread released, but the line is neither shown nor voiced. Every path that
-        /// discards an utterance must call this.
-        /// </summary>
+        /// <summary>Returns a cancelled native cue to the coordinator.</summary>
         private void AbandonNativeCue(Utterance utterance)
         {
             if (utterance?.NativeDialogue == null) return;
@@ -139,14 +111,10 @@ namespace LilithMod
             _warmUpComplete.Set();
         }
 
-        /// <summary>
-        /// Start the background worker thread and a separate warm-up thread.
-        /// Must be called once after construction.
-        /// </summary>
+        /// <summary>Starts the worker and warm-up threads.</summary>
         public void Start()
         {
-            // Start warm-up on its own short-lived thread. Kept in a field so Dispose
-            // can wait for it - otherwise it may call Set() on a disposed event.
+            // Keep the warm-up thread so Dispose can join it.
             _warmUpThread = new Thread(RunWarmUp)
             {
                 IsBackground = true,
@@ -193,8 +161,7 @@ namespace LilithMod
                 {
                     // Synthesize but discard the audio – we only want to warm the model.
                     _ttsClient.SynthesizeAsync(sentence, VoiceConfig.TextLang, CancellationToken.None).GetAwaiter().GetResult();
-                    // Proof the service is up, and it lands during Load() - early
-                    // enough for the greeting, which the Update() probe never was.
+                    // Warm-up success also confirms service availability.
                     VoiceServiceMonitor.NoteServiceAnswered();
                 }
                 catch (Exception ex)
@@ -211,12 +178,7 @@ namespace LilithMod
 
         // ---- Main processing loop -----------------------------------------
 
-        /// <summary>
-        /// Drains the queue one sentence at a time, overlapping synthesis with
-        /// playback: the next sentence is synthesised BEFORE PlaySync blocks on the
-        /// current one. Subtitles are enqueued immediately before their audio so the
-        /// two cannot drift apart.
-        /// </summary>
+        /// <summary>Overlaps synthesis with playback while preserving subtitle order.</summary>
         private void ProcessLoop()
         {
             // Block until warm-up completes.
@@ -276,10 +238,7 @@ namespace LilithMod
                     continue;
                 }
 
-                // A new reply arrived while this one was being synthesised. A native
-                // utterance abandoned here was in the worker's hands, not the queue,
-                // so CancelCurrent could not route its cue - do it now or the
-                // coordinator's pending entry leaks and the bubble stays suppressed.
+                // Return an in-flight native cue when a newer reply cancels it.
                 if (_abandonRun)
                 {
                     _abandonRun = false;
@@ -290,8 +249,7 @@ namespace LilithMod
                     continue;
                 }
 
-                // Start the next sentence BEFORE blocking on playback. This is the
-                // whole point: synthesis of N+1 runs while N is being heard.
+                // Synthesize the next sentence during current playback.
                 if (_queue.TryDequeue(out next))
                 {
                     var pending = next;
@@ -307,17 +265,13 @@ namespace LilithMod
                     nextSynth = null;
                 }
 
-                // Audio is ready. Hand its subtitle to Unity and wait for the bubble
-                // refresh before starting playback. This prevents early subtitles and
-                // makes the text and voice begin on the same main-thread frame.
+                // Wait for Unity to display the subtitle before playback.
                 SubtitleCue subtitleCue = null;
                 if (current.NativeDialogue != null)
                 {
                     NativeDialogueQueue.Enqueue(current.NativeDialogue);
                     current.NativeDialogue.WaitUntilDisplayed(_cts.Token);
-                    // The coordinator declined to re-show this line - superseded by a
-                    // newer one, or abandoned by a cancel. Its audio must not play
-                    // under whatever is on the bubble now.
+                    // Never play audio for a cancelled or superseded line.
                     if (current.NativeDialogue.Cancelled)
                         continue;
                 }
@@ -335,10 +289,7 @@ namespace LilithMod
                     }
                 }
 
-                // Cancellation may have removed the cue before Unity displayed it.
-                // Do not play orphaned audio under the next reply. current's cue, if
-                // any, already went through the coordinator above; only next's needs
-                // routing.
+                // Return the prefetched cue if cancellation removed it from display.
                 if (_abandonRun)
                 {
                     _abandonRun = false;

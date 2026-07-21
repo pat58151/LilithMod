@@ -9,21 +9,12 @@ namespace LilithMod
         private static GameVoiceCoordinator _instance;
         private static bool _allowOriginalShow;
 
-        /// <summary>
-        /// How long the game's own dialogue is held off after the mod speaks. The
-        /// mirror of NativeDialogueQuietSeconds, which holds the mod off after the
-        /// game speaks - shorter, because her reply is the one the player asked for.
-        /// </summary>
+        /// <summary>Quiet period for native dialogue after Lilith speaks.</summary>
         private const float NativeSuppressedAfterModSeconds = 4f;
 
         private static float _modSpokeAt = -600f;
 
-        /// <summary>
-        /// The gate's decision about the line it just saw. The four audio prefixes
-        /// fire separately and are told only a sound id, so they read this instead:
-        /// declined lines keep their audio, replaced ones lose it. Last one wins,
-        /// and it only has to outlast the gap between a bubble and its audio.
-        /// </summary>
+        /// <summary>How the next native audio callbacks should handle this line.</summary>
         private const float NativeAudioDecisionSeconds = 2f;
 
         private static float _nativeAudioDecisionAt = -600f;
@@ -34,10 +25,7 @@ namespace LilithMod
 
         internal static bool NativeAudioAllowed => DecisionFresh && _nativeAudioAllow;
 
-        /// <summary>
-        /// Set when a line is replaced from cache. The usual suppression rides on
-        /// VoiceReplacementEnabled, which is false in exactly that case.
-        /// </summary>
+        /// <summary>Whether the current native line is being replaced.</summary>
         internal static bool NativeAudioSuppressed => DecisionFresh && !_nativeAudioAllow;
 
         private static void AllowNativeAudioForThisLine()
@@ -52,27 +40,16 @@ namespace LilithMod
             _nativeAudioAllow = false;
         }
 
-        /// <summary>
-        /// How long to wait for synthesis before accepting it is not coming. Rarely
-        /// reached - warm-up marks it available during Load(). Overshooting drops
-        /// native lines that should have played.
-        /// </summary>
+        /// <summary>Maximum startup wait before native voice resumes.</summary>
         private const float StartupVoiceGraceSeconds = 15f;
 
-        /// <summary>
-        /// Longer when this process started the services itself: the model really is
-        /// loading from cold, rather than having been warm since login.
-        /// </summary>
+        /// <summary>Startup wait when the voice service is loading from cold.</summary>
         private const float ColdStartVoiceGraceSeconds = 30f;
 
         private static float VoiceGraceSeconds =>
             ServiceBootstrap.StartedServices ? ColdStartVoiceGraceSeconds : StartupVoiceGraceSeconds;
 
-        /// <summary>
-        /// Synthesis wanted, never answered yet, grace still open: drop the line
-        /// whole. Bubble and audio must both read this - they travel separately, and
-        /// gating one alone gave the game's Chinese voice under no subtitle.
-        /// </summary>
+        /// <summary>Holds both native text and audio while synthesis starts.</summary>
         internal static bool HoldingForSynthesis =>
             !_allowOriginalShow && !VoiceServiceMonitor.EverAvailable &&
             SynthesisPreferred() && DialogueTextCatalog.Available &&
@@ -85,10 +62,7 @@ namespace LilithMod
                    VoiceConfig.Enabled;
         }
 
-        /// <summary>
-        /// Everything replacement needs except a reachable service, which a cached
-        /// line never touches.
-        /// </summary>
+        /// <summary>Whether cached replacement is configured.</summary>
         private static bool CacheReplacementPossible()
         {
             return SynthesisPreferred() && DialogueTextCatalog.Available &&
@@ -96,11 +70,7 @@ namespace LilithMod
         }
         private readonly HashSet<long> _pendingNodes = new HashSet<long>();
 
-        /// <summary>
-        /// Newest node per bubble. A held cue that is no longer newest when its audio
-        /// arrives is stale - re-showing it put old text over the animation playing
-        /// now, which is what rapid touches produced.
-        /// </summary>
+        /// <summary>Newest dialogue node for each bubble.</summary>
         private readonly Dictionary<long, long> _latestNodeForBubble = new Dictionary<long, long>();
         private int _dynamicAlarmLine;
         private float _alarmDialogueUntil;
@@ -126,10 +96,6 @@ namespace LilithMod
             if (node != null && node.id == 9500000)
             {
                 _modSpokeAt = Time.unscaledTime;
-                // This was suspected dead, because no suppression had ever been
-                // logged in a session where she plainly spoke. Instrumenting it
-                // disproved that: the line fires on every reply, so the guard is
-                // live and the jumbled ordering had another cause.
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                     LilithModPlugin.Logger.LogInfo(
                         "[Voice] Mod reply bubble seen; native dialogue held off for " +
@@ -137,10 +103,7 @@ namespace LilithMod
                 return true;
             }
 
-            // Synthesis is wanted but has never answered this session. Bounded by the
-            // grace window so a machine with no synthesis at all still falls back to
-            // the native voice, which is the designed behaviour - this covers only
-            // "not up YET", never "not installed".
+            // Wait only while a configured service is still starting.
             if (node != null && bubble != null && HoldingForSynthesis)
             {
                 // Cached audio needs no service, so try that before dropping.
@@ -156,9 +119,7 @@ namespace LilithMod
                 return false;
             }
 
-            // Hold the game off briefly after she speaks, or it answers over the top
-            // of her reply. _allowOriginalShow is excluded: that is a line already
-            // synthesised and coming back to be shown.
+            // Do not let native dialogue overlap Lilith's reply.
             bool modAudioPlaying = LilithModPlugin.VoiceProcessor != null &&
                 LilithModPlugin.VoiceProcessor.PlaybackActive;
             if (node != null && bubble != null && !_allowOriginalShow &&
@@ -172,18 +133,12 @@ namespace LilithMod
                         "the mod spoke less than " +
                         $"{NativeSuppressedAfterModSeconds:0.#}s ago."));
                 }
-                // Dropped, not deferred: the game has no queue to hold it in, and a
-                // reaction shown four seconds late is worse than one not shown. The
-                // game already tore the previous bubble down before this gate ran,
-                // so if that bubble was her reply, put it back.
+                // Native dialogue has no deferred queue, so restore Lilith's bubble.
                 LlmChatController.RequestReplyBubbleRestore();
                 SuppressNativeAudioForThisLine();
                 return false;
             }
-            // Past every drop gate, so this node will reach the screen - either now
-            // or held until its audio. It supersedes anything still held on the same
-            // bubble. Re-shows are excluded: handing a line back must not mark the
-            // line itself stale.
+            // A new node supersedes older held nodes on the same bubble.
             if (!_allowOriginalShow && node != null && bubble != null && _instance != null)
                 _instance._latestNodeForBubble[bubble.Pointer.ToInt64()] = node.Pointer.ToInt64();
             // Service unreachable, but a cached line still plays.
@@ -197,9 +152,7 @@ namespace LilithMod
             if (_allowOriginalShow || !replacing ||
                 _instance == null || bubble == null || node == null)
             {
-                // Which early-out fired matters: a line that slips through here keeps
-                // the game's own voice, which is Chinese, and that is indistinguishable
-                // from a bug elsewhere unless the reason is recorded.
+                // Record why native voice was kept.
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                 {
                     string why =
@@ -221,14 +174,8 @@ namespace LilithMod
             return _instance.QueueNode(bubble, node);
         }
 
-        /// <summary>
-        /// Returns true to let the game show the line with its own voice, false when
-        /// the line has been held for replacement audio.
-        /// </summary>
-        /// <param name="cachedOnly">
-        /// Replace only from disk. Set when synthesis is unreachable, where a real
-        /// request would hang the line.
-        /// </param>
+        /// <summary>Queues replacement audio or allows the native line.</summary>
+        /// <param name="cachedOnly">Use only existing cached audio.</param>
         private bool QueueNode(DialogueBubbleUI bubble, DialogueNode node, bool cachedOnly = false)
         {
             long key = node.Pointer.ToInt64();
@@ -264,11 +211,7 @@ namespace LilithMod
                 else if (DialogueTextCatalog.TryGet(alarmLineId, subtitleLanguage, out string localized))
                     node.text = localized;
             }
-            // node.text is the game's own string - Chinese for scripted lines, the UI
-            // language for runtime ones. Feeding either to the Japanese voice made her
-            // read the wrong language aloud, so keep the original voice instead.
-            // Runtime lines carry no id, so the Japanese is fetched once and kept:
-            // silent the first time, spoken after. These repeat, so it converges fast.
+            // Runtime lines need a translated cache before Japanese synthesis.
             if (string.IsNullOrWhiteSpace(text) && !string.IsNullOrWhiteSpace(node.text))
             {
                 if (DynamicLineCache.TryGet(node.text, out string learned))
@@ -287,8 +230,7 @@ namespace LilithMod
                 return true;
             }
 
-            // Nothing cached and no service to synthesise it: keep the game's
-            // voice rather than hang on a request that cannot be served.
+            // Keep native voice when neither cache nor synthesis is available.
             if (cachedOnly && !LilithModPlugin.VoiceProcessor.IsCached(text, language))
             {
                 AllowNativeAudioForThisLine();
@@ -315,9 +257,7 @@ namespace LilithMod
                 LilithModPlugin.Logger.LogInfo(
                     $"[Voice] Holding line {node.lineId} until {language} audio is ready" +
                     (cachedOnly ? " (from cache; synthesis not reachable)." : "."));
-            // Holding this line leaves the bubble the game just tore down empty for
-            // the whole synthesis wait. If that bubble was her reply mid-playback,
-            // restore it; the held line takes the bubble back when its audio lands.
+            // Restore the previous reply while this line waits for audio.
             LlmChatController.RequestReplyBubbleRestore();
             return false;
         }
@@ -338,11 +278,7 @@ namespace LilithMod
                 }
                 if (stale)
                 {
-                    // Superseded or abandoned while it waited for audio. Not
-                    // re-shown - the newer line owns the bubble now. Cancel() keeps
-                    // the voice thread from playing its audio, MarkDisplayed()
-                    // releases that thread, and the pending entry above is already
-                    // cleared, so nothing leaks.
+                    // Release cancelled cues without showing or playing them.
                     cue.Cancel();
                     cue.MarkDisplayed();
                     if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
@@ -369,10 +305,7 @@ namespace LilithMod
                     cue.MarkDisplayed();
                     if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                     {
-                        // Pairs with the "Holding line" entry. A held line with no
-                        // matching re-show is a bubble that will never be handed back
-                        // to the game, which is the shape to look for when one sticks
-                        // on screen forever.
+                        // Pairs with the diagnostic entry created when the line was held.
                         LilithModPlugin.Logger.LogInfo(
                             $"[Voice] Re-showed line {(cue.Node == null ? -1 : cue.Node.lineId)} " +
                             $"after audio; {_pendingNodes.Count} still held.");

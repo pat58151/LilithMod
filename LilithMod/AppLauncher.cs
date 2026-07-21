@@ -7,12 +7,7 @@ using Microsoft.Win32;
 
 namespace LilithMod
 {
-    /// <summary>
-    /// Reads an allowed‑list file of sanctioned app names, resolves them to launch
-    /// targets, and launches them via <see cref="Process.Start"/> with
-    /// <c>UseShellExecute = true</c>. Consumers always see up‑to‑date names without
-    /// restart through a single lazy‑reload entry point.
-    /// </summary>
+    /// <summary>Launches apps from an editable allowlist.</summary>
     public static class AppLauncher
     {
         private static string _filePath;
@@ -20,16 +15,11 @@ namespace LilithMod
         private static Dictionary<string, string> _targets;
         private static List<string> _names;
 
-        /// <summary>
-        /// True when the config gate is enabled.
-        /// </summary>
+        /// <summary>Whether app launching is enabled.</summary>
         public static bool GateOpen =>
             LilithModPlugin.CfgAllowOpenApps != null && LilithModPlugin.CfgAllowOpenApps.Value;
 
-        /// <summary>
-        /// Attempts to open the app with the given canonical name.
-        /// Logs a warning and returns false if the name is not in the allowed list.
-        /// </summary>
+        /// <summary>Opens an allowed app by canonical name.</summary>
         public static bool TryOpen(string appName)
         {
             if (string.IsNullOrWhiteSpace(appName)) return false;
@@ -120,10 +110,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// Opens a Google results page in the user's default browser. The query is
-        /// URL-encoded and is never fetched or inspected by the mod.
-        /// </summary>
+        /// <summary>Opens an encoded Google query without reading its results.</summary>
         public static bool TrySearch(string query)
         {
             query = query?.Trim();
@@ -154,19 +141,14 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// Returns the current set of allowed app names (lowercased).
-        /// </summary>
+        /// <summary>Returns current allowed app names in lowercase.</summary>
         public static IReadOnlyList<string> GetAllowedNames()
         {
             EnsureLoaded();
             return _names.AsReadOnly();
         }
 
-        /// <summary>
-        /// Ensures the allowed‑list file exists (creates with defaults if missing)
-        /// and opens its directory via shell.
-        /// </summary>
+        /// <summary>Creates the allowlist if needed and opens its directory.</summary>
         public static void OpenAllowedList()
         {
             EnsureLoaded();
@@ -186,8 +168,7 @@ namespace LilithMod
                 }
                 else
                 {
-                    // Should not happen because EnsureLoaded creates the file,
-                    // but just in case, open the directory.
+                    // Fall back to the containing directory.
                     if (!string.IsNullOrEmpty(dir))
                     {
                         Process.Start(new ProcessStartInfo
@@ -254,8 +235,7 @@ browser = default
 
             _filePath = path;
             _lastWrite = currentWrite;
-            // Built locally and swapped in whole: the prompt builder reads these from
-            // the LLM background thread, so a reader must never see a half-filled list.
+            // Swap complete collections for lock-free background reads.
             var targets = new Dictionary<string, string>();
             var names = new List<string>();
 
@@ -301,10 +281,7 @@ browser = default
             _names = names;
         }
 
-        /// <summary>
-        /// Resolves the user's default browser executable via the Windows registry.
-        /// Returns null on failure.
-        /// </summary>
+        /// <summary>Resolves the default browser from the Windows registry.</summary>
         private static string ResolveDefaultBrowser()
         {
             try

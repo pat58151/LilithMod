@@ -1,24 +1,8 @@
-"""Speech-to-text listener for LilithMod.
+"""Local speech-to-text listener for LilithMod.
 
-The mod toggles listening with a key (default F8) by creating and deleting a
-trigger file. While that file exists this process records, streams interim
-transcripts back, and finalises the utterance after a fixed run of silence.
-
-The mod, not a wake model, decides when the microphone is open. That is why
-there is no wake word, no arm window, and no confidence gate here: the only
-judgement this process still makes is where the utterance *ends*, which is
-plain energy-based endpointing.
-
-Two recognition backends:
-
-* ``transformers`` runs Whisper through PyTorch, which on this machine means
-  ROCm on the Radeon GPU. This is the default and is much faster and more
-  accurate than the alternative.
-* ``faster-whisper`` runs on the CPU. Its CTranslate2 backend is CUDA-only and
-  has no ROCm build, so it cannot use this GPU at all - it is the fallback for
-  a machine without a working torch.
-
-Backends are imported lazily so each runtime only needs the one it uses.
+A trigger file controls recording. The listener streams partial transcripts,
+ends on detected silence, and supports PyTorch Whisper or faster-whisper.
+Backends are loaded only when selected.
 """
 
 from __future__ import annotations
@@ -45,10 +29,7 @@ MIN_SPEECH_SECONDS = 0.45        # total voiced audio required before decoding a
 SPEECH_PAD_SECONDS = 0.3         # keep this much either side of the voiced region
 SPEECH_PAD_FRAMES = int(SPEECH_PAD_SECONDS / FRAME_SECONDS)
 
-# Energy fallback only. These exist for a machine that cannot load Silero, and
-# they are the reason Silero is the default: an RMS threshold is meaningless
-# across different microphones and rooms, so any constant shipped here is wrong
-# for somebody. Measured on one machine, the room varied 20x between runs.
+# Energy fallback for systems that cannot load Silero.
 ENERGY_FLOOR = 90.0
 NOISE_MARGIN = 2.0
 CALIBRATION_SECONDS = 1.5
@@ -56,11 +37,7 @@ PARTIAL_MARKER = "__LILITH_PTT_PARTIAL__"
 HEARTBEAT_INTERVAL = 2.0         # seconds between liveness touches
 SUPPORTED_LANGUAGES = {"en", "ja", "zh"}
 
-# Whisper emits stock caption phrases when handed silence or noise - they are
-# frequent in its training captions, so near-empty audio decodes to one of these
-# rather than to nothing. Any of them appearing is evidence of hallucination, not
-# of speech, so they are dropped when the voiced audio was too short to contain
-# them. Compared after lowercasing and stripping punctuation.
+# Common Whisper hallucinations from silence and noise.
 HALLUCINATIONS = {
     "thank you", "thanks", "thank you very much", "thanks for watching",
     "thank you for watching", "thanks for watching!", "bye", "goodbye",
@@ -70,23 +47,11 @@ HALLUCINATIONS = {
     "はい", "え", "あの", "字幕", "谢谢观看", "谢谢大家", "好", "嗯",
     "请不吝点赞 订阅 转发 打赏支持明镜与点点栏目",
 }
-# Exact matches are rejected regardless of how long the audio was. Duration was
-# tried as the discriminator first and leaked: noise that sustained past the
-# limit still decoded to "Bye". A whole utterance that reduces to one stock word
-# is a mismatch whatever its length - real speech of that duration produces more
-# words than that. The cost is that a bare "okay" as an entire message is never
-# heard, which is a fair trade for never inventing one.
+# Exact matches are always rejected, including one-word acknowledgements.
 
 
 class SileroDetector:
-    """Neural speech/non-speech classifier.
-
-    The point of this over an energy threshold is that it needs no per-machine
-    tuning: it judges whether a frame contains speech, not whether it is louder
-    than some constant. A quiet speaker on a low-gain laptop microphone and a
-    loud one in a noisy room both work, which an RMS threshold cannot deliver
-    because the right constant differs per microphone and per room.
-    """
+    """Neural speech detector that avoids microphone-specific RMS tuning."""
 
     def __init__(self, threshold: float):
         import torch
@@ -100,8 +65,7 @@ class SileroDetector:
         return f"silero(threshold={self._threshold})"
 
     def reset(self) -> None:
-        # The model is recurrent, so state from the previous utterance would
-        # otherwise leak into the next one.
+        # Reset recurrent state between utterances.
         self._model.reset_states()
 
     def is_speech(self, frame: np.ndarray) -> bool:
@@ -128,13 +92,7 @@ class EnergyDetector:
 
 
 def measure_noise_floor(seconds: float = CALIBRATION_SECONDS) -> float:
-    """Sample the room so the voice threshold is relative to it.
-
-    A fixed threshold is the wrong shape for this: too high and quiet speech is
-    never voiced, too low and room tone counts as speech, which is what makes
-    Whisper decode silence into stock phrases. The 75th percentile ignores the
-    odd transient without chasing a single loud frame.
-    """
+    """Measure room noise for the energy-detector fallback."""
     frames = int(seconds * RATE / FRAME)
     captured = sd.rec(frames * FRAME, samplerate=RATE, channels=1, dtype="int16")
     sd.wait()
@@ -146,9 +104,7 @@ def measure_noise_floor(seconds: float = CALIBRATION_SECONDS) -> float:
     return float(np.percentile(energies, 75))
 
 
-# Whisper reliably lands on these instead of her name, most often when it opens
-# the sentence and has no context yet. Corrected only in first position: "release
-# the file" is a real thing to say, "Release, what time is it" is not.
+# Leading-name errors commonly produced by Whisper.
 NAME_CONFUSIONS = {
     "release", "relish", "relist", "leelith", "lilith's", "lilis", "lilies",
     "lily", "lilly", "lili", "lillie", "little", "elizabeth",
@@ -363,13 +319,10 @@ def main() -> None:
 
     output = Path(args.output)
     trigger = Path(args.trigger) if args.trigger else output.with_name("push-to-talk.active")
-    # Touched periodically so the mod can tell this process is alive and grey out
-    # the setting when it is not. A file rather than a port: everything else in
-    # this handoff is already files, and it survives the process being killed.
+    # File heartbeat used by the mod's availability check.
     heartbeat = trigger.with_name("push-to-talk.alive")
     silence_limit = max(0.5, args.silence)
-    # Floored above the trailing-silence window: giving up sooner than an utterance
-    # is allowed to end would cut off anyone who pauses before starting.
+    # Never give up before the silence endpoint can elapse.
     no_speech_limit = max(silence_limit, args.no_speech)
     language = args.language.strip()
     save_last = Path(args.save_last) if args.save_last else None
@@ -380,7 +333,7 @@ def main() -> None:
         asr = FasterWhisperBackend(args.whisper_model, language,
                                    args.compute_type, args.cpu_threads)
 
-    # Frames are 32 ms now, so hold the same few seconds of slack as before.
+    # Leave capture slack for decode stalls.
     audio_queue: queue.Queue[np.ndarray] = queue.Queue(maxsize=256)
 
     def callback(indata, frames, timing, status):
@@ -401,16 +354,11 @@ def main() -> None:
     next_partial_at = 0.0
     last_partial = ""
     current_language = language
-    # After finalising we must not immediately start a second utterance: the mod
-    # clears the trigger when it receives the transcript, so wait for that.
+    # Wait for the mod to clear the trigger after finalization.
     awaiting_reset = False
 
     def read_trigger_language() -> str:
-        """The mod writes the game's display language into the trigger file.
-
-        Read per utterance so changing the game's language takes effect on the
-        next thing said, with no restart.
-        """
+        """Read recognition language for the next utterance."""
         try:
             requested = trigger.read_text(encoding="utf-8").strip().lower()
         except OSError:
@@ -418,12 +366,7 @@ def main() -> None:
         return requested if requested in SUPPORTED_LANGUAGES else language
 
     def speech_region(frames: list[np.ndarray], flags: list[bool]) -> np.ndarray:
-        """Trim to the voiced span, padded.
-
-        Decoding a long buffer that is mostly silence is what invites the stock
-        caption phrases; giving Whisper only the part that has speech in it
-        removes most of the opportunity.
-        """
+        """Return the padded voiced span."""
         indices = [index for index, flag in enumerate(flags) if flag]
         if not indices:
             return np.concatenate(frames) if frames else np.zeros(0, dtype=np.int16)
@@ -431,10 +374,7 @@ def main() -> None:
         last = min(len(frames), indices[-1] + 1 + SPEECH_PAD_FRAMES)
         return np.concatenate(frames[first:last])
 
-    # Interim decoding runs on its own thread. Done inline it stalled the capture
-    # loop for the length of a decode (~0.4 s), so audio backed up and updates
-    # could only arrive every interval-plus-decode. The loop now just hands over a
-    # snapshot and keeps reading the microphone.
+    # Decode partials off the capture thread.
     partial_requests: queue.Queue = queue.Queue(maxsize=1)
     model_lock = threading.Lock()
     utterance_lock = threading.Lock()
@@ -465,8 +405,7 @@ def main() -> None:
 
             if normalise(text) in HALLUCINATIONS:
                 text = ""
-            # Re-check: the utterance may have ended while this was decoding, and a
-            # late partial would overwrite the final transcript with a worse one.
+            # Drop partials that finish after their utterance.
             if not text or text == last_sent or request_id != current_utterance_id():
                 continue
             last_sent = text
@@ -531,8 +470,7 @@ def main() -> None:
               f"lang={current_language}, {report_energy(energies)}): {text}", flush=True)
 
     asr.set_vocabulary(args.vocabulary)
-    # The first vocabulary entry is the canonical spelling of her name, used to
-    # repair the mishearings the bias alone does not catch.
+    # Use the first vocabulary entry as the canonical name.
     canonical_name = args.vocabulary.split(",")[0].strip()
 
     detector = None
@@ -553,8 +491,7 @@ def main() -> None:
                   f"{energy_threshold:.0f}.", flush=True)
         detector = EnergyDetector(energy_threshold)
 
-    # Whisper pads every input to the same 30 s window, so one warm-up decode
-    # covers the sequence length every later call will use.
+    # Warm the selected Whisper backend.
     asr.transcribe(np.zeros(RATE, dtype=np.int16))
     print(f"Speech listener ready. vad={detector.describe()} backend={asr.describe()} "
           f"model={args.whisper_model} language={language or 'auto'} "
@@ -603,9 +540,7 @@ def main() -> None:
                 continue
 
             if not on:
-                # Toggled off by hand: that is a cancel, not a submit. Report what
-                # was heard anyway - a cancel after speaking usually means the
-                # threshold never let the utterance end on its own.
+                # Manual toggle-off cancels the utterance.
                 listening = False
                 end_utterance()
                 print(f"Listening cancelled. voiced={sum(voiced) * FRAME_SECONDS:.2f}s "
@@ -629,21 +564,14 @@ def main() -> None:
 
             ended = had_speech and silent_for >= silence_limit
             over_cap = now - started_at >= MAX_SECONDS
-            # Keyed by mistake, or keyed and then not spoken into. Closing on its
-            # own beats leaving the microphone open and the chat bar waiting.
+            # Close an unused recording automatically.
             gave_up = not had_speech and now - started_at >= no_speech_limit
 
             if not ended and not over_cap and not gave_up:
-                # Interim text into the chat field, so the user can see they are
-                # being heard before the utterance ends. Greedy: these are
-                # thrown away as soon as the next one lands.
-                # Require real voiced audio, not just one spike, or the partial
-                # decodes near-silence and returns a stock caption phrase.
+                # Send partial text only after sustained speech.
                 if (speech_frames * FRAME_SECONDS >= MIN_SPEECH_SECONDS
                         and now >= next_partial_at):
-                    # Hand the snapshot to the worker and carry on reading the
-                    # microphone. Never block: if the worker is still busy, skip
-                    # this turn rather than queue audio that is already stale.
+                    # Skip partials instead of blocking microphone capture.
                     try:
                         partial_requests.put_nowait(
                             (speech_region(active, voiced), current_utterance_id()))

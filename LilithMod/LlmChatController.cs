@@ -23,12 +23,8 @@ using UnityEngine.UI;
 
 namespace LilithMod
 {
-    /// <summary>
-    /// Injectable MonoBehaviour that provides free-text LLM chat.
-    /// All UI, networking, and dialogue injection are handled here.
-    /// </summary>
-    // Partial so untracked DevHooks.cs can add local-only hooks; its call sites are
-    // partial methods and compile to nothing when that file is absent.
+    /// <summary>Coordinates chat, memory, notes, speech, and companion behavior.</summary>
+    // Partial methods allow optional local authoring hooks.
     public partial class LlmChatController : MonoBehaviour
     {
         // ========== Configuration (populated from LilithModPlugin statics) ==========
@@ -116,9 +112,7 @@ namespace LilithMod
         };
 
         // ========== Unity lifecycle ==========
-        /// <summary>
-        /// The live controller, for static callers needing its HTTP client and key.
-        /// </summary>
+        /// <summary>Live controller for static integrations.</summary>
         private static LlmChatController _instance;
 
         private void Awake()
@@ -126,11 +120,7 @@ namespace LilithMod
             _instance = this;
             ApplyConfiguredHotkey(Hotkey, true);
 
-            // UI construction is deliberately NOT done here. Awake() runs when BepInEx
-            // attaches the component, which is before the game's first scene exists - so
-            // there is no EventSystem yet and building the UI now would disable chat
-            // permanently. Update() retries until the scene is up. Same failure mode as
-            // creating a GameObject in BasePlugin.Load().
+            // UI initialization waits for the first scene and its EventSystem.
 
             _httpClient = new HttpClient();
             _httpClient.Timeout = TimeSpan.FromSeconds(TimeoutSeconds + 10); // a bit beyond our cancellation timeout
@@ -164,16 +154,11 @@ namespace LilithMod
                 return;
             }
 
-            // --- Hotkey toggle ---
-            // Win32 GetAsyncKeyState, NOT Unity: the pet window is WS_EX_NOACTIVATE, so it
-            // never receives key messages and Unity input is permanently silent here.
-            // Polled exactly once - IsKeyDown consumes the transition.
+            // The no-activate pet window requires Win32 key polling.
             bool hotkeyPressed = !SettingsBridge.CapturingChatKey &&
                                  _vkHotkey > 0 && WindowFocus.IsKeyDown(_vkHotkey);
 
-            // No key, no chat. The box would open and every send would fail, so the
-            // hotkey is inert rather than misleading - the greyed settings row and
-            // this warning say why.
+            // Keep chat inert until an API key is configured.
             if (hotkeyPressed && !HasApiKey)
             {
                 WarnMissingApiKey();
@@ -193,9 +178,7 @@ namespace LilithMod
                 }
             }
 
-            // Escape closes, Enter submits. Once the panel is open the window has been made
-            // focusable, so Unity input works again - but these are polled globally too so
-            // they behave identically whether or not focus actually landed.
+            // Poll globally so close and submit work even if focus did not land.
             if (IsPanelVisible() && WindowFocus.IsKeyDown(VkEscape))
             {
                 if (_speechListening) StopListening(false);
@@ -208,9 +191,7 @@ namespace LilithMod
                 OnPlayerSubmit(_inputField != null ? _inputField.text : null);
             }
 
-            // Clicking the box re-focuses it. Detected through Win32 rather than uGUI
-            // pointer events, because once the window has lost focus Unity receives no
-            // input at all - the very situation this needs to recover from.
+            // Win32 click detection can recover focus when Unity cannot receive input.
             if (IsPanelVisible() && PointerFocus.ClickedInside(_panelRect))
                 FocusInputField();
 
@@ -258,19 +239,14 @@ namespace LilithMod
             _hotkeyValid = true;
         }
 
-        /// <summary>
-        /// Moves subtitles and voice failures from the voice thread onto the main
-        /// thread, where Unity APIs may actually be called.
-        /// </summary>
+        /// <summary>Drains voice events on Unity's main thread.</summary>
         private void DrainVoiceQueues()
         {
             var processor = LilithModPlugin.VoiceProcessor;
             if (processor == null)
                 return;
 
-            // If synthesis gave up, show the whole reply once and drop the rest of
-            // the per-sentence subtitles - with no audio there is nothing pacing
-            // them, so they would otherwise flash past within a frame or two.
+            // Without audio pacing, show the full reply once.
             bool failed = false;
             while (processor.VoiceFailureQueue.TryDequeue(out _))
                 failed = true;
@@ -318,11 +294,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// Puts text in the bubble. Assigning node.text alone does not refresh a
-        /// dialogue that is already on screen; StartDialogue is what the game reacts
-        /// to, and is the path the reply display has always used.
-        /// </summary>
+        /// <summary>Refreshes the reply bubble through the game's dialogue path.</summary>
         private void DisplayReplyText(string text)
         {
             if (string.IsNullOrEmpty(text))
@@ -344,14 +316,7 @@ namespace LilithMod
         private string _lastDisplayedSentence;
         private bool _restoreReplyBubble;
 
-        /// <summary>
-        /// The game's own dialogue start tears the reply bubble down before the mod's
-        /// gate can decline the line, so a touch mid-reply leaves her voice playing
-        /// under an empty bubble. The coordinator requests a restore; it runs on the
-        /// next Update rather than inside the ShowNode prefix, because a nested
-        /// StartDialogue from inside the game's own StartDialogue corrupts the
-        /// manager's current-dialogue state.
-        /// </summary>
+        /// <summary>Schedules reply-bubble restoration outside nested dialogue calls.</summary>
         internal static void RequestReplyBubbleRestore()
         {
             if (_instance != null)
@@ -375,10 +340,7 @@ namespace LilithMod
             }
         }
 
-        // Keeps the END of the line visible. TMP_InputField's own horizontal scrolling does
-        // not engage on a hand-built hierarchy, so the line is slid left by however much it
-        // overruns the viewport: the head passes under the RectMask2D and out of sight while
-        // freshly typed text stays at the right edge.
+        // Keep the newest input visible in the custom TMP hierarchy.
         private void ScrollInputText()
         {
             if (_inputText == null || _inputTextRect == null || _textAreaRect == null)
@@ -388,9 +350,7 @@ namespace LilithMod
             float textWidth = _inputText.preferredWidth;
             float overrun = textWidth - viewportWidth;
 
-            // While the line still fits, keep it centred so short messages grow outward from
-            // the middle. Once it overruns, pin the right edge to the viewport and let the
-            // head slide out under the mask.
+            // Center short input and right-align overflowing input.
             float x = overrun > 0f
                 ? -overrun
                 : (viewportWidth - textWidth) * 0.5f;
@@ -398,17 +358,13 @@ namespace LilithMod
             if (!Mathf.Approximately(pos.x, x))
                 _inputTextRect.anchoredPosition = new Vector2(x, pos.y);
 
-            // Width must track the content, otherwise the glyphs beyond the original rect
-            // width are never laid out and the tail simply stops rendering.
+            // Grow the layout width with the rendered content.
             float w = Mathf.Max(viewportWidth, textWidth);
             if (!Mathf.Approximately(_inputTextRect.sizeDelta.x, w))
                 _inputTextRect.sizeDelta = new Vector2(w, _inputTextRect.sizeDelta.y);
         }
 
-        // TMP inherits the font asset's default point size, far too large here. Pin it
-        // and keep one row, so long input scrolls sideways instead of growing.
-        // TMP's default RectTransform is small and centred, not filling its parent;
-        // left alone the field cannot scroll and clips the tail instead of the head.
+        // Stretch TMP children so the custom field can scroll horizontally.
         private static void StretchToParent(GameObject go)
         {
             var rt = go.GetComponent<RectTransform>();
@@ -825,16 +781,12 @@ namespace LilithMod
                 return; // keep panel open
 
             _pendingSpeechCommand = null;
-            // Submitting by hand ends the utterance too, or the microphone would stay
-            // open behind the reply and land a stray transcript on top of it.
+            // Manual submission ends the active recording.
             if (_speechListening) StopListening(false);
             HidePanel();
             bool nativeActionHandled = TryApplyImmediateNativeAction(trimmed);
 
-            // Held until she stops talking. Sending straight away cancelled the rest
-            // of her current reply mid-word, which reads as a fault rather than as
-            // being interrupted. A later message replaces an earlier waiting one:
-            // the newest is what the player still means.
+            // Wait for speech to finish; keep only the newest queued message.
             if (SpeechStillFinishing)
             {
                 _pendingUserMessage = trimmed;
@@ -874,8 +826,7 @@ namespace LilithMod
             {
                 bool timerNamed = value.Contains("timer") || value.Contains("タイマー") || value.Contains("计时");
                 bool alarmNamed = value.Contains("alarm") || value.Contains("アラーム") || value.Contains("闹钟");
-                // Speech recognition often returns only "cancel it". With no named
-                // target, cancelling both native schedulers is the safe interpretation.
+                // An unnamed cancellation applies to both schedulers.
                 if (timerNamed || !alarmNamed)
                 {
                     TimerSystem.Instance?.Cancel();
@@ -897,14 +848,10 @@ namespace LilithMod
         {
             string value = text?.ToLowerInvariant() ?? string.Empty;
 
-            // App launch is checked first, before the timer/alarm parsing, so a phrase
-            // like "open steam" fires immediately and never falls through to the alarm
-            // clock parser. Only allowed names launch; anything else is left to the LLM,
-            // which omits the action and lets her decline in words. Gated by config.
+            // Resolve allowed app launches before timer and alarm phrases.
             if (LilithModPlugin.CfgAllowOpenApps != null && LilithModPlugin.CfgAllowOpenApps.Value)
             {
-                // Browser searches are launches, not information requests: this opens
-                // an encoded Google URL and never downloads or reads the result page.
+                // Browser searches only open an encoded results URL.
                 Match searchMatch = Regex.Match(text.Trim(),
                     @"^(?:lilith[\s,.!~]+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:(?:open\s+(?:google|(?:the\s+)?browser)\s+and\s+)?search(?:\s+(?:google|the\s+web))?(?:\s+for)?|google)\s+(?<query>.+?)(?:\s+on\s+google)?[\s.!?~]*$",
                     RegexOptions.IgnoreCase);
@@ -918,8 +865,7 @@ namespace LilithMod
                     }
                 }
 
-                // Lazy name + trailing punctuation class: a spoken transcript arrives as
-                // "Open Discord." and the period must not become part of the name.
+                // Exclude trailing speech punctuation from app names.
                 Match appMatch = Regex.Match(value.Trim(),
                     @"^(?:lilith[\s,.!~]+)?(?:please\s+)?(?:open|launch|start)\s+(?:the\s+)?(?<app>[a-z0-9_.\-]+?)[\s.!?~]*$",
                     RegexOptions.IgnoreCase);
@@ -1085,14 +1031,10 @@ namespace LilithMod
             lock (_history) messagesSnapshot = new List<Message>(_history);
             string requestPersona = messagesSnapshot[0].Content;
 
-            // Talking resets the idle clock: a remark seconds after she answered reads
-            // as talking to herself. Only the ambient schedule - _lastSpontaneousAt also
-            // gates interaction replies, and muting those would read as ignoring you.
+            // Conversation resets the ambient schedule.
             if (!ambient) ScheduleNextAmbient();
 
-            // The log carries no timestamps, so "it feels slower than it used to" has
-            // never been checkable. Measured from the moment the message is accepted,
-            // which is what the player actually waits through.
+            // Measure latency from accepted input.
             _replyStartedAt = Time.unscaledTime;
 
             _currentRequest = Task.Run(async () =>
@@ -1133,10 +1075,7 @@ namespace LilithMod
 
         private void CancelCurrentRequest()
         {
-            // The owning task disposes its own CTS in a finally block, so by the time a
-            // second message is sent this field may reference an already-disposed source.
-            // Cancel() then throws ObjectDisposedException, which Il2CppInterop swallows at
-            // the trampoline - silently killing chat after exactly one exchange.
+            // The request task may dispose this source before cancellation.
             try
             {
                 _cts?.Cancel();
@@ -1156,9 +1095,7 @@ namespace LilithMod
             if (string.IsNullOrWhiteSpace(ApiKey))
                 throw new InvalidOperationException("API key is not configured.");
 
-            // response_format keeps the model from wrapping the reply in markdown fences.
-            // The parser tolerates fences anyway, because providers that ignore this
-            // field are still expected to work.
+            // Request JSON while retaining fallback parsing for compatible providers.
             var payload = new JObject
             {
                 ["model"] = Model,
@@ -1178,9 +1115,7 @@ namespace LilithMod
                 }));
             }
 
-            // V4 Flash defaults to thinking mode, which adds hidden reasoning latency
-            // that this short, structured dialogue task does not need. Keep this field
-            // DeepSeek-only so other OpenAI-compatible providers remain supported.
+            // Disable DeepSeek reasoning for short structured replies.
             if (BaseUrl.IndexOf("api.deepseek.com", StringComparison.OrdinalIgnoreCase) >= 0)
                 payload["thinking"] = JObject.FromObject(new { type = "disabled" });
 
@@ -1190,10 +1125,7 @@ namespace LilithMod
 
             LilithModPlugin.Logger.LogWarning(
                 $"[LlmChat] Model used the wrong shown language; requesting {displayLanguage} correction.");
-            // This fires on every reply, which doubles the API calls and roughly
-            // doubles the wait. Whether the model really is emitting Japanese in
-            // shown, or the check rejects a shape it should accept, cannot be told
-            // apart without seeing the reply - so say what came back.
+            // Diagnostics retain the rejected reply for language-check debugging.
             if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                 LilithModPlugin.Logger.LogInfo(
                     "[LlmChat] Rejected reply was: " +
@@ -1251,10 +1183,7 @@ namespace LilithMod
             return false;
         }
 
-        /// <summary>
-        /// Japanese for one line the game built at runtime. Used only by
-        /// DynamicLineCache, and only once per distinct line - the result is kept.
-        /// </summary>
+        /// <summary>Translates and caches runtime dialogue.</summary>
         internal static async Task<string> TranslateLineToJapaneseAsync(
             string source, CancellationToken token)
         {
@@ -1315,9 +1244,7 @@ namespace LilithMod
                         role = "system",
                         content = "The previous completion was empty. Return a complete, non-empty answer now. Follow the requested output format exactly."
                     }));
-                    // Some compatible endpoints intermittently return blank content
-                    // while enforcing JSON mode. The parser already tolerates plain
-                    // and fenced JSON, so the final attempt can safely omit it.
+                    // Relax JSON mode on the final retry.
                     if (attempt == 2) requestPayload.Remove("response_format");
                     await Task.Delay(150 * attempt, token);
                 }
@@ -1346,11 +1273,7 @@ namespace LilithMod
                                 $"completion_tokens={lastCompletionTokens}).");
                         if (!string.IsNullOrWhiteSpace(content)) return content;
 
-                        // reasoning_content distinguishes the two causes. V4 Flash is a
-                        // reasoning model, and the request asks for thinking to be
-                        // disabled; if reasoning came back anyway, that field is not
-                        // taking effect and the token budget is being spent before any
-                        // answer is written. Empty reasoning means something else.
+                        // Record hidden reasoning length when visible content is empty.
                         int reasoningLength =
                             (choice?["message"]?["reasoning_content"]?.ToString() ?? string.Empty).Length;
                         LilithModPlugin.Logger.LogWarning(
@@ -1377,9 +1300,7 @@ namespace LilithMod
 
             if (result.Ok)
             {
-                // Abandon anything still queued from the previous reply, otherwise its
-                // audio keeps playing under this reply's subtitles and the two stay
-                // mismatched for the rest of the session.
+                // Cancel speech from the previous reply.
                 LilithModPlugin.VoiceProcessor?.CancelCurrent();
                 _currentReplyEnglish = null;
                 _replyPlaybackActive = false;
@@ -1439,9 +1360,7 @@ namespace LilithMod
                     return;   // deliberately not added to history
                 }
 
-                // History keeps what she actually said. Storing the raw JSON instead
-                // would feed the model its own markup and triple the token cost of
-                // every later turn.
+                // Store spoken text in history, not response markup.
                 var spoken = new System.Collections.Generic.List<string>();
                 var english = new System.Collections.Generic.List<string>();
                 foreach (var u in utterances)
@@ -1475,10 +1394,7 @@ namespace LilithMod
                 _currentReplyEnglish = english;
                 _replyPlaybackActive = true;
 
-                // A long line is one synthesis request, so the player waits through
-                // the whole reply before hearing any of it. Split first, then queue:
-                // the first piece is all the wait, and the rest are synthesised
-                // while she is already speaking.
+                // Split long replies so later pieces synthesize during playback.
                 var queued = new System.Collections.Generic.List<Utterance>();
                 foreach (var u in utterances)
                     queued.AddRange(UtteranceChunker.Chunk(u));
@@ -1515,10 +1431,7 @@ namespace LilithMod
         /// <summary>Safety net against a model that returns a wall of sentences.</summary>
         private const int MaxUtterancesPerReply = 5;
 
-        /// <summary>
-        /// The English lines of the reply being spoken, so a synthesis failure part way
-        /// through can still show the whole thing. Null when nothing is in flight.
-        /// </summary>
+        /// <summary>Full subtitle fallback for an in-flight spoken reply.</summary>
         private System.Collections.Generic.List<string> _currentReplyEnglish;
 
         private static void ExecuteNativeAction(string text)
@@ -1892,10 +1805,7 @@ namespace LilithMod
             });
         }
 
-        /// <summary>
-        /// Periodically distils substantial conversation into one sourced episode and
-        /// stable player facts. This is independent of the rarer handwritten notes.
-        /// </summary>
+        /// <summary>Consolidates substantial conversations into episodes and facts.</summary>
         private void TryConsolidateMemory()
         {
             if (_memoryInFlight || LilithModPlugin.CfgEpisodicMemoryEnabled == null ||
@@ -1973,18 +1883,10 @@ namespace LilithMod
             return JObject.Parse(trimmed);
         }
 
-        /// <summary>
-        /// Development-only hook, implemented in the untracked DevHooks.cs. With no
-        /// implementation present - any machine but this one, and every release -
-        /// the compiler removes this call entirely.
-        /// </summary>
+        /// <summary>Optional local authoring hook.</summary>
         partial void PollNoteTestFile();
 
-        /// <summary>
-        /// Removes a trailing sign-off. The note image draws her signature itself,
-        /// and a model told not to sign still does now and then - belt and braces,
-        /// because the duplicate is only visible once the note is rendered.
-        /// </summary>
+        /// <summary>Removes a sign-off already drawn by the note template.</summary>
         private static string StripSignature(string letter)
         {
             if (string.IsNullOrWhiteSpace(letter)) return letter;
@@ -2007,8 +1909,7 @@ namespace LilithMod
             letter = StripSignature(letter);
             try
             {
-                // SaveNote returns the path it wrote, or null/empty when it declined.
-                // Ignoring that made a silent no-op look like success.
+                // Notify the inbox only after a note was written.
                 string saved = NoteImageSaver.SaveNote(letter, false);
                 if (string.IsNullOrEmpty(saved))
                 {
@@ -2026,27 +1927,16 @@ namespace LilithMod
         }
 
 
-        // Two, so a single stray "love you" cannot arm a love letter on its own.
+        // Require repeated personal context for love letters.
         private const int LoveLetterPersonalMinimum = 2;
 
-        /// <summary>
-        /// Floor between ANY two unprompted utterances. Separate timers let ambient and
-        /// interaction each stay in budget while the pair did not, giving back-to-back
-        /// spontaneous speech. One shared timestamp is what actually bounds it.
-        /// </summary>
+        /// <summary>Minimum gap between all unprompted speech.</summary>
         private const float SpontaneousGapSeconds = 180f;
 
-        /// <summary>
-        /// Quiet window after the game's own dialogue. Measured, the game speaks far more
-        /// than the mod does, so landing on a native line is the likeliest overlap.
-        /// </summary>
+        /// <summary>Quiet period after native dialogue.</summary>
         private const float NativeDialogueQuietSeconds = 8f;
 
-        /// <summary>
-        /// Rolled when an interaction reply fires; a miss drops it silently, so she
-        /// notices most handling, not all. Ambient is not rolled - its interval is
-        /// already the rarity there.
-        /// </summary>
+        /// <summary>Chance that a physical interaction receives a reply.</summary>
         private const float InteractionReplyChance = 0.7f;
 
         /// <summary>Lower, because being handled while asleep should mostly not wake her.</summary>
@@ -2055,10 +1945,7 @@ namespace LilithMod
         /// <summary>Ambient intervals stretch by this much while she sleeps.</summary>
         private const float SleepingAmbientMultiplier = 1.5f;
 
-        /// <summary>
-        /// Whether she is currently asleep. Wrapped because the character instance is
-        /// not guaranteed to exist, and a throw here would take out the whole tick.
-        /// </summary>
+        /// <summary>Returns sleep state safely during scene transitions.</summary>
         private static bool IsSleeping()
         {
             try
@@ -2077,19 +1964,12 @@ namespace LilithMod
 
         private float _replyStartedAt;
 
-        /// <summary>
-        /// Quiet after her voice stops before an interaction reply may follow, so two
-        /// utterances do not run together.
-        /// </summary>
+        /// <summary>Quiet period after synthesized speech.</summary>
         private const float InteractionAfterSpeechSeconds = 1f;
 
         private float _speechEndedAt = -600f;
 
-        /// <summary>
-        /// True while she is still speaking, or within the beat just after. Anything
-        /// that would start a new reply waits on this: cutting her off mid-sentence
-        /// reads as a malfunction rather than an interruption.
-        /// </summary>
+        /// <summary>Whether new speech should wait for current playback.</summary>
         private bool SpeechStillFinishing =>
             _replyPlaybackActive ||
             Time.unscaledTime - _speechEndedAt < InteractionAfterSpeechSeconds;
@@ -2098,11 +1978,7 @@ namespace LilithMod
         private bool _pendingUserMessageNativeAction;
         private float _pendingUserMessageAt;
 
-        /// <summary>
-        /// A held message is sent regardless once this long has passed. Waiting on
-        /// playback means a stuck _replyPlaybackActive would swallow what the player
-        /// typed and never answer it, which is far worse than talking over her.
-        /// </summary>
+        /// <summary>Maximum delay for a user message waiting on playback.</summary>
         private const float QueuedMessageMaxWaitSeconds = 20f;
 
         private static float _lastNativeDialogueAt = -600f;
@@ -2123,9 +1999,7 @@ namespace LilithMod
             while (InteractionQueue.TryDequeue(out string kind))
             {
                 MemoryStore.RecordInteraction(kind);
-                // Cooldown between reactions to being interacted with. Long enough that
-                // repeated petting does not turn into a running commentary; the
-                // interaction is still remembered even when the reply is skipped.
+                // Remember every interaction, but throttle spoken reactions.
                 if (!AmbientAllowed || !SpontaneousReady) continue;
                 _pendingInteraction = kind;
                 _interactionReplyAt = Time.unscaledTime + 3f;
@@ -2136,14 +2010,10 @@ namespace LilithMod
         {
             if (string.IsNullOrEmpty(_pendingInteraction) || Time.unscaledTime < _interactionReplyAt ||
                 (_currentRequest != null && !_currentRequest.IsCompleted)) return;
-            // Handling her triggers the game's own drag and touch dialogue, so a
-            // reply fired immediately lands on top of it. Held, not dropped - the
-            // reply still makes sense a moment after she finishes.
+            // Wait for native touch dialogue to finish.
             if (Time.unscaledTime - _lastNativeDialogueAt < NativeDialogueQuietSeconds) return;
 
-            // _currentRequest covers only the API call, which finishes seconds before the
-            // audio. Without this the reply lands mid-sentence and CancelCurrent drops the
-            // rest. Held, not dropped - the interaction is still pending when she stops.
+            // Wait for synthesized speech to finish.
             if (SpeechStillFinishing) return;
 
             string kind = _pendingInteraction;
@@ -2151,16 +2021,11 @@ namespace LilithMod
             // Re-checked here, not just when queued: an ambient remark may have
             // landed during the three second delay before this fires.
             if (!SpontaneousReady) return;
-            // Rolled once, at the moment of firing, and a miss discards the pending
-            // interaction. Rolling every frame while it waits would come up true
-            // eventually and make the chance meaningless.
+            // Roll once when the pending interaction is ready.
             bool sleeping = IsSleeping();
             float replyChance = sleeping ? SleepingInteractionReplyChance : InteractionReplyChance;
             float roll = UnityEngine.Random.value;
-            // Which branch was taken, not just the outcome. The chance itself cannot
-            // practically be sampled - a miss costs 11 s before the next attempt but
-            // a hit costs the 180 s cooldown - so whether the sleeping path was
-            // chosen has to be readable from a single poke.
+            // Log the sleep-adjusted branch for diagnostics.
             if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                 LilithModPlugin.Logger.LogInfo(
                     $"[Ambient] Interaction '{kind}': sleeping={sleeping}, " +
@@ -2171,10 +2036,7 @@ namespace LilithMod
             SendUserMessage("The player just interacted with Lilith: " + kind, true);
         }
 
-        /// <summary>
-        /// Ambient remarks and interaction replies are unprompted, so without a key
-        /// they can only surface an error the player never asked for.
-        /// </summary>
+        /// <summary>Whether unprompted replies can be sent.</summary>
         private static bool AmbientAllowed =>
             LilithModPlugin.CfgAmbientEnabled.Value && HasApiKey;
 
@@ -2183,8 +2045,7 @@ namespace LilithMod
             if (!LilithModPlugin.CfgAmbientEnabled.Value) return;
             if (!HasApiKey)
             {
-                // Rescheduled rather than left due, or pasting a key mid-session would
-                // be answered by an immediate remark out of nowhere.
+                // Reschedule when ambient replies are unavailable.
                 ScheduleNextAmbient();
                 return;
             }
@@ -2192,16 +2053,12 @@ namespace LilithMod
                 (_currentRequest != null && !_currentRequest.IsCompleted)) return;
             if (Time.unscaledTime - _lastNativeDialogueAt < NativeDialogueQuietSeconds)
             {
-                // The game is mid-sentence. Deliberately NOT rescheduled: hold the
-                // remark and let it through a moment later, rather than pushing it
-                // out by another full interval for an eight second overlap.
+                // Keep the remark due until native dialogue ends.
                 return;
             }
             if (SpeechStillFinishing)
             {
-                // She is still speaking. Held, not rescheduled - for the same reason
-                // as the native-dialogue case above, pushing it out by a full interval
-                // would be a heavy penalty for a few seconds of overlap.
+                // Keep the remark due until synthesized speech ends.
                 return;
             }
             if (!SpontaneousReady)
@@ -2220,25 +2077,17 @@ namespace LilithMod
         {
             int min = Math.Max(1, LilithModPlugin.CfgAmbientMinMinutes.Value);
             int max = Math.Max(min, LilithModPlugin.CfgAmbientMaxMinutes.Value);
-            // Both bounds stretch while she sleeps, so the whole window moves out
-            // rather than just becoming wider - a sleeping remark should be rarer,
-            // not more erratic. Sampled here rather than at fire time: waking during
-            // a long wait should not suddenly shorten it.
+            // Sleep scales the full ambient interval when it is scheduled.
             float scale = IsSleeping() ? SleepingAmbientMultiplier : 1f;
             _nextAmbientAt = Time.unscaledTime + UnityEngine.Random.Range(min * 60f, max * 60f) * scale;
         }
 
-        /// <summary>
-        /// Toggles speech recognition. The trigger file tells the external transcriber to
-        /// listen; it ends on silence. Pressing again cancels, since silence submits.
-        /// </summary>
+        /// <summary>Toggles the external speech listener.</summary>
         private void PollPushToTalkKey()
         {
             SpeechInputService.Refresh(Time.unscaledTime);
 
-            // Without the listener the key would open the bar, show "Listening~", and
-            // wait forever for a transcript nobody is writing. Without an API key the
-            // transcript would arrive and then fail to send. Both make the key inert.
+            // Speech input requires both the listener and an API key.
             if (!LilithModPlugin.CfgPushToTalkEnabled.Value ||
                 !SpeechInputService.IsAvailable || !HasApiKey)
             {
@@ -2304,11 +2153,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// Stops the microphone. <paramref name="cancelled"/> distinguishes the user
-        /// toggling off - which also closes an untouched panel - from listening ending
-        /// because a transcript arrived.
-        /// </summary>
+        /// <summary>Stops listening and optionally closes an untouched panel.</summary>
         private void StopListening(bool cancelled)
         {
             _speechListening = false;
@@ -2357,8 +2202,7 @@ namespace LilithMod
                     $"[Speech] Unrecognised push-to-talk key '{name}'. Expected F1-F12, A-Z, or 0-9.");
             }
 
-            // Rebinding mid-utterance would leave the microphone on with no key that
-            // can turn it off again.
+            // Stop listening before changing its key.
             if (_vkPushToTalk > 0 && key != _vkPushToTalk && _speechListening)
                 StopListening(true);
             _vkPushToTalk = key;
@@ -2392,9 +2236,7 @@ namespace LilithMod
 
             if (command.StartsWith(SpeechPartialMarker, StringComparison.Ordinal))
             {
-                // Interim text only lands while still listening. A partial arriving
-                // afterwards belongs to an utterance already transcribed in full, and
-                // would replace the final text with a worse version of it.
+                // Ignore partial text after final transcription.
                 if (!_speechListening) return;
                 if (NoteUserTyping()) return;
 
@@ -2423,9 +2265,7 @@ namespace LilithMod
                 return;
             }
 
-            // Typing outranks recognition: once the user has edited the field, the
-            // transcript is stale and replacing their text would discard real input.
-            // They submit with Enter instead.
+            // User edits take precedence over recognition.
             if (_userTypedWhileListening)
             {
                 LilithModPlugin.Logger.LogInfo(
@@ -2436,11 +2276,7 @@ namespace LilithMod
             _speechCommandQueue.Enqueue(command);
         }
 
-        /// <summary>
-        /// Detects that the field no longer holds the partial we last wrote into it,
-        /// which can only mean the user typed. Latches, because a later partial must not
-        /// silently re-take the field once they have started editing.
-        /// </summary>
+        /// <summary>Latches manual edits so partial transcripts cannot overwrite them.</summary>
         private bool NoteUserTyping()
         {
             if (_userTypedWhileListening) return true;

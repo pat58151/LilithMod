@@ -5,11 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace LilithMod
 {
-    /// <summary>
-    /// A small local multilingual feature embedding. Word and character n-grams
-    /// make names and subjects comparable across inflection and CJK text without a
-    /// model download or another network request.
-    /// </summary>
+    /// <summary>Local multilingual matching with word, character, and topic features.</summary>
     internal static class MemoryVectorizer
     {
         private const int Dimensions = 512;

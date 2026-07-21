@@ -1,22 +1,16 @@
 using System;
 using UnityEngine;
-using LilithMod; // for LilithModPlugin.Logger
+using LilithMod;
 
 namespace LilithMod
 {
-    /// <summary>
-    /// Low‑level helper that detects a left‑click inside a <c>RectTransform</c> even
-    /// when the game window has WS_EX_NOACTIVATE|WS_EX_TRANSPARENT and Unity input is dead.
-    /// </summary>
+    /// <summary>Detects UI clicks through Win32 when Unity input is unavailable.</summary>
     public static class PointerFocus
     {
-        // Previous state of the left mouse button, used for edge‑triggered detection.
+        // Previous state for edge detection.
         private static bool? s_prevLeftDown = null;
 
-        /// <summary>
-        /// Returns <c>true</c> exactly once per physical left‑click, at the rising edge.
-        /// Uses Win32 <c>GetAsyncKeyState(VK_LBUTTON)</c> directly.
-        /// </summary>
+        /// <summary>Returns true once per physical left-click.</summary>
         public static bool LeftClickPressed()
         {
             try
@@ -38,10 +32,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// Reads the absolute desktop cursor position and converts it to Unity screen
-        /// coordinates relative to the game window.
-        /// </summary>
+        /// <summary>Converts the desktop cursor to game-window coordinates.</summary>
         /// <param name="point">Receives the screen point (origin bottom‑left, Y up).</param>
         /// <returns><c>true</c> if the conversion succeeded; otherwise <c>false</c> and <paramref name="point"/> is set to <c>Vector2.zero</c>.</returns>
         public static bool TryGetUnityScreenPoint(out Vector2 point)
@@ -49,7 +40,6 @@ namespace LilithMod
             point = Vector2.zero;
             try
             {
-                // 1. Get absolute cursor position (desktop coordinates, origin top‑left, Y down)
                 WindowsNativeAPI.POINT desktopPoint;
                 if (!WindowsNativeAPI.GetCursorPos(out desktopPoint))
                 {
@@ -57,7 +47,6 @@ namespace LilithMod
                     return false;
                 }
 
-                // 2. Obtain window handle
                 IntPtr hWnd = WindowsNativeAPI.GetActiveWindow();
                 if (hWnd == IntPtr.Zero)
                     hWnd = WindowsNativeAPI.FindWindow(null, "Lilith");
@@ -68,7 +57,6 @@ namespace LilithMod
                     return false;
                 }
 
-                // 3. Get window rectangle (desktop coordinates)
                 WindowsNativeAPI.RECT rect;
                 if (!WindowsNativeAPI.GetWindowRect(hWnd, out rect))
                 {
@@ -76,11 +64,7 @@ namespace LilithMod
                     return false;
                 }
 
-                // 4. Convert to Unity screen space
-                //    Desktop: origin top‑left, Y down
-                //    Unity:   origin bottom‑left (relative to window), Y up
-                //    x = cursor.X - windowLeft
-                //    y = windowBottom - cursor.Y   (where windowBottom = rect.Bottom)
+                // Convert top-left desktop coordinates to bottom-left Unity coordinates.
                 float x = desktopPoint.X - rect.Left;
                 float y = rect.Bottom - desktopPoint.Y;
                 point = new Vector2(x, y);
@@ -94,10 +78,7 @@ namespace LilithMod
             }
         }
 
-        /// <summary>
-        /// Returns <c>true</c> on the frame the user left‑clicks inside the given RectTransform.
-        /// Designed for a ScreenSpaceOverlay canvas; the null camera is correct for that mode.
-        /// </summary>
+        /// <summary>Returns true when a click lands inside an overlay rectangle.</summary>
         /// <param name="target">The UI rectangle to test against. If <c>null</c>, immediately returns <c>false</c>.</param>
         public static bool ClickedInside(RectTransform target)
         {
@@ -106,7 +87,7 @@ namespace LilithMod
                 if (target == null)
                     return false;
 
-                // Edge‑triggered check – do NOT call LeftClickPressed() twice.
+                // Consume the click edge once.
                 if (!LeftClickPressed())
                     return false;
 

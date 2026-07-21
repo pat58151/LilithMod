@@ -8,11 +8,7 @@ using System.Text.RegularExpressions;
 
 namespace LilithMod
 {
-    /// <summary>
-    /// Keeps only a coarse foreground observation: a locally resolved game name,
-    /// Discord, or the executable filename. Window titles are never read, so channels,
-    /// messages, tabs, and document names cannot enter the prompt.
-    /// </summary>
+    /// <summary>Reports a game, known app, or executable without reading window titles.</summary>
     internal static class ForegroundActivity
     {
         private const double StableSeconds = 10;

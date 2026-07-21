@@ -11,12 +11,10 @@ namespace LilithMod
     public class LilithModPlugin : BasePlugin
     {
         private static LilithModPlugin _instance;
-        // Injected MonoBehaviours are not BasePlugin subclasses and have no Log
-        // property of their own; they log through here.
+        // Shared logger for injected MonoBehaviours.
         internal static ManualLogSource Logger;
 
-        // LLM chat settings. The key is user-supplied and never ships with the mod.
-        // BaseUrl is OpenAI-compatible, so DeepSeek/OpenAI/OpenRouter/Ollama all work.
+        // OpenAI-compatible chat settings. API keys are user-supplied.
         internal static ConfigEntry<string> CfgBaseUrl;
         internal static ConfigEntry<string> CfgApiKey;
         internal static ConfigEntry<string> CfgModel;
@@ -68,16 +66,10 @@ namespace LilithMod
         internal static ConfigEntry<float> CfgVoiceFragmentInterval;
         internal static ConfigEntry<string> CfgVoiceTextSplitMethod;
 
-        /// <summary>
-        /// Shared speech queue processor, created when voice is enabled.
-        /// <c>null</c> when voice is disabled or failed to initialise.
-        /// </summary>
+        /// <summary>Shared speech processor, or null when voice is unavailable.</summary>
         internal static SpeechQueueProcessor VoiceProcessor { get; private set; }
 
-        // Every rule below is measured from the game's own script - 1298 Chinese and 1808
-        // Japanese lines - rather than guessed. The counts are kept in the comments because
-        // they are the reason each rule exists, and they are what to re-check if her voice
-        // ever drifts.
+        // Persona rules are derived from the game's Chinese and Japanese scripts.
         private const string DefaultSystemPrompt =
             "You are Lilith (莉莉丝 / リリス).\n"
             + "\n"
@@ -153,19 +145,12 @@ namespace LilithMod
                 Config.Remove(new ConfigDefinition("LLM", "AnthropicApiKey")) |
                 Config.Remove(new ConfigDefinition("LLM", "AnthropicModel"));
             if (removedLegacyClaude) Config.Save();
-            // Deliberately a new key. Config.Bind keeps whatever is already in the cfg,
-            // so editing the default under the old "SystemPrompt" name would silently do
-            // nothing on an existing install - the bilingual prompt would never arrive
-            // and the feature would look installed while never happening. Binding a name
-            // that is not in the file yet makes BepInEx write the new default. Any old
-            // "SystemPrompt" entry is left alone and ignored.
+            // A new key applies the bilingual default without overwriting old custom prompts.
             CfgSystemPrompt = Config.Bind("LLM", "BilingualSystemPrompt", DefaultSystemPrompt,
                 "Persona instructions sent with every request. Replaces the older "
                 + "'SystemPrompt' entry, which is now ignored - copy your own wording "
                 + "across if you had customised it.");
-            // A new key rather than a new default on the old one: Config.Bind keeps
-            // whatever an existing cfg already holds, so raising 8 to 15 in place
-            // would ship to nobody who had run the mod before.
+            // A new key lets existing installs receive the updated default.
             CfgMaxHistoryTurns = Config.Bind("LLM", "HistoryTurns", 15,
                 "How many past exchanges to keep as context. Replaces the older "
                 + "'MaxHistoryTurns' entry, which is now ignored.");
@@ -203,9 +188,7 @@ namespace LilithMod
                 "Full path to start-lilith.ps1. Empty means derive it from the voice "
                 + "runtime location in voice-config.ini.");
 
-            // Coordinates are otherwise derived from the public IP, which means
-            // telling a third party roughly where the player is. Setting these skips
-            // that entirely.
+            // Explicit coordinates avoid IP-based location lookup.
             CfgWeatherLatitude = Config.Bind("Weather", "Latitude", 0.0,
                 "Your latitude, if you would rather not have it detected from your IP address. "
                 + "Set both this and Longitude to skip the location lookup. 0 means detect.");
@@ -224,10 +207,7 @@ namespace LilithMod
                 + "An authoring aid for writing custom nodes against the real ids; "
                 + "leave off for normal play.");
 
-            // Three behaviours only occur in conditions that cannot be arranged on
-            // demand: synthesis failing to start, Lilith asleep, and no Startup
-            // shortcut installed. Each shipped untested because reaching it meant
-            // waiting for luck. These force the condition instead.
+            // Debug switches for states that are difficult to reproduce manually.
             CfgForceSynthesisUnavailable = Config.Bind("Debug", "ForceSynthesisUnavailable", false,
                 "Testing only. Pretend the voice service never answers, to exercise the "
                 + "startup grace window and the fallback to the game's own voice.");
@@ -238,8 +218,7 @@ namespace LilithMod
                 "Testing only. Act as though the Startup shortcut is absent, so the mod "
                 + "starts the voice services itself.");
 
-            // Not exposed in settings and not meant to be switched off: spontaneous
-            // remarks are most of what makes her feel present rather than summoned.
+            // Kept on because spontaneous remarks define companion behavior.
             CfgAmbientEnabled = Config.Bind("Companion", "AmbientAlwaysOn", true,
                 "Allow occasional generated remarks and responses to physical interactions.");
             CfgAmbientMinMinutes = Config.Bind("Companion", "AmbientMinMinutes", 12,
@@ -256,23 +235,18 @@ namespace LilithMod
                 "Saved user preference. Service outages temporarily fall back to native voice without changing this value.");
             CfgLilithOpacity = Config.Bind("Display", "LilithOpacity", 0.6f,
                 "Lilith character opacity from 0.2 to 1.0. Click-through uses the game's built-in setting.");
-            // Deliberately new key names. Config.Bind keeps whatever is already in the
-            // cfg, so reusing "WakeWordEnabled" would silently inherit the old value
-            // and the setting would appear to do nothing on an existing install.
+            // New key names avoid inheriting obsolete voice-input settings.
             CfgPushToTalkEnabled = Config.Bind("VoiceInput", "PushToTalkEnabled", true,
                 "Enable the external push-to-talk transcriber.");
             CfgPushToTalkKey = Config.Bind("VoiceInput", "PushToTalkKey", "F8",
                 "Press this key to start and stop speaking. F1-F12, A-Z, or 0-9.");
-            // "WakeWordEnabled" is burned (see the note above): existing configs
-            // still carry the old listener's value and would silently pre-enable
-            // this. A fresh key keeps those installs inert until opted in.
+            // Wake word remains opt-in for upgraded installs.
             CfgWakeWord = Config.Bind("VoiceInput", "WakeWord", false,
                 "Listen for her name and start recording without pressing the push-to-talk key. "
                 + "Needs the speech listener, an API key, and a wake-word model. "
                 + "Keeps the microphone open while enabled.");
 
-            // Notes are meant to be keepsakes, so all three gates are deliberately
-            // strict: substance, then time, then chance.
+            // Notes require substance, elapsed time, and chance.
             CfgNoteMinConversations = Config.Bind("Letters", "MinConversationsPerNote", 10,
                 "Messages from the player, substantial enough to count, required before a note becomes possible.");
             CfgNoteMinMessageLength = Config.Bind("Letters", "MinMessageLength", 18,
@@ -281,9 +255,7 @@ namespace LilithMod
                 "Those conversations must all fall inside this many hours, so a note comes out of one stretch of talking.");
             CfgNoteCooldownHours = Config.Bind("Letters", "CooldownHours", 36.0,
                 "Minimum hours between notes.");
-            // Rolled again on every substantial message once the count is met, not
-            // once per stretch of talking - so a high value compounds fast. At 0.4 a
-            // note was near-certain within five messages of becoming eligible.
+            // Chance is rolled for each qualifying message after eligibility.
             CfgNoteChance = Config.Bind("Letters", "Chance", 0.2f,
                 "Chance a note is written once it is otherwise due, so it does not arrive on a felt schedule. "
                 + "Re-rolled per qualifying message, so small values still add up.");
@@ -291,9 +263,7 @@ namespace LilithMod
             CfgAllowOpenApps = Config.Bind("Apps", "AllowOpenApps", false,
                 "Allow Lilith to open sanctioned applications when asked (discord, steam, etc.). "
                 + "The allowed list lives in plugins/LilithMod/apps/lilith-apps.txt and can be edited at any time.");
-            // Create the default allowed-apps list on first run, so it can be edited
-            // before the feature is ever switched on. AppLauncher owns the defaults;
-            // reading the names is what triggers the lazy file creation.
+            // Create the editable app list on first run.
             try { AppLauncher.GetAllowedNames(); }
             catch (System.Exception ex) { Log.LogWarning("[Apps] Could not prepare allowed-apps list: " + ex.Message); }
 
@@ -304,10 +274,7 @@ namespace LilithMod
             // ---- Voice configuration ------------------------------------------
             BindVoiceConfig();
 
-            // Use BepInEx's own AddComponent rather than creating a GameObject here.
-            // Load() runs before the first scene exists, so a hand-made GameObject does
-            // not survive DontDestroyOnLoad and its Update() never ticks. BepInEx attaches
-            // to its persistent BepInEx_Manager object and registers the type for us.
+            // BepInEx owns these components before the first scene exists.
             AddComponent<DialogueInjector>();
             AddComponent<LlmChatController>();
             AddComponent<SettingsBridge>();
@@ -316,8 +283,7 @@ namespace LilithMod
 
             // ---- Voice initialisation -----------------------------------------
             InitVoice();
-            // After InitVoice, which loads voice-config.ini and so knows where the
-            // runtime lives and which endpoint to probe.
+            // Voice configuration supplies the runtime and endpoint.
             ServiceBootstrap.Run();
 
             LogStartupSummary();
@@ -331,8 +297,7 @@ namespace LilithMod
                 Log.LogError($"[LilithMod] Integration patches failed: {ex.Message}");
             }
 
-            // Off by default: force-firing nothing, only logging. Authors turn this on to
-            // discover which DialogueTriggerType a given interaction actually raises.
+            // Optional authoring log for dialogue trigger discovery.
             var logTriggers = Config.Bind("Debug", "LogTriggers", false,
                 "Log every dialogue trigger the game raises, and every node that begins. "
                 + "Use this to find the right 'trigger' value for custom nodes.");
@@ -366,12 +331,7 @@ namespace LilithMod
                 "http://127.0.0.1:9880/tts",
                 "Full URL of the GPT‑SoVITS TTS endpoint.");
 
-            // The reference clip is NOT shipped with this mod - it belongs to the
-            // game's rights holders. Point this at a clip you already have locally.
-            // The default is relative on purpose: an absolute path here is correct
-            // on exactly one machine and silently wrong on every other install.
-            // The service reads this path itself, so it must be readable by that
-            // process.
+            // The user supplies a legally usable reference clip. Relative paths are portable.
             CfgVoiceRefAudioPath = Config.Bind("Voice", "RefAudioPath",
                 @"voice\jp\calm-reference.wav",
                 "Absolute path to the reference WAV the voice is cloned from, as seen "
@@ -401,12 +361,7 @@ namespace LilithMod
                 "text_split_method parameter passed to the TTS service.");
         }
 
-        /// <summary>
-        /// One line describing the state every support question turns out to hinge on.
-        /// Reconstructing this from scattered entries was the slow part of every
-        /// diagnosis so far, and on a machine that is not this one it may be the only
-        /// evidence available.
-        /// </summary>
+        /// <summary>Logs the configuration state needed for support.</summary>
         private void LogStartupSummary()
         {
             try
@@ -420,8 +375,7 @@ namespace LilithMod
                     $"servicesStartedByMod={ServiceBootstrap.StartedServices}, " +
                     $"speechLanguage={VoiceConfig.TextLang}.");
 
-                // Loud and separate: these change behaviour in ways that look like
-                // bugs, and a report made with one left on wastes everyone's time.
+                // Keep active debug overrides visible in support logs.
                 if (CfgForceSynthesisUnavailable.Value || CfgForceSleeping.Value ||
                     CfgIgnoreStartupShortcut.Value)
                 {
