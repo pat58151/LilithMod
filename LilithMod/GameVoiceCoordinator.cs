@@ -33,7 +33,27 @@ namespace LilithMod
             if (node != null && node.id == 9500000) return true;
             if (_allowOriginalShow || !ModIntegrations.VoiceReplacementEnabled() ||
                 _instance == null || bubble == null || node == null)
+            {
+                // Which early-out fired matters: a line that slips through here keeps
+                // the game's own voice, which is Chinese, and that is indistinguishable
+                // from a bug elsewhere unless the reason is recorded.
+                if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                {
+                    string why =
+                        node == null ? "node null" :
+                        bubble == null ? "bubble null" :
+                        _allowOriginalShow ? "re-show of a line already replaced" :
+                        _instance == null ? "coordinator not awake" :
+                        !LilithModPlugin.CfgReplaceGameVoice.Value ? "ReplaceGameVoice off" :
+                        !VoiceConfig.Enabled ? "voice disabled" :
+                        LilithModPlugin.VoiceProcessor == null ? "voice processor not ready" :
+                        "unknown";
+                    LilithModPlugin.Logger.LogInfo(
+                        $"[Voice] Original voice kept for line {(node == null ? -1 : node.lineId)} " +
+                        $"(id {(node == null ? -1 : node.id)}): {why}.");
+                }
                 return true;
+            }
             return _instance.QueueNode(bubble, node);
         }
 
@@ -113,6 +133,16 @@ namespace LilithMod
                 {
                     _allowOriginalShow = false;
                     cue.MarkDisplayed();
+                    if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                    {
+                        // Pairs with the "Holding line" entry. A held line with no
+                        // matching re-show is a bubble that will never be handed back
+                        // to the game, which is the shape to look for when one sticks
+                        // on screen forever.
+                        LilithModPlugin.Logger.LogInfo(
+                            $"[Voice] Re-showed line {(cue.Node == null ? -1 : cue.Node.lineId)} " +
+                            $"after audio; {_pendingNodes.Count} still held.");
+                    }
                 }
             }
         }

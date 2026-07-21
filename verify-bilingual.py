@@ -239,8 +239,11 @@ check("trigger.exists()" in ptt and "--trigger" in ptt and "--trigger" in launch
 check("WindowFocus.IsKeyDown(_vkPushToTalk)" in chat and "StartListening" in chat and
       "StopListening" in chat,
       "The speech key must toggle listening on its rising edge")
-check("SILENCE_SECONDS = 2.5" in ptt and "silent_for >= silence_limit" in ptt and
-      "energy_threshold" in ptt,
+# Asserts the mechanism and a sane bound, not the exact tuning value. Pinning the
+# literal made retuning the timeout fail a check named for the behaviour.
+_silence = re.search(r"^SILENCE_SECONDS = ([\d.]+)", ptt, re.M)
+check(_silence is not None and 0.5 <= float(_silence.group(1)) <= 5.0 and
+      "silent_for >= silence_limit" in ptt and "energy_threshold" in ptt,
       "An utterance must end after a fixed run of trailing silence")
 check("SileroDetector" in ptt and '"--vad"' in ptt and
       "silero-vad" in requirements,
