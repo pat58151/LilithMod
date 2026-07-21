@@ -541,6 +541,11 @@ check("Put each sentence in its own object" in persona,
       "multi-sentence object afterwards can only guess where the shown text divides")
 check("A hint is not permission to tell the whole thing" in persona,
       "A hinted memory must draw an allusion, not the whole anecdote")
+# "The theme park is closed" was true of that one night and got answered as
+# though it described theme parks now.
+check("describes one past occasion, not how the world is now" in persona,
+      "A memory's details must not be carried into a present-tense mention of the "
+      "same subject")
 
 # -- The weather feature discloses what it contacts ---------------------------
 # Asking about the weather sends the player's IP to a third party. That is a
