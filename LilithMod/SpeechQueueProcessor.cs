@@ -161,6 +161,9 @@ namespace LilithMod
                 {
                     // Synthesize but discard the audio – we only want to warm the model.
                     _ttsClient.SynthesizeAsync(sentence, VoiceConfig.TextLang, CancellationToken.None).GetAwaiter().GetResult();
+                    // Proof the service is up, and it lands during Load() - early
+                    // enough for the greeting, which the Update() probe never was.
+                    VoiceServiceMonitor.NoteServiceAnswered();
                 }
                 catch (Exception ex)
                 {

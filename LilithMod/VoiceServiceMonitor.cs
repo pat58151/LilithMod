@@ -24,6 +24,30 @@ namespace LilithMod
         private Task<bool> _probe;
         private bool _reported;
 
+        /// <summary>
+        /// Records that the service answered a real request, from whichever thread saw
+        /// it. Availability was previously discovered only by the probe in Update(),
+        /// which does not tick until the Unity player loop starts - and the EnterGame
+        /// greeting fires on that same first frame. The probe lost that race every
+        /// launch, so the opening line always kept the game's Chinese voice, however
+        /// long the service had already been up. Warm-up finishes during Load(), well
+        /// before any dialogue, and a completed synthesis is stronger evidence than a
+        /// socket connect.
+        /// </summary>
+        internal static void NoteServiceAnswered()
+        {
+            IsAvailable = true;
+            EverAvailable = true;
+
+            bool preferred = LilithModPlugin.CfgVoiceSynthesisPreferred != null &&
+                             LilithModPlugin.CfgVoiceSynthesisPreferred.Value;
+            // Compared before assigning: the setter persists the file, and this runs on
+            // the warm-up thread.
+            if (preferred && LilithModPlugin.CfgReplaceGameVoice != null &&
+                !LilithModPlugin.CfgReplaceGameVoice.Value)
+                LilithModPlugin.CfgReplaceGameVoice.Value = true;
+        }
+
         private void Update()
         {
             if (_probe != null && _probe.IsCompleted)

@@ -136,6 +136,11 @@ check("nameof(AudioManager.PlayVoice)" in integrations and
 # assert the single shared predicate rather than either call site.
 check("HoldingForSynthesis" in game_voice and "EverAvailable" in game_voice,
       "The synthesis grace window must be one predicate in GameVoiceCoordinator")
+# The Update() probe cannot run before the first frame, which is when the
+# EnterGame greeting fires. Availability has to be establishable off that loop
+# or the opening line keeps the game's own Chinese voice on every launch.
+check("NoteServiceAnswered" in voice_monitor and "NoteServiceAnswered" in speech,
+      "A successful warm-up must mark the service available, not wait for the probe")
 check(len(re.findall(r"return AllowNativeVoice\(\);", integrations)) >= 3 and
       "GameVoiceCoordinator.HoldingForSynthesis" in integrations,
       "Every native-audio prefix must honour the grace window, not just the bubble")
