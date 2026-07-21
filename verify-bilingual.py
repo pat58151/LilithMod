@@ -486,6 +486,15 @@ check("text = node.text;" not in game_voice,
 # grace window.
 check("NativeAudioAllowed" in game_voice and "NativeAudioAllowed" in integrations,
       "A line handed back unreplaced must keep its own audio, or it plays silently")
+# Runtime-built lines carry no id, so the catalogue cannot reach them. Their
+# Japanese is fetched once and kept, never awaited on the dialogue path.
+dynamic_cache = read(MOD_DIR, "DynamicLineCache.cs")
+check(dynamic_cache and "TranslateLineToJapaneseAsync" in chat,
+      "Runtime-built dialogue needs a Japanese translation path, or it is silent")
+check("DynamicLineCache.TryGet" in game_voice and "RequestTranslation" in game_voice,
+      "The dialogue path must use the cache and request a fill on a miss")
+check("InFlight" in dynamic_cache,
+      "A repeating line must not queue one translation request per occurrence")
 
 # -- The weather feature discloses what it contacts ---------------------------
 # Asking about the weather sends the player's IP to a third party. That is a

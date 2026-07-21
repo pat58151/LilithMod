@@ -216,6 +216,17 @@ namespace LilithMod
             // language aloud, which is what a touch reply in English turned out to be.
             // The original voice is the right answer whenever the catalogue cannot
             // supply the line.
+            // Runtime-built lines carry no id to look up, so the Japanese is fetched
+            // once and kept. Silent the first time, spoken every time after - these
+            // are the reactions that repeat most, so it converges quickly.
+            if (string.IsNullOrWhiteSpace(text) && !string.IsNullOrWhiteSpace(node.text))
+            {
+                if (DynamicLineCache.TryGet(node.text, out string learned))
+                    text = learned;
+                else
+                    DynamicLineCache.RequestTranslation(node.text);
+            }
+
             if (string.IsNullOrWhiteSpace(text))
             {
                 AllowNativeAudioForThisLine();

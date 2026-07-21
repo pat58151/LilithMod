@@ -116,8 +116,16 @@ namespace LilithMod
         };
 
         // ========== Unity lifecycle ==========
+        /// <summary>
+        /// The live controller, for the few static callers that need its HTTP client
+        /// and key. DynamicLineCache is one: it runs off the dialogue path, not the
+        /// component.
+        /// </summary>
+        private static LlmChatController _instance;
+
         private void Awake()
         {
+            _instance = this;
             ApplyConfiguredHotkey(Hotkey, true);
 
             // UI construction is deliberately NOT done here. Awake() runs when BepInEx
@@ -1169,6 +1177,27 @@ namespace LilithMod
                 if ((c >= '\u3040' && c <= '\u30ff') || (c >= '\u3400' && c <= '\u9fff'))
                     return true;
             return false;
+        }
+
+        /// <summary>
+        /// Japanese for one line the game built at runtime. Used only by
+        /// DynamicLineCache, and only once per distinct line - the result is kept.
+        /// </summary>
+        internal static async Task<string> TranslateLineToJapaneseAsync(
+            string source, CancellationToken token)
+        {
+            var instance = _instance;
+            if (instance == null || string.IsNullOrWhiteSpace(ApiKey) ||
+                string.IsNullOrWhiteSpace(source))
+                return null;
+
+            string reply = await instance.RequestTextCompletionAsync(
+                "You translate one short line of game dialogue into natural Japanese. " +
+                "It is spoken by Lilith, a soft-spoken companion character, to the player. " +
+                "Reply with the Japanese only: no quotes, no romaji, no explanation, no alternatives.",
+                source, 120, token).ConfigureAwait(false);
+
+            return reply?.Trim().Trim('"', '「', '」');
         }
 
         private async Task<string> RequestTextCompletionAsync(

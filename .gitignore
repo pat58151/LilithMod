@@ -55,3 +55,4 @@ LilithMod/DevHooks.cs
 
 # Staged release-zip contents for the installer build; recreated every build.
 installer/payload/
+dynamic-lines.ja.json
