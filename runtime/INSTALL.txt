@@ -43,8 +43,8 @@ OPTIONAL - HER VOICE
 --------------------
 Out of the box she writes but does not speak.
 
-No voice model is included. One trained on the game's audio is the developers'
-work and is not mine to distribute, so you supply your own. Instructions are in
+No voice model is included - the mod works with any GPT-SoVITS voice model
+you provide. Instructions are in
 
     BepInEx\plugins\LilithMod\voice-setup\README.txt
 

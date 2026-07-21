@@ -5,9 +5,8 @@ This is about LILITH'S VOICE - making her speak aloud. For talking to her, see
 the speech-setup folder next to this one. The two are independent and either
 works without the other. With neither installed she still chats in text.
 
-Nothing about the voice ships with the mod, and that is deliberate: a voice
-model trained on the game's own audio is the developers' work, so it is not
-mine to distribute. You supply a voice. Instructions below.
+No voice model ships with the mod - it works with any GPT-SoVITS voice you
+supply. Instructions below.
 
 You need GPT-SoVITS and a voice model, about 2 GB. It runs entirely on your
 computer and nothing is uploaded. A GPU makes it much faster but is not
@@ -164,5 +163,5 @@ Everything here is local. Synthesis runs on your machine and no audio is
 uploaded. Only your typed or spoken message text goes to the language model,
 and your API key stays in the game's own config file.
 
-Voice models trained on the game's audio are derived from the developers'
-work. Keep them to yourself.
+If you train a voice model from copyrighted audio, treat it as personal-use
+only and do not redistribute it.
