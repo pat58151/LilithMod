@@ -1066,6 +1066,14 @@ namespace LilithMod
 
             LilithModPlugin.Logger.LogWarning(
                 $"[LlmChat] Model used the wrong shown language; requesting {displayLanguage} correction.");
+            // This fires on every reply, which doubles the API calls and roughly
+            // doubles the wait. Whether the model really is emitting Japanese in
+            // shown, or the check rejects a shape it should accept, cannot be told
+            // apart without seeing the reply - so say what came back.
+            if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                LilithModPlugin.Logger.LogInfo(
+                    "[LlmChat] Rejected reply was: " +
+                    (reply == null ? "<null>" : reply.Length > 400 ? reply.Substring(0, 400) + "..." : reply));
             var correctionPayload = (JObject)payload.DeepClone();
             var correctionMessages = (JArray)correctionPayload["messages"];
             correctionMessages.Add(JObject.FromObject(new { role = "assistant", content = reply }));
@@ -1183,9 +1191,17 @@ namespace LilithMod
                         lastCompletionTokens = (int?)json["usage"]?["completion_tokens"] ?? 0;
                         if (!string.IsNullOrWhiteSpace(content)) return content;
 
+                        // reasoning_content distinguishes the two causes. V4 Flash is a
+                        // reasoning model, and the request asks for thinking to be
+                        // disabled; if reasoning came back anyway, that field is not
+                        // taking effect and the token budget is being spent before any
+                        // answer is written. Empty reasoning means something else.
+                        int reasoningLength =
+                            (choice?["message"]?["reasoning_content"]?.ToString() ?? string.Empty).Length;
                         LilithModPlugin.Logger.LogWarning(
                             $"[LlmChat] Empty API content on attempt {attempt + 1}/3; "
-                            + $"finish={lastFinishReason}, completion_tokens={lastCompletionTokens}.");
+                            + $"finish={lastFinishReason}, completion_tokens={lastCompletionTokens}, "
+                            + $"reasoning_chars={reasoningLength}.");
                     }
                 }
             }
