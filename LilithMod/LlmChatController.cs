@@ -1762,14 +1762,12 @@ namespace LilithMod
         private const float NativeDialogueQuietSeconds = 8f;
 
         /// <summary>
-        /// Rolled each time an ambient remark comes due. A miss skips that turn
-        /// rather than delaying it, so the timing stays unpredictable instead of
-        /// arriving on a schedule the player can feel.
+        /// Rolled when an interaction reply is about to fire. A miss drops it
+        /// silently, so handling her does not draw a comment every single time -
+        /// she notices most of it, not all of it. Idle ambient remarks are not
+        /// rolled; their 12-25 minute interval is already the rarity there.
         /// </summary>
-        private const float AmbientChance = 0.7f;
-
-        /// <summary>Minimum wait after an ambient remark actually fires.</summary>
-        private const float AmbientCooldownSeconds = 180f;
+        private const float InteractionReplyChance = 0.7f;
 
         private static float _lastNativeDialogueAt = -600f;
 
@@ -1802,11 +1800,20 @@ namespace LilithMod
         {
             if (string.IsNullOrEmpty(_pendingInteraction) || Time.unscaledTime < _interactionReplyAt ||
                 (_currentRequest != null && !_currentRequest.IsCompleted)) return;
+            // Handling her triggers the game's own drag and touch dialogue, so a
+            // reply fired immediately lands on top of it. Held, not dropped - the
+            // reply still makes sense a moment after she finishes.
+            if (Time.unscaledTime - _lastNativeDialogueAt < NativeDialogueQuietSeconds) return;
+
             string kind = _pendingInteraction;
             _pendingInteraction = null;
             // Re-checked here, not just when queued: an ambient remark may have
             // landed during the three second delay before this fires.
             if (!SpontaneousReady) return;
+            // Rolled once, at the moment of firing, and a miss discards the pending
+            // interaction. Rolling every frame while it waits would come up true
+            // eventually and make the chance meaningless.
+            if (UnityEngine.Random.value >= InteractionReplyChance) return;
             _lastSpontaneousAt = Time.unscaledTime;
             SendUserMessage("The player just interacted with Lilith: " + kind, true);
         }
@@ -1844,16 +1851,7 @@ namespace LilithMod
                 ScheduleNextAmbient();
                 return;
             }
-            if (UnityEngine.Random.value >= AmbientChance)
-            {
-                // Rolled off: skip this turn entirely.
-                ScheduleNextAmbient();
-                return;
-            }
             ScheduleNextAmbient();
-            // A floor, not a replacement for the configured interval - it only binds
-            // if that interval is ever set shorter than the cooldown.
-            _nextAmbientAt = Mathf.Max(_nextAmbientAt, Time.unscaledTime + AmbientCooldownSeconds);
             _lastSpontaneousAt = Time.unscaledTime;
             SendUserMessage("Make one spontaneous remark suited to the current time, posture, and recent memory.", true);
         }
