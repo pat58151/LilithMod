@@ -60,8 +60,12 @@ Ordered. Several steps are non-obvious and were each learned from a failure.
 
 4. **Copy the plugin.** `LilithMod.dll` plus its managed dependencies, the
    `help\`, `voice-setup\` and `speech-setup\` folders. Build with
-   `-p:IncludeDialogueCatalog=false`; a release DLL is ~195 KB and a local one
-   ~410 KB, which is the quickest check that the game's script did not ship.
+   `-p:IncludeDialogueCatalog=false`; a release DLL is ~210 KB and a local one
+   ~420 KB, which is the quickest check that the game's script did not ship.
+
+   Without the catalogue the mod does not replace native dialogue at all, so the
+   game keeps its own voice for its own lines. Her replies are unaffected. This
+   is now enforced by `DialogueTextCatalog.Available` - see the note below.
 
 5. **Do not write `LilithMod.cfg`.** Let the mod generate it on first run. The
    API key is user-supplied and belongs only in that file.
@@ -77,9 +81,12 @@ Ordered. Several steps are non-obvious and were each learned from a failure.
 
 ## Not verified, and worth an installer's attention
 
-- **The release zip has never been installed anywhere.** It is assembled and
-  its contents checked, but no clean machine has run it. Every install bug this
-  project hit was environmental and only appeared on a real run.
+- **The release zip has now been installed once**, on 2026-07-21, onto a freshly
+  reinstalled game on the development machine. That is not a clean *machine* -
+  same Steam, same drive layout, same OS - but it was a clean game folder and a
+  clean `LilithMod.cfg`, so it was the first run against the shipped defaults
+  rather than a config accumulated across every version. It found a real bug
+  immediately; see below. A genuinely foreign machine is still untested.
 - **BepInEx `interop\` is generated from `GameAssembly.dll` on first run.** It
   takes noticeably long, and a first launch that seems to hang is usually this.
   Worth telling the user rather than letting them force-quit - which can abandon
@@ -89,3 +96,20 @@ Ordered. Several steps are non-obvious and were each learned from a failure.
   those: they are the only irreplaceable things the mod creates.
 - **Antivirus and SmartScreen.** An unsigned installer that writes into a Steam
   folder and launches PowerShell is a plausible false positive. Untested.
+
+## Found by that first real install
+
+The distribution build replaced native dialogue with text it did not have.
+`TryGet` correctly returned false without the catalogue, but `QueueNode` fell
+through to `node.text` - the game's Chinese source string - and handed it to the
+Japanese voice. Every release install behaved that way; no local build could,
+because a local build always has the catalogue.
+
+Fixed by gating `VoiceReplacementEnabled` on `DialogueTextCatalog.Available`,
+which turns the bubble gate and all four audio prefixes off together. Gating
+only one would have yielded silent dialogue instead of wrong-language dialogue.
+
+**The lesson is the reason this document exists.** Both verify suites passed,
+the mod worked perfectly on the development machine, and the artifact users
+would receive was broken. "Works" and "works here" are still not the same thing,
+and only a real install distinguished them.

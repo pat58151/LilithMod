@@ -12,8 +12,10 @@
     build output is assembled from scratch instead.
 
     The dialogue catalogue is excluded too. It is the game's own script,
-    compiled in only for local builds; without it native dialogue simply keeps
-    its original voice.
+    compiled in only for local builds. Without it the mod leaves native dialogue
+    alone and the game keeps its original voice - enforced by
+    DialogueTextCatalog.Available, after a release build was found replacing
+    those lines with text it did not have.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File runtime\package-mod.ps1

@@ -120,8 +120,10 @@ Non-negotiable, and a licensing boundary rather than a preference:
 
 These are the game developers' content. They are gitignored, excluded by
 `package-mod.ps1`, and asserted absent by `verify-package.py`. The release build
-uses `-p:IncludeDialogueCatalog=false`; a release DLL is ~195 KB against ~428 KB
+uses `-p:IncludeDialogueCatalog=false`; a release DLL is ~210 KB against ~420 KB
 for a local one, which is the fastest way to spot a catalogue that leaked in.
+Without it the mod leaves native dialogue alone entirely, so the game keeps its
+own voice for its own lines; her replies are unaffected.
 
 Also never ship: `LilithMod.cfg` (API key), `memory.json`, `notes.json`, cached
 voice audio, `.pdb`, `.log`.
@@ -205,10 +207,11 @@ and the shipped assembly carrying the developer's folder layout in its embedded
 
 Stated plainly so nobody inherits false confidence:
 
-- **The release zip has never been installed on a clean machine.** Not once. It
-  is assembled and its contents verified, but every install bug this project has
-  hit was environmental and only appeared on a real run. This is the single
-  biggest risk in shipping.
+- **The release zip has been installed exactly once**, and only onto a freshly
+  reinstalled game on the development machine - same Steam, same drive, same OS.
+  It found a real bug on that first run (native dialogue was being replaced with
+  text the build did not contain). A genuinely foreign machine is still
+  untested, and remains the single biggest risk in shipping.
 - **Antivirus and SmartScreen are untested.** An unsigned installer that writes
   into a Steam folder and may launch PowerShell is a plausible false positive.
   Signing is worth considering.
