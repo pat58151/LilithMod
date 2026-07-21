@@ -456,6 +456,9 @@ check("QueuedMessageMaxWaitSeconds" in chat,
 check(len(re.findall(r"SpeechStillFinishing", chat)) >= 4,
       "Every path that starts a reply must wait on SpeechStillFinishing, including "
       "the ambient remark")
+check("if (!ambient) ScheduleNextAmbient();" in chat,
+      "Talking to her must reset the idle clock, or a held ambient remark lands "
+      "seconds after she finishes answering")
 check("_speechEndedAt = Time.unscaledTime;" in chat,
       "The end of playback must be recorded, or the post-speech delay has no anchor")
 

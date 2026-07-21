@@ -1000,6 +1000,16 @@ namespace LilithMod
             lock (_history) messagesSnapshot = new List<Message>(_history);
             string requestPersona = messagesSnapshot[0].Content;
 
+            // Talking to her resets the idle clock. An unprompted remark moments
+            // after she has just answered reads as her talking to herself rather than
+            // as company, and the ambient hold makes that likelier: a remark falling
+            // due mid-reply now waits and lands the moment she stops.
+            //
+            // Only the ambient schedule, deliberately - not _lastSpontaneousAt, which
+            // also gates interaction replies. Muting her response to touch for three
+            // minutes after every conversation would read as her ignoring you.
+            if (!ambient) ScheduleNextAmbient();
+
             // The log carries no timestamps, so "it feels slower than it used to" has
             // never been checkable. Measured from the moment the message is accepted,
             // which is what the player actually waits through.
