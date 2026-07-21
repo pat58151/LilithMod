@@ -971,6 +971,11 @@ namespace LilithMod
             lock (_history) messagesSnapshot = new List<Message>(_history);
             string requestPersona = messagesSnapshot[0].Content;
 
+            // The log carries no timestamps, so "it feels slower than it used to" has
+            // never been checkable. Measured from the moment the message is accepted,
+            // which is what the player actually waits through.
+            _replyStartedAt = Time.unscaledTime;
+
             _currentRequest = Task.Run(async () =>
             {
                 try
@@ -1180,15 +1185,22 @@ namespace LilithMod
                     request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {ApiKey}");
                     request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
+                    var callTimer = System.Diagnostics.Stopwatch.StartNew();
                     using (var response = await _httpClient.SendAsync(request, token))
                     {
                         response.EnsureSuccessStatusCode();
                         string responseBody = await response.Content.ReadAsStringAsync();
+                        callTimer.Stop();
                         var json = JObject.Parse(responseBody);
                         var choice = json["choices"]?[0];
                         var content = choice?["message"]?["content"]?.ToString();
                         lastFinishReason = choice?["finish_reason"]?.ToString() ?? "missing";
                         lastCompletionTokens = (int?)json["usage"]?["completion_tokens"] ?? 0;
+                        if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                            LilithModPlugin.Logger.LogInfo(
+                                $"[LlmChat] API call took {callTimer.ElapsedMilliseconds} ms " +
+                                $"(prompt_tokens={(int?)json["usage"]?["prompt_tokens"] ?? 0}, " +
+                                $"completion_tokens={lastCompletionTokens}).");
                         if (!string.IsNullOrWhiteSpace(content)) return content;
 
                         // reasoning_content distinguishes the two causes. V4 Flash is a
@@ -1316,7 +1328,8 @@ namespace LilithMod
                 }
 
                 LilithModPlugin.Logger.LogInfo(
-                    $"[LlmChat] LLM reply queued ({utterances.Count} synchronized sentence(s)).");
+                    $"[LlmChat] LLM reply queued ({utterances.Count} synchronized sentence(s)) " +
+                    $"after {Time.unscaledTime - _replyStartedAt:0.0}s.");
             }
             else
             {
@@ -1802,6 +1815,8 @@ namespace LilithMod
                 return false;
             }
         }
+
+        private float _replyStartedAt;
 
         private static float _lastNativeDialogueAt = -600f;
 
