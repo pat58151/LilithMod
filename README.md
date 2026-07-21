@@ -27,6 +27,24 @@ them grey out rather than failing.
 
 ---
 
+## Things you might not notice at first
+
+- **She never talks over herself.** Nothing interrupts a line already in
+  progress — not your next message, not the game's own dialogue, not an ambient
+  remark that came due. Four separate paths wait rather than cut her off.
+- **Long replies arrive in pieces.** She speaks the first sentence while the
+  rest is still being synthesised, so she starts answering in about the time a
+  short reply would take.
+- **Speech and subtitles are independent.** Japanese, English or Chinese for
+  either, in any combination. Japanese spoken under English subtitles is the
+  intended default, and the game's own dialogue can be revoiced the same way.
+- **Her settings live in the game's menu**, in whatever language the game is
+  set to — not in a separate launcher or a config file you have to find.
+- **Everything runs on your machine** except the language model. Her voice, her
+  memory and her notes never leave it.
+
+---
+
 ## Install
 
 Download the latest release and run `LilithMod-Setup-<version>.exe`. It finds
