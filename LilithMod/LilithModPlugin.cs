@@ -26,6 +26,9 @@ namespace LilithMod
         internal static ConfigEntry<int> CfgTimeoutSeconds;
         internal static ConfigEntry<string> CfgHotkey;
         internal static ConfigEntry<bool> CfgLogDiagnostics;
+        internal static ConfigEntry<bool> CfgForceSynthesisUnavailable;
+        internal static ConfigEntry<bool> CfgForceSleeping;
+        internal static ConfigEntry<bool> CfgIgnoreStartupShortcut;
         internal static ConfigEntry<bool> CfgAutoStartServices;
         internal static ConfigEntry<string> CfgServiceLauncher;
         internal static ConfigEntry<bool> CfgAmbientEnabled;
@@ -180,6 +183,20 @@ namespace LilithMod
                 "Verbose per-frame input and window-focus logging. Only needed when "
                 + "diagnosing why a hotkey or the chat box is not responding.");
 
+            // Three behaviours only occur in conditions that cannot be arranged on
+            // demand: synthesis failing to start, Lilith asleep, and no Startup
+            // shortcut installed. Each shipped untested because reaching it meant
+            // waiting for luck. These force the condition instead.
+            CfgForceSynthesisUnavailable = Config.Bind("Debug", "ForceSynthesisUnavailable", false,
+                "Testing only. Pretend the voice service never answers, to exercise the "
+                + "startup grace window and the fallback to the game's own voice.");
+            CfgForceSleeping = Config.Bind("Debug", "ForceSleeping", false,
+                "Testing only. Pretend Lilith is asleep, so the longer ambient intervals "
+                + "and the reduced interaction chance apply while she is plainly awake.");
+            CfgIgnoreStartupShortcut = Config.Bind("Debug", "IgnoreStartupShortcut", false,
+                "Testing only. Act as though the Startup shortcut is absent, so the mod "
+                + "starts the voice services itself.");
+
             // Not exposed in settings and not meant to be switched off: spontaneous
             // remarks are most of what makes her feel present rather than summoned.
             CfgAmbientEnabled = Config.Bind("Companion", "AmbientAlwaysOn", true,
@@ -238,6 +255,8 @@ namespace LilithMod
             // After InitVoice, which loads voice-config.ini and so knows where the
             // runtime lives and which endpoint to probe.
             ServiceBootstrap.Run();
+
+            LogStartupSummary();
 
             try
             {
@@ -316,6 +335,43 @@ namespace LilithMod
 
             CfgVoiceTextSplitMethod = Config.Bind("Voice", "TextSplitMethod", "cut5",
                 "text_split_method parameter passed to the TTS service.");
+        }
+
+        /// <summary>
+        /// One line describing the state every support question turns out to hinge on.
+        /// Reconstructing this from scattered entries was the slow part of every
+        /// diagnosis so far, and on a machine that is not this one it may be the only
+        /// evidence available.
+        /// </summary>
+        private void LogStartupSummary()
+        {
+            try
+            {
+                Log.LogInfo(
+                    "[LilithMod] Startup: " +
+                    $"apiKey={(string.IsNullOrWhiteSpace(CfgApiKey?.Value) ? "absent" : "present")}, " +
+                    $"voice={(VoiceConfig.Enabled ? "enabled" : "disabled")}, " +
+                    $"synthesisPreferred={CfgVoiceSynthesisPreferred?.Value}, " +
+                    $"endpoint={VoiceConfig.Endpoint}, " +
+                    $"servicesStartedByMod={ServiceBootstrap.StartedServices}, " +
+                    $"speechLanguage={VoiceConfig.TextLang}.");
+
+                // Loud and separate: these change behaviour in ways that look like
+                // bugs, and a report made with one left on wastes everyone's time.
+                if (CfgForceSynthesisUnavailable.Value || CfgForceSleeping.Value ||
+                    CfgIgnoreStartupShortcut.Value)
+                {
+                    Log.LogWarning(
+                        "[LilithMod] TESTING FLAGS ARE ON - behaviour is deliberately not normal: " +
+                        $"ForceSynthesisUnavailable={CfgForceSynthesisUnavailable.Value}, " +
+                        $"ForceSleeping={CfgForceSleeping.Value}, " +
+                        $"IgnoreStartupShortcut={CfgIgnoreStartupShortcut.Value}.");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Log.LogWarning($"[LilithMod] Could not write the startup summary: {ex.Message}");
+            }
         }
 
         private void InitVoice()

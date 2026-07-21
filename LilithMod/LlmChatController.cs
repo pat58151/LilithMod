@@ -1783,6 +1783,9 @@ namespace LilithMod
         {
             try
             {
+                if (LilithModPlugin.CfgForceSleeping != null &&
+                    LilithModPlugin.CfgForceSleeping.Value)
+                    return true;
                 var character = CharacterController.s_activeInstance;
                 return character != null && character.IsSleep;
             }

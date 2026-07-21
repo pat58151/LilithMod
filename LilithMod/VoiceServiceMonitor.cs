@@ -36,6 +36,9 @@ namespace LilithMod
         /// </summary>
         internal static void NoteServiceAnswered()
         {
+            if (LilithModPlugin.CfgForceSynthesisUnavailable != null &&
+                LilithModPlugin.CfgForceSynthesisUnavailable.Value)
+                return;
             IsAvailable = true;
             EverAvailable = true;
 
@@ -66,6 +69,9 @@ namespace LilithMod
 
         private static async Task<bool> ProbeAsync()
         {
+            if (LilithModPlugin.CfgForceSynthesisUnavailable != null &&
+                LilithModPlugin.CfgForceSynthesisUnavailable.Value)
+                return false;
             if (!VoiceConfig.Enabled || LilithModPlugin.VoiceProcessor == null ||
                 !Uri.TryCreate(VoiceConfig.Endpoint, UriKind.Absolute, out Uri endpoint) ||
                 (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))

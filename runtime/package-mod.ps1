@@ -47,8 +47,16 @@ New-Item -ItemType Directory -Path $pluginOut -Force | Out-Null
 
 try {
     Write-Host "Building without the dialogue catalogue..."
+    # DebugType=none: symbols are stripped below anyway, and without this the
+    # assembly still carries the full .pdb path from this machine, which puts the
+    # developer's folder layout into a public download.
+    # --no-incremental is load-bearing next to DebugType: without it MSBuild
+    # reuses an intermediate assembly compiled with symbols, and the .pdb path
+    # survives into the release despite the property.
     & $dotnet build $project -c Release `
         -p:IncludeDialogueCatalog=false `
+        -p:DebugType=none `
+        --no-incremental `
         -p:OutputPath="$pluginOut\" `
         --nologo
     if ($LASTEXITCODE -ne 0) { throw "Build failed." }
@@ -80,6 +88,14 @@ try {
     $doorstopText = Get-Content -LiteralPath $doorstopConfig -Raw
     $doorstopText = $doorstopText -replace '(?m)^ignore_disable_switch\s*=\s*false\s*$', 'ignore_disable_switch = true'
     Set-Content -LiteralPath $doorstopConfig -Value $doorstopText -Encoding utf8
+
+    # Assert rather than assume the rewrite matched. If a future BepInEx renames
+    # or drops the key, the regex above quietly does nothing and every install
+    # from this zip is silently unmodded while the logs look healthy - the single
+    # worst failure this project has had, and invisible from here.
+    if ((Get-Content -LiteralPath $doorstopConfig -Raw) -notmatch '(?m)^ignore_disable_switch\s*=\s*true\s*$') {
+        throw "doorstop_config.ini has no 'ignore_disable_switch = true' after the rewrite. Steam will skip the mod."
+    }
 
     Copy-Item (Join-Path $PSScriptRoot "INSTALL.txt") (Join-Path $staging "INSTALL.txt") -Force
 

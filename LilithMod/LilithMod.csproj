@@ -110,6 +110,8 @@
     <None Include="voice-setup\voice-config.example.ini" CopyToOutputDirectory="PreserveNewest" />
     <None Include="speech-setup\README.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="help\OVERVIEW.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="help\OVERVIEW.ja.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="help\OVERVIEW.zh.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

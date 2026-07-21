@@ -80,6 +80,9 @@ namespace LilithMod
         {
             try
             {
+                if (LilithModPlugin.CfgIgnoreStartupShortcut != null &&
+                    LilithModPlugin.CfgIgnoreStartupShortcut.Value)
+                    return false;
                 string startup = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
                 return !string.IsNullOrEmpty(startup) &&
                        File.Exists(Path.Combine(startup, StartupShortcutName));
