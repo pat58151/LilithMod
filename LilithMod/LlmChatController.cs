@@ -83,7 +83,6 @@ namespace LilithMod
         private readonly ConcurrentQueue<string> _letterQueue = new ConcurrentQueue<string>();
         private static readonly ConcurrentQueue<string> InteractionQueue = new ConcurrentQueue<string>();
         private float _nextAmbientAt;
-        private float _lastInteractionReplyAt = -300f;
         private string _pendingInteraction;
         private float _interactionReplyAt;
         private bool _letterInFlight;
@@ -1741,10 +1740,23 @@ namespace LilithMod
             }
         }
 
-        private const float InteractionCooldownSeconds = 210f;
 
         // Two, so a single stray "love you" cannot arm a love letter on its own.
         private const int LoveLetterPersonalMinimum = 2;
+
+        /// <summary>
+        /// Floor between ANY two unprompted utterances. Ambient remarks and
+        /// interaction replies used to keep separate timers, so each was within its
+        /// own budget while the two together were not - petting her shortly after an
+        /// ambient remark produced back-to-back spontaneous speech. One shared
+        /// timestamp is what actually bounds how often she speaks unbidden.
+        /// </summary>
+        private const float SpontaneousGapSeconds = 210f;
+
+        private float _lastSpontaneousAt = -600f;
+
+        private bool SpontaneousReady =>
+            Time.unscaledTime - _lastSpontaneousAt >= SpontaneousGapSeconds;
 
         private void DrainInteractions()
         {
@@ -1754,9 +1766,7 @@ namespace LilithMod
                 // Cooldown between reactions to being interacted with. Long enough that
                 // repeated petting does not turn into a running commentary; the
                 // interaction is still remembered even when the reply is skipped.
-                if (!AmbientAllowed ||
-                    Time.unscaledTime - _lastInteractionReplyAt < InteractionCooldownSeconds)
-                    continue;
+                if (!AmbientAllowed || !SpontaneousReady) continue;
                 _pendingInteraction = kind;
                 _interactionReplyAt = Time.unscaledTime + 3f;
             }
@@ -1768,7 +1778,10 @@ namespace LilithMod
                 (_currentRequest != null && !_currentRequest.IsCompleted)) return;
             string kind = _pendingInteraction;
             _pendingInteraction = null;
-            _lastInteractionReplyAt = Time.unscaledTime;
+            // Re-checked here, not just when queued: an ambient remark may have
+            // landed during the three second delay before this fires.
+            if (!SpontaneousReady) return;
+            _lastSpontaneousAt = Time.unscaledTime;
             SendUserMessage("The player just interacted with Lilith: " + kind, true);
         }
 
@@ -1791,7 +1804,15 @@ namespace LilithMod
             }
             if (Time.unscaledTime < _nextAmbientAt ||
                 (_currentRequest != null && !_currentRequest.IsCompleted)) return;
+            if (!SpontaneousReady)
+            {
+                // Due, but she has spoken unbidden too recently. Push it out rather
+                // than dropping it, so the remark arrives late instead of never.
+                ScheduleNextAmbient();
+                return;
+            }
             ScheduleNextAmbient();
+            _lastSpontaneousAt = Time.unscaledTime;
             SendUserMessage("Make one spontaneous remark suited to the current time, posture, and recent memory.", true);
         }
 

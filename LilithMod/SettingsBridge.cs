@@ -575,18 +575,37 @@ namespace LilithMod
             SetVoiceSelectionWithoutNotify(buttons);
         }
 
+        /// <summary>
+        /// Held so the label can be re-applied when the game language changes. Its
+        /// localiser is stripped, so nothing else will ever retranslate it.
+        /// </summary>
+        private static TMP_Text[] _synthesisLabels;
+
         private static void RenameSynthesisButton(Component button)
         {
             if (button == null) return;
-            var labels = button.GetComponentsInChildren<TMP_Text>(true);
-            for (int i = 0; i < labels.Length; i++)
+            _synthesisLabels = button.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < _synthesisLabels.Length; i++)
             {
-                if (labels[i] == null) continue;
-                TraySettingView.StripLabelLocalizer(labels[i]);
-                labels[i].text = "Vocal Synthesis";
-                labels[i].enableWordWrapping = false;
-                labels[i].enableAutoSizing = false;
-                labels[i].overflowMode = TextOverflowModes.Overflow;
+                if (_synthesisLabels[i] == null) continue;
+                TraySettingView.StripLabelLocalizer(_synthesisLabels[i]);
+                _synthesisLabels[i].enableWordWrapping = false;
+                _synthesisLabels[i].enableAutoSizing = false;
+                _synthesisLabels[i].overflowMode = TextOverflowModes.Overflow;
+            }
+            ApplySynthesisLabel(UiLanguage());
+        }
+
+        private static void ApplySynthesisLabel(string language)
+        {
+            if (_synthesisLabels == null) return;
+            string text =
+                language == "ja" ? "音声合成" :
+                language == "zh" ? "语音合成" :
+                "Vocal Synthesis";
+            for (int i = 0; i < _synthesisLabels.Length; i++)
+            {
+                if (_synthesisLabels[i] != null) _synthesisLabels[i].text = text;
             }
         }
 
@@ -648,6 +667,9 @@ namespace LilithMod
                 ja ? "音声合成\nフォルダを開く" : zh ? "打开合成\n语音文件夹" : "Open Synth\nVoice Folder");
             SetWrappedLabel(_opacityLabel,
                 ja ? "不透明度" : zh ? "不透明度" : "Opacity");
+            // Native row, relabelled by this mod and localiser-stripped, so it needs
+            // the same treatment as the cloned ones.
+            ApplySynthesisLabel(language);
         }
 
         /// <summary>

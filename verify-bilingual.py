@@ -323,9 +323,21 @@ def _folder_label_args(field):
 _voice_labels = _folder_label_args("_voiceFolderLabel")
 _speech_labels = _folder_label_args("_speechFolderLabel")
 check(len(_voice_labels) >= 3 and all("\\n" in v for v in _voice_labels) and
-      len(_speech_labels) >= 3 and all("\\n" in v for v in _speech_labels) and
-      'labels[i].enableWordWrapping = false' in settings,
+      len(_speech_labels) >= 3 and all("\\n" in v for v in _speech_labels),
       "The folder rows must be labelled over two lines in every language")
+
+# Separate concern, separate check: the native synthesis row is one line and must
+# not wrap. Bundling this into the folder-label check above made a rename there
+# look like a labelling regression here.
+check(re.search(r"_synthesisLabels\[i\]\.enableWordWrapping = false", settings)
+      is not None,
+      "The vocal synthesis row must not word-wrap")
+
+# Relabelled by this mod with its localiser stripped, so only this mod can
+# translate it - the same trap as the cloned rows.
+check(re.search(r"ApplySynthesisLabel\(language\)", settings) is not None and
+      "音声合成" in settings,
+      "The vocal synthesis row must follow the game's UI language")
 
 # The rows this mod adds are clones with their localiser stripped, so nothing but
 # this refresh will ever translate them.
