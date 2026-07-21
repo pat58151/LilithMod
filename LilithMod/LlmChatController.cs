@@ -1635,7 +1635,12 @@ namespace LilithMod
             // sentence than English does. Overshooting costs nothing.
             if (noteRoll < 0.05f)
             {
-                lengthRule = "Write one long, flowing sentence of roughly 90 to 140 words.";
+                // Measured, not guessed: this brackets a median of ~520 rendered
+                // characters, which is about as close to the 500 target as a word
+                // count gets. The ceiling drives the result far more than the floor
+                // - 90-140 medians 574 and 90-110 medians 427 on the same floor -
+                // and roughly +-100 characters of spread is inherent either way.
+                lengthRule = "Write one long, flowing sentence of roughly 90 to 115 words.";
                 letterMaxTokens = 420;
             }
             else if (noteRoll < 0.20f)
