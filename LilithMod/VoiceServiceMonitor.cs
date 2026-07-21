@@ -11,6 +11,15 @@ namespace LilithMod
 
         internal static bool IsAvailable { get; private set; }
 
+        /// <summary>
+        /// Whether the service has answered even once this session. "Not up yet" and
+        /// "not installed" both read as unavailable, but only the first is worth
+        /// waiting through - the synthesis model takes tens of seconds to load, and
+        /// dialogue that fires in that window would otherwise use the game's own
+        /// voice, which is Chinese.
+        /// </summary>
+        internal static bool EverAvailable { get; private set; }
+
         private float _nextProbe;
         private Task<bool> _probe;
         private bool _reported;
@@ -54,6 +63,7 @@ namespace LilithMod
         {
             bool changed = IsAvailable != available;
             IsAvailable = available;
+            if (available) EverAvailable = true;
             bool preferred = LilithModPlugin.CfgVoiceSynthesisPreferred != null &&
                              LilithModPlugin.CfgVoiceSynthesisPreferred.Value;
             bool effective = preferred && available;

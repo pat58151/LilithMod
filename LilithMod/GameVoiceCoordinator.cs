@@ -17,6 +17,20 @@ namespace LilithMod
         private const float NativeSuppressedAfterModSeconds = 4f;
 
         private static float _modSpokeAt = -600f;
+
+        /// <summary>
+        /// How long to wait for synthesis to come up before accepting that it is not
+        /// going to. Generous: the model load measured tens of seconds, and the cost
+        /// of overshooting is a few dropped native lines rather than wrong audio.
+        /// </summary>
+        private const float StartupVoiceGraceSeconds = 90f;
+
+        private static bool SynthesisPreferred()
+        {
+            return LilithModPlugin.CfgVoiceSynthesisPreferred != null &&
+                   LilithModPlugin.CfgVoiceSynthesisPreferred.Value &&
+                   VoiceConfig.Enabled;
+        }
         private readonly HashSet<long> _pendingNodes = new HashSet<long>();
         private int _dynamicAlarmLine;
         private float _alarmDialogueUntil;
@@ -43,6 +57,28 @@ namespace LilithMod
             {
                 _modSpokeAt = Time.unscaledTime;
                 return true;
+            }
+
+            // Synthesis is wanted but has never answered yet this session, and the
+            // model takes tens of seconds to load. Letting the line through here is
+            // what made the first thing she says come out in the game's own Chinese
+            // voice: the monitor reports "unavailable" before it has ever been up,
+            // which is indistinguishable from having no synthesis installed.
+            //
+            // Bounded by StartupVoiceGraceSeconds so a machine with no synthesis at
+            // all still falls back to the native voice, which is the designed
+            // behaviour - this only covers "not up YET".
+            if (node != null && bubble != null && !_allowOriginalShow &&
+                !VoiceServiceMonitor.EverAvailable && SynthesisPreferred() &&
+                Time.unscaledTime < StartupVoiceGraceSeconds)
+            {
+                if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                {
+                    LilithModPlugin.Logger.LogInfo(
+                        $"[Voice] Dropped native line {node.lineId} (id {node.id}); " +
+                        "synthesis is preferred but has not come up yet.");
+                }
+                return false;
             }
 
             // The mod just spoke, so hold the game off for a moment. The other
