@@ -136,7 +136,10 @@ namespace LilithMod
                         $"{NativeSuppressedAfterModSeconds:0.#}s ago.");
                 }
                 // Dropped, not deferred: the game has no queue to hold it in, and a
-                // reaction shown four seconds late is worse than one not shown.
+                // reaction shown four seconds late is worse than one not shown. The
+                // game already tore the previous bubble down before this gate ran,
+                // so if that bubble was her reply, put it back.
+                LlmChatController.RequestReplyBubbleRestore();
                 return false;
             }
             // Past every drop gate, so this node will reach the screen - either now
@@ -242,6 +245,10 @@ namespace LilithMod
             });
             if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                 LilithModPlugin.Logger.LogInfo($"[Voice] Holding line {node.lineId} until {language} audio is ready.");
+            // Holding this line leaves the bubble the game just tore down empty for
+            // the whole synthesis wait. If that bubble was her reply mid-playback,
+            // restore it; the held line takes the bubble back when its audio lands.
+            LlmChatController.RequestReplyBubbleRestore();
             return false;
         }
 
