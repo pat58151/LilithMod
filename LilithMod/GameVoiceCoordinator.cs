@@ -19,11 +19,9 @@ namespace LilithMod
         private static float _modSpokeAt = -600f;
 
         /// <summary>
-        /// Set when a native line is handed back unreplaced, so its own audio is let
-        /// through. The four audio prefixes fire separately from the bubble gate and
-        /// cannot tell which line was declined - without this they keep suppressing
-        /// on the assumption the mod is about to speak, and the line plays silently.
-        /// The window only has to outlast the gap between the bubble and its audio.
+        /// Lets a declined line keep its own audio. The audio prefixes fire
+        /// separately from the bubble gate and cannot tell which line was declined;
+        /// without this they suppress it and the line plays silently.
         /// </summary>
         private static float _nativeAudioAllowedUntil = -600f;
 
@@ -35,11 +33,9 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// How long to wait for synthesis to come up before accepting that it is not
-        /// going to. Rarely reached: a successful warm-up marks the service available
-        /// during Load(), long before any dialogue. This covers the case where the
-        /// service genuinely is not up, and overshooting it drops native lines that
-        /// should have played.
+        /// How long to wait for synthesis before accepting it is not coming. Rarely
+        /// reached - warm-up marks it available during Load(). Overshooting drops
+        /// native lines that should have played.
         /// </summary>
         private const float StartupVoiceGraceSeconds = 15f;
 
@@ -53,13 +49,9 @@ namespace LilithMod
             ServiceBootstrap.StartedServices ? ColdStartVoiceGraceSeconds : StartupVoiceGraceSeconds;
 
         /// <summary>
-        /// True while synthesis is wanted, has never answered this session, and the
-        /// grace window is still open - so a native line arriving now should be
-        /// dropped whole rather than played.
-        ///
-        /// Both the bubble and the audio must read this. They travel by separate
-        /// routes (ShowNode here, four AudioManager prefixes in ModIntegrations), and
-        /// gating only one produced the game's Chinese voice under no subtitle at all.
+        /// Synthesis wanted, never answered yet, grace still open: drop the line
+        /// whole. Bubble and audio must both read this - they travel separately, and
+        /// gating one alone gave the game's Chinese voice under no subtitle.
         /// </summary>
         internal static bool HoldingForSynthesis =>
             !_allowOriginalShow && !VoiceServiceMonitor.EverAvailable &&
@@ -75,11 +67,9 @@ namespace LilithMod
         private readonly HashSet<long> _pendingNodes = new HashSet<long>();
 
         /// <summary>
-        /// The newest node the game genuinely tried to put on each bubble. A held
-        /// cue that is no longer the newest by the time its audio arrives is stale:
-        /// re-showing it put old text and voice over whatever reaction the game is
-        /// animating now, which is how rapid touches produced dialogue running
-        /// across the wrong animation.
+        /// Newest node per bubble. A held cue that is no longer newest when its audio
+        /// arrives is stale - re-showing it put old text over the animation playing
+        /// now, which is what rapid touches produced.
         /// </summary>
         private readonly Dictionary<long, long> _latestNodeForBubble = new Dictionary<long, long>();
         private int _dynamicAlarmLine;
@@ -132,14 +122,9 @@ namespace LilithMod
                 return false;
             }
 
-            // The mod just spoke, so hold the game off for a moment. The other
-            // direction already exists - ambient waits 8 s after native dialogue -
-            // and without this the game answers over the top of her reply, which is
-            // what makes handling her produce two overlapping lines.
-            //
-            // _allowOriginalShow is excluded: that is a line already synthesised and
-            // coming back to be displayed, and dropping it would discard audio that
-            // is about to play.
+            // Hold the game off briefly after she speaks, or it answers over the top
+            // of her reply. _allowOriginalShow is excluded: that is a line already
+            // synthesised and coming back to be shown.
             if (node != null && bubble != null && !_allowOriginalShow &&
                 Time.unscaledTime - _modSpokeAt < NativeSuppressedAfterModSeconds)
             {
@@ -222,16 +207,11 @@ namespace LilithMod
                 else if (DialogueTextCatalog.TryGet(alarmLineId, subtitleLanguage, out string localized))
                     node.text = localized;
             }
-            // No catalogue text for this line, so there is nothing correct to speak.
-            // node.text is the game's own string: Chinese for scripted lines, and the
-            // UI language - often English - for the ones it builds at runtime with
-            // lineId 0. Handing either to the Japanese voice made her read the wrong
-            // language aloud, which is what a touch reply in English turned out to be.
-            // The original voice is the right answer whenever the catalogue cannot
-            // supply the line.
-            // Runtime-built lines carry no id to look up, so the Japanese is fetched
-            // once and kept. Silent the first time, spoken every time after - these
-            // are the reactions that repeat most, so it converges quickly.
+            // node.text is the game's own string - Chinese for scripted lines, the UI
+            // language for runtime ones. Feeding either to the Japanese voice made her
+            // read the wrong language aloud, so keep the original voice instead.
+            // Runtime lines carry no id, so the Japanese is fetched once and kept:
+            // silent the first time, spoken after. These repeat, so it converges fast.
             if (string.IsNullOrWhiteSpace(text) && !string.IsNullOrWhiteSpace(node.text))
             {
                 if (DynamicLineCache.TryGet(node.text, out string learned))

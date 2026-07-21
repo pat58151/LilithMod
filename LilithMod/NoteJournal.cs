@@ -7,12 +7,9 @@ using Newtonsoft.Json;
 namespace LilithMod
 {
     /// <summary>
-    /// Bookkeeping for how often Lilith leaves a note.
-    ///
-    /// Persisted, because the whole point is rarity: when the count lived in a
-    /// field it reset on every launch, so restarting often meant a note could
-    /// almost never accumulate, and restarting rarely meant nothing throttled it
-    /// across sessions. Both failure modes are invisible from inside one session.
+    /// Bookkeeping for how often Lilith leaves a note. Persisted because rarity is
+    /// the point: an in-memory count reset each launch, so frequent restarts starved
+    /// it and rare ones left it unthrottled. Neither shows up within one session.
     /// </summary>
     internal static class NoteJournal
     {

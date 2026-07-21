@@ -87,12 +87,9 @@ namespace LilithMod
         /// </summary>
         public void CancelCurrent()
         {
-            // Native cues are never discarded here, only cancelled. Discarding one
-            // left the coordinator's pending entry leaked forever ("1 still held" for
-            // the rest of the session) and its bubble suppressed with no re-show. A
-            // cancelled cue still flows through the coordinator, which clears the
-            // pending entry and releases the voice thread without showing or voicing
-            // the stale line.
+            // Cancelled, never discarded: a discarded cue leaked the coordinator's
+            // pending entry forever and left its bubble suppressed with no re-show.
+            // A cancelled one still flows through and clears that entry.
             int held = NativeDialogueQueue.Count;
             for (int i = 0; i < held && NativeDialogueQueue.TryDequeue(out NativeDialogueCue heldCue); i++)
             {
@@ -117,10 +114,9 @@ namespace LilithMod
         private volatile bool _abandonRun;
 
         /// <summary>
-        /// Hand a dropped utterance's native cue back to the coordinator, cancelled:
-        /// the pending entry is cleared and the voice thread released, but the line
-        /// is neither re-shown nor voiced. Every path that discards an utterance the
-        /// queue no longer holds must call this.
+        /// Hands a dropped utterance's cue back cancelled: pending entry cleared and
+        /// thread released, but the line is neither shown nor voiced. Every path that
+        /// discards an utterance must call this.
         /// </summary>
         private void AbandonNativeCue(Utterance utterance)
         {
@@ -208,13 +204,10 @@ namespace LilithMod
         // ---- Main processing loop -----------------------------------------
 
         /// <summary>
-        /// Drains the queue one sentence at a time, overlapping synthesis with playback.
-        ///
-        /// The overlap is structural rather than incidental: synthesis of the next
-        /// sentence is started BEFORE PlaySync blocks on the current one, so it runs
-        /// during playback. Each sentence is dequeued exactly once, and its subtitle is
-        /// enqueued immediately before its audio, so subtitle and audio cannot drift
-        /// apart by a sentence.
+        /// Drains the queue one sentence at a time, overlapping synthesis with
+        /// playback: the next sentence is synthesised BEFORE PlaySync blocks on the
+        /// current one. Subtitles are enqueued immediately before their audio so the
+        /// two cannot drift apart.
         /// </summary>
         private void ProcessLoop()
         {

@@ -9,19 +9,12 @@ using Newtonsoft.Json;
 namespace LilithMod
 {
     /// <summary>
-    /// Japanese for the dialogue the game builds at runtime.
+    /// Japanese for dialogue the game builds at runtime. Those nodes carry lineId 0
+    /// and UI-language text, so the catalogue cannot reach them: speaking it made her
+    /// read English aloud, and the game has no clip to fall back to.
     ///
-    /// Those nodes carry lineId 0 and text already localised to the UI language, so
-    /// the catalogue cannot translate them - there is no id to look up. Speaking that
-    /// text directly made her read English aloud in a Japanese voice; keeping the
-    /// original voice left them silent, because the game has no clip for them either.
-    ///
-    /// So the Japanese is fetched once and kept. A line is silent the first time it
-    /// appears and spoken every time after, which is quick to converge because these
-    /// are the reactions that repeat most - touch, drag, refusal.
-    ///
-    /// Translation is deliberately never awaited by the dialogue path: a line held
-    /// while an API call runs would stall the bubble behind it.
+    /// Fetched once and kept - silent the first time, spoken after. Never awaited on
+    /// the dialogue path, which would stall the bubble behind it.
     /// </summary>
     internal static class DynamicLineCache
     {

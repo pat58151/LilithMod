@@ -168,9 +168,7 @@ namespace LilithMod
         }
     }
 
-    /// <summary>
-    /// Wraps TTS-related exceptions so callers can catch them specifically.
-    /// </summary>
+    /// <summary>Wraps TTS-related exceptions so callers can catch them specifically.</summary>
     public class TtsException : Exception
     {
         public TtsException(string message) : base(message) { }

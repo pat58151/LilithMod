@@ -6,14 +6,10 @@ using System.Net.Sockets;
 namespace LilithMod
 {
     /// <summary>
-    /// Starts the voice and speech services when nothing else has.
-    ///
-    /// There are two supported ways to run them. Installing the Startup shortcut
-    /// keeps them running from login, which is the better experience - synthesis
-    /// takes tens of seconds to load its model, so having it warm before the game
-    /// opens is the difference between her greeting being spoken and being dropped.
-    /// Without that shortcut the services would simply never run, which looked like
-    /// the voice being broken. This covers that case by starting them with the game.
+    /// Starts the voice and speech services when nothing else has. The Startup
+    /// shortcut is the better route - synthesis takes tens of seconds to load, so
+    /// warm-before-launch decides whether her greeting is spoken at all. Without it
+    /// the services never ran, which read as the voice being broken.
     /// </summary>
     internal static class ServiceBootstrap
     {

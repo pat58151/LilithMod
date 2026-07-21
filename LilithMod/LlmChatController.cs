@@ -27,9 +27,8 @@ namespace LilithMod
     /// Injectable MonoBehaviour that provides free-text LLM chat.
     /// All UI, networking, and dialogue injection are handled here.
     /// </summary>
-    // Partial so local-only development hooks can live in an untracked DevHooks.cs
-    // without shipping in a release build. Their call sites are partial methods,
-    // which compile to nothing when that file is absent.
+    // Partial so untracked DevHooks.cs can add local-only hooks; its call sites are
+    // partial methods and compile to nothing when that file is absent.
     public partial class LlmChatController : MonoBehaviour
     {
         // ========== Configuration (populated from LilithModPlugin statics) ==========
@@ -117,9 +116,7 @@ namespace LilithMod
 
         // ========== Unity lifecycle ==========
         /// <summary>
-        /// The live controller, for the few static callers that need its HTTP client
-        /// and key. DynamicLineCache is one: it runs off the dialogue path, not the
-        /// component.
+        /// The live controller, for static callers needing its HTTP client and key.
         /// </summary>
         private static LlmChatController _instance;
 
@@ -166,12 +163,9 @@ namespace LilithMod
             }
 
             // --- Hotkey toggle ---
-            // Polled through Win32 GetAsyncKeyState, NOT Unity. The pet window carries
-            // WS_EX_NOACTIVATE|WS_EX_TRANSPARENT, so Windows never delivers key messages
-            // to it and Unity's input (both new and legacy) is permanently silent here -
-            // verified by probe. Global key state is the only thing that sees the press.
-            // Polled exactly once: IsKeyDown consumes the up-to-down transition, so a
-            // second call in the same frame always reports false.
+            // Win32 GetAsyncKeyState, NOT Unity: the pet window is WS_EX_NOACTIVATE, so it
+            // never receives key messages and Unity input is permanently silent here.
+            // Polled exactly once - IsKeyDown consumes the transition.
             bool hotkeyPressed = !SettingsBridge.CapturingChatKey &&
                                  _vkHotkey > 0 && WindowFocus.IsKeyDown(_vkHotkey);
 
@@ -378,14 +372,10 @@ namespace LilithMod
                 _inputTextRect.sizeDelta = new Vector2(w, _inputTextRect.sizeDelta.y);
         }
 
-        // TMP inherits the font asset's own default point size unless told otherwise, which
-        // on the game's CJK asset is far too large for a 400x60 box - only a few characters
-        // fit before it overflows. Pin the size and keep the line on one row so long input
-        // scrolls horizontally instead of growing.
-        // TextMeshProUGUI supplies its own default RectTransform - small and centred, not
-        // filling its parent. Left that way the line sits inset from the left and the field
-        // cannot scroll properly, so long input clips its tail instead of sliding its head
-        // out of view.
+        // TMP inherits the font asset's default point size, far too large here. Pin it
+        // and keep one row, so long input scrolls sideways instead of growing.
+        // TMP's default RectTransform is small and centred, not filling its parent;
+        // left alone the field cannot scroll and clips the tail instead of the head.
         private static void StretchToParent(GameObject go)
         {
             var rt = go.GetComponent<RectTransform>();
@@ -1008,14 +998,9 @@ namespace LilithMod
             lock (_history) messagesSnapshot = new List<Message>(_history);
             string requestPersona = messagesSnapshot[0].Content;
 
-            // Talking to her resets the idle clock. An unprompted remark moments
-            // after she has just answered reads as her talking to herself rather than
-            // as company, and the ambient hold makes that likelier: a remark falling
-            // due mid-reply now waits and lands the moment she stops.
-            //
-            // Only the ambient schedule, deliberately - not _lastSpontaneousAt, which
-            // also gates interaction replies. Muting her response to touch for three
-            // minutes after every conversation would read as her ignoring you.
+            // Talking resets the idle clock: a remark seconds after she answered reads
+            // as talking to herself. Only the ambient schedule - _lastSpontaneousAt also
+            // gates interaction replies, and muting those would read as ignoring you.
             if (!ambient) ScheduleNextAmbient();
 
             // The log carries no timestamps, so "it feels slower than it used to" has
@@ -1611,12 +1596,9 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Whether an exchange is worth counting toward a note.
-        ///
-        /// Raw length was the old test, which let a pasted link qualify and refused
-        /// a short sincere line. This still uses length as the floor - it is the only
-        /// cheap signal available - but requires the message to be mostly words
-        /// rather than a URL or a path, and requires that she actually answered.
+        /// Whether an exchange counts toward a note. Length is the floor, but the
+        /// message must be mostly words rather than a URL, and she must have answered -
+        /// raw length alone let a pasted link qualify.
         /// </summary>
         private static bool IsSubstantialExchange(string user, string lilith, bool nativeActionHandled)
         {
@@ -1643,10 +1625,8 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Whether the player was talking about themselves or about her, rather than
-        /// simply talking well about something. Bare first person is deliberately not
-        /// enough - almost every message has an "I" in it - so a feeling, a life
-        /// event, or the bond itself has to be named.
+        /// Whether the player was talking about themselves or her. Bare first person is
+        /// deliberately not enough - a feeling, life event, or the bond must be named.
         /// </summary>
         private static bool IsPersonalExchange(string user)
         {
@@ -1834,27 +1814,22 @@ namespace LilithMod
         private const int LoveLetterPersonalMinimum = 2;
 
         /// <summary>
-        /// Floor between ANY two unprompted utterances. Ambient remarks and
-        /// interaction replies used to keep separate timers, so each was within its
-        /// own budget while the two together were not - petting her shortly after an
-        /// ambient remark produced back-to-back spontaneous speech. One shared
-        /// timestamp is what actually bounds how often she speaks unbidden.
+        /// Floor between ANY two unprompted utterances. Separate timers let ambient and
+        /// interaction each stay in budget while the pair did not, giving back-to-back
+        /// spontaneous speech. One shared timestamp is what actually bounds it.
         /// </summary>
         private const float SpontaneousGapSeconds = 180f;
 
         /// <summary>
-        /// Quiet window after the game's own dialogue. Measured, the game speaks far
-        /// more than this mod does - drag and idle nodes dominate - so a remark
-        /// landing right on top of a native line is the most likely way she reads as
-        /// talking over herself.
+        /// Quiet window after the game's own dialogue. Measured, the game speaks far more
+        /// than the mod does, so landing on a native line is the likeliest overlap.
         /// </summary>
         private const float NativeDialogueQuietSeconds = 8f;
 
         /// <summary>
-        /// Rolled when an interaction reply is about to fire. A miss drops it
-        /// silently, so handling her does not draw a comment every single time -
-        /// she notices most of it, not all of it. Idle ambient remarks are not
-        /// rolled; their 12-25 minute interval is already the rarity there.
+        /// Rolled when an interaction reply fires; a miss drops it silently, so she
+        /// notices most handling, not all. Ambient is not rolled - its interval is
+        /// already the rarity there.
         /// </summary>
         private const float InteractionReplyChance = 0.7f;
 
@@ -1950,12 +1925,9 @@ namespace LilithMod
             // reply still makes sense a moment after she finishes.
             if (Time.unscaledTime - _lastNativeDialogueAt < NativeDialogueQuietSeconds) return;
 
-            // Let her finish what she is already saying, then leave a beat before
-            // answering the touch. _currentRequest above only covers the API call,
-            // which completes seconds before the audio does - so without this the
-            // interaction reply lands mid-sentence and CancelCurrent drops the rest
-            // of the previous one. Held rather than dropped: the pending interaction
-            // is still waiting when playback ends.
+            // _currentRequest covers only the API call, which finishes seconds before the
+            // audio. Without this the reply lands mid-sentence and CancelCurrent drops the
+            // rest. Held, not dropped - the interaction is still pending when she stops.
             if (SpeechStillFinishing) return;
 
             string kind = _pendingInteraction;
@@ -2041,10 +2013,8 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Toggles speech recognition with the configured key. The trigger file tells the
-        /// external transcriber to listen; it ends the utterance itself after a run of
-        /// silence. Pressing the key again while listening cancels, since silence is the
-        /// normal way to submit.
+        /// Toggles speech recognition. The trigger file tells the external transcriber to
+        /// listen; it ends on silence. Pressing again cancels, since silence submits.
         /// </summary>
         private void PollPushToTalkKey()
         {
