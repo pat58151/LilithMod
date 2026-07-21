@@ -123,27 +123,6 @@ own replies are unaffected.
 
 ---
 
-## Before changing behaviour
-
-Two rules are load-bearing, and the code defers to them in more places than is
-obvious:
-
-- **Nothing interrupts a line she is already speaking.** Four separate paths
-  wait on one predicate for this, and the verify suite asserts that at least
-  four call sites do.
-- **She never rejects affection.** Not deflected, not joked away, not
-  qualified. This is in the persona prompt in deliberately absolute language.
-
-Almost every timing constant in the mod was arrived at by watching real
-sessions and being wrong first. The comments in the code carry that reasoning;
-they are worth reading before changing a number.
-
-The longer development notes — timing measurements, the portability audit, the
-installer record, solved problems — are kept in `document\`, which is local
-only and not published.
-
----
-
 ## Content boundary
 
 The game's dialogue, its audio, and the voice model fine-tuned from that audio
