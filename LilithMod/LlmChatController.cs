@@ -1769,6 +1769,29 @@ namespace LilithMod
         /// </summary>
         private const float InteractionReplyChance = 0.7f;
 
+        /// <summary>Lower, because being handled while asleep should mostly not wake her.</summary>
+        private const float SleepingInteractionReplyChance = 0.4f;
+
+        /// <summary>Ambient intervals stretch by this much while she sleeps.</summary>
+        private const float SleepingAmbientMultiplier = 1.5f;
+
+        /// <summary>
+        /// Whether she is currently asleep. Wrapped because the character instance is
+        /// not guaranteed to exist, and a throw here would take out the whole tick.
+        /// </summary>
+        private static bool IsSleeping()
+        {
+            try
+            {
+                var character = CharacterController.s_activeInstance;
+                return character != null && character.IsSleep;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static float _lastNativeDialogueAt = -600f;
 
         /// <summary>Called from the dialogue gate whenever the game itself speaks.</summary>
@@ -1813,7 +1836,8 @@ namespace LilithMod
             // Rolled once, at the moment of firing, and a miss discards the pending
             // interaction. Rolling every frame while it waits would come up true
             // eventually and make the chance meaningless.
-            if (UnityEngine.Random.value >= InteractionReplyChance) return;
+            float replyChance = IsSleeping() ? SleepingInteractionReplyChance : InteractionReplyChance;
+            if (UnityEngine.Random.value >= replyChance) return;
             _lastSpontaneousAt = Time.unscaledTime;
             SendUserMessage("The player just interacted with Lilith: " + kind, true);
         }
@@ -1860,7 +1884,12 @@ namespace LilithMod
         {
             int min = Math.Max(1, LilithModPlugin.CfgAmbientMinMinutes.Value);
             int max = Math.Max(min, LilithModPlugin.CfgAmbientMaxMinutes.Value);
-            _nextAmbientAt = Time.unscaledTime + UnityEngine.Random.Range(min * 60f, max * 60f);
+            // Both bounds stretch while she sleeps, so the whole window moves out
+            // rather than just becoming wider - a sleeping remark should be rarer,
+            // not more erratic. Sampled here rather than at fire time: waking during
+            // a long wait should not suddenly shorten it.
+            float scale = IsSleeping() ? SleepingAmbientMultiplier : 1f;
+            _nextAmbientAt = Time.unscaledTime + UnityEngine.Random.Range(min * 60f, max * 60f) * scale;
         }
 
         /// <summary>

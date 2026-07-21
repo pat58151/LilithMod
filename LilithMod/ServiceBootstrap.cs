@@ -19,6 +19,13 @@ namespace LilithMod
     {
         private const string StartupShortcutName = "Lilith AI services.lnk";
 
+        /// <summary>
+        /// True when this process launched the services itself, meaning synthesis is
+        /// loading its model right now rather than having been warm since login. The
+        /// startup grace for native dialogue is longer in that case.
+        /// </summary>
+        internal static bool StartedServices { get; private set; }
+
         internal static void Run()
         {
             try
@@ -58,6 +65,7 @@ namespace LilithMod
                     UseShellExecute = false,
                     CreateNoWindow = true
                 });
+                StartedServices = true;
                 LilithModPlugin.Logger.LogInfo("[Services] Starting voice services: " + launcher);
             }
             catch (Exception ex)

@@ -20,11 +20,19 @@ namespace LilithMod
 
         /// <summary>
         /// How long to wait for synthesis to come up before accepting that it is not
-        /// going to. Short, because in practice this only ever covers the greeting
-        /// that fires as the game opens - overshooting drops native lines that
-        /// should have played.
+        /// going to. Short, because it only ever covers the greeting fired as the
+        /// game opens, and overshooting drops native lines that should have played.
         /// </summary>
         private const float StartupVoiceGraceSeconds = 15f;
+
+        /// <summary>
+        /// Longer when this process started the services itself: the model is loading
+        /// from cold right now, rather than having been warm since login.
+        /// </summary>
+        private const float ColdStartVoiceGraceSeconds = 30f;
+
+        private static float VoiceGraceSeconds =>
+            ServiceBootstrap.StartedServices ? ColdStartVoiceGraceSeconds : StartupVoiceGraceSeconds;
 
         private static bool SynthesisPreferred()
         {
@@ -71,7 +79,7 @@ namespace LilithMod
             // behaviour - this only covers "not up YET".
             if (node != null && bubble != null && !_allowOriginalShow &&
                 !VoiceServiceMonitor.EverAvailable && SynthesisPreferred() &&
-                Time.unscaledTime < StartupVoiceGraceSeconds)
+                Time.unscaledTime < VoiceGraceSeconds)
             {
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                 {
