@@ -20,14 +20,16 @@ namespace LilithMod
 
         /// <summary>
         /// How long to wait for synthesis to come up before accepting that it is not
-        /// going to. Short, because it only ever covers the greeting fired as the
-        /// game opens, and overshooting drops native lines that should have played.
+        /// going to. Rarely reached: a successful warm-up marks the service available
+        /// during Load(), long before any dialogue. This covers the case where the
+        /// service genuinely is not up, and overshooting it drops native lines that
+        /// should have played.
         /// </summary>
         private const float StartupVoiceGraceSeconds = 15f;
 
         /// <summary>
-        /// Longer when this process started the services itself: the model is loading
-        /// from cold right now, rather than having been warm since login.
+        /// Longer when this process started the services itself: the model really is
+        /// loading from cold, rather than having been warm since login.
         /// </summary>
         private const float ColdStartVoiceGraceSeconds = 30f;
 
@@ -81,15 +83,10 @@ namespace LilithMod
                 return true;
             }
 
-            // Synthesis is wanted but has never answered yet this session, and the
-            // model takes tens of seconds to load. Letting the line through here is
-            // what made the first thing she says come out in the game's own Chinese
-            // voice: the monitor reports "unavailable" before it has ever been up,
-            // which is indistinguishable from having no synthesis installed.
-            //
-            // Bounded by StartupVoiceGraceSeconds so a machine with no synthesis at
-            // all still falls back to the native voice, which is the designed
-            // behaviour - this only covers "not up YET".
+            // Synthesis is wanted but has never answered this session. Bounded by the
+            // grace window so a machine with no synthesis at all still falls back to
+            // the native voice, which is the designed behaviour - this covers only
+            // "not up YET", never "not installed".
             if (node != null && bubble != null && HoldingForSynthesis)
             {
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)

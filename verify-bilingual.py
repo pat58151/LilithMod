@@ -74,6 +74,7 @@ precache = read(ROOT, "runtime", "precache-game-voice.py")
 requirements = read(ROOT, "runtime", "speech-input-requirements.txt")
 window_focus = read(MOD_DIR, "WindowFocus.cs")
 launcher = read(ROOT, "runtime", "start-lilith.ps1")
+voice_player = read(MOD_DIR, "VoicePlayer.cs")
 
 # -- 2. The sentence pair type ------------------------------------------------
 check(utterance, "LilithMod/Utterance.cs is missing")
@@ -416,6 +417,28 @@ check(os.path.exists(os.path.join(out_dir, "speech-setup", "README.txt")) and
 check(os.path.exists(os.path.join(out_dir, "voice-setup", "README.txt")) and
       os.path.exists(os.path.join(out_dir, "voice-setup", "voice-config.example.ini")),
       "Voice setup README/config were not deployed")
+
+# -- Invariants inherited from verify-step3.py and verify-voice.py -------------
+# Those two scripts were folded into this one. They duplicated the build and the
+# NAudio check already here; what follows is the coverage that was theirs alone.
+check("GetAsyncKeyState" in chat or "GetAsyncKeyState" in window_focus,
+      "Hotkeys must poll Win32 directly - this game's window delivers no Unity "
+      "keyboard input, so Input.GetKeyDown silently never fires")
+check("EnableTyping" in window_focus and "RestoreWindow" in window_focus,
+      "Typing needs the focus toggle, and the window style must be restored after")
+check("chat/completions" in chat,
+      "The chat endpoint path is missing")
+check("textComponent" in chat and "textViewport" in chat,
+      "A cloned TMP input field needs textComponent and textViewport wired by hand "
+      "or it renders nothing and swallows input")
+check("ref_audio_path" in tts and "text_lang" in tts and "fragment_interval" in tts,
+      "The TTS request must carry the reference audio, language and fragment interval")
+check("WaveOutEvent" in voice_player and "WaveFileReader" in voice_player and
+      "PlaybackStopped" in voice_player,
+      "Playback must read the wav, play it, and signal completion")
+check("WarmUpSentences" in speech,
+      "Warm-up sentences are gone - first synthesis would take the cold-start hit, "
+      "and NoteServiceAnswered would never fire early")
 
 # -- Result -------------------------------------------------------------------
 if failures:

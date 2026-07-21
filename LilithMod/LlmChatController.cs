@@ -118,7 +118,6 @@ namespace LilithMod
         // ========== Unity lifecycle ==========
         private void Awake()
         {
-            // Parse hotkey.
             ApplyConfiguredHotkey(Hotkey, true);
 
             // UI construction is deliberately NOT done here. Awake() runs when BepInEx
@@ -127,7 +126,6 @@ namespace LilithMod
             // permanently. Update() retries until the scene is up. Same failure mode as
             // creating a GameObject in BasePlugin.Load().
 
-            // HTTP client.
             _httpClient = new HttpClient();
             _httpClient.Timeout = TimeSpan.FromSeconds(TimeoutSeconds + 10); // a bit beyond our cancellation timeout
             _liveInformation = new LiveInformationService();
@@ -464,7 +462,6 @@ namespace LilithMod
                 return;
             }
 
-            // Root canvas.
             _canvas = new GameObject("LlmChatCanvas");
             DontDestroyOnLoad(_canvas);
             var canvasComp = _canvas.AddComponent<Canvas>();
@@ -478,7 +475,6 @@ namespace LilithMod
             _canvas.AddComponent<GraphicRaycaster>();
             _canvasGroup = _canvas.AddComponent<CanvasGroup>();
 
-            // Input panel.
             var inputPanel = new GameObject("InputPanel");
             inputPanel.transform.SetParent(_canvas.transform, false);
             var panelRect = inputPanel.AddComponent<RectTransform>();
@@ -501,7 +497,6 @@ namespace LilithMod
             inputFieldRect.offsetMin = Vector2.zero;
             inputFieldRect.offsetMax = Vector2.zero;
 
-            // Text Area.
             var textArea = new GameObject("Text Area");
             textArea.transform.SetParent(inputFieldGo.transform, false);
             var textAreaRect = textArea.AddComponent<RectTransform>();
@@ -523,7 +518,6 @@ namespace LilithMod
             textArea.AddComponent<RectMask2D>();
             _textAreaRect = textAreaRect;
 
-            // Placeholder.
             var placeholderGo = new GameObject("Placeholder");
             placeholderGo.transform.SetParent(textArea.transform, false);
             StretchToParent(placeholderGo);
@@ -533,7 +527,6 @@ namespace LilithMod
             _placeholderText.color = Color.grey;
             ApplyTextMetrics(_placeholderText, true);
 
-            // Text.
             // The input line is anchored to the LEFT edge with a left pivot, not stretched.
             // A stretched rect cannot be slid sideways, and sliding it is how the head of a
             // long line is moved out of view (see ScrollInputText).
@@ -1313,7 +1306,6 @@ namespace LilithMod
             {
                 LilithModPlugin.Logger.LogWarning($"[LlmChat] LLM request failed: {result.Error}");
 
-                // Fallback.
                 string fallback = FallbackLines[UnityEngine.Random.Range(0, FallbackLines.Length)];
                 if (DialogueManager.s_instance.TryGetNode(9500000, out _replyNode))
                 {

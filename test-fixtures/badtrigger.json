@@ -1,5 +1,0 @@
-{ "nodes": [
-  { "key": "bad_trigger", "trigger": "NoSuchTrigger", "say": "should be skipped" },
-  { "key": "bad_choice", "trigger": "Idle", "say": "has an invalid choice",
-    "choices": [ { "text": "both set", "reply": "r", "goto": "modtest_branch" } ] }
-] }

@@ -14,9 +14,10 @@ namespace LilithMod
         /// <summary>
         /// Whether the service has answered even once this session. "Not up yet" and
         /// "not installed" both read as unavailable, but only the first is worth
-        /// waiting through - the synthesis model takes tens of seconds to load, and
-        /// dialogue that fires in that window would otherwise use the game's own
-        /// voice, which is Chinese.
+        /// waiting through: dialogue firing in that window would otherwise use the
+        /// game's own voice, which is Chinese. Usually set by NoteServiceAnswered
+        /// during Load(); the probe below only establishes it on a genuine cold
+        /// start, where the model does take tens of seconds.
         /// </summary>
         internal static bool EverAvailable { get; private set; }
 
