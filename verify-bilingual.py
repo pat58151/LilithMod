@@ -444,9 +444,13 @@ check("WarmUpSentences" in speech,
 # _currentRequest only covers the API call, which finishes seconds before the
 # audio does. Without a playback gate the interaction reply fires mid-sentence
 # and CancelCurrent drops the rest of the previous one.
-check("_replyPlaybackActive) return;" in chat and "InteractionAfterSpeechSeconds" in chat,
+check("SpeechStillFinishing" in chat and "InteractionAfterSpeechSeconds" in chat,
       "An interaction reply must wait for playback to finish, then a beat, rather "
       "than cutting off the reply already being spoken")
+check("_pendingUserMessage" in chat and "TrySendQueuedUserMessage" in chat,
+      "A typed message must queue behind her current reply instead of cancelling it")
+check("QueuedMessageMaxWaitSeconds" in chat,
+      "A queued message needs a ceiling, or a stuck playback flag swallows it forever")
 check("_speechEndedAt = Time.unscaledTime;" in chat,
       "The end of playback must be recorded, or the post-speech delay has no anchor")
 

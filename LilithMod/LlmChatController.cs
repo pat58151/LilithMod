@@ -223,6 +223,7 @@ namespace LilithMod
             PollNoteTestFile();
 
             DrainInteractions();
+            TrySendQueuedUserMessage();
             TryInteractionReply();
             PollPushToTalkKey();
             PollSpeechCommand();
@@ -798,7 +799,34 @@ namespace LilithMod
             if (_speechListening) StopListening(false);
             HidePanel();
             bool nativeActionHandled = TryApplyImmediateNativeAction(trimmed);
+
+            // Held until she stops talking. Sending straight away cancelled the rest
+            // of her current reply mid-word, which reads as a fault rather than as
+            // being interrupted. A later message replaces an earlier waiting one:
+            // the newest is what the player still means.
+            if (SpeechStillFinishing)
+            {
+                _pendingUserMessage = trimmed;
+                _pendingUserMessageNativeAction = nativeActionHandled;
+                _pendingUserMessageAt = Time.unscaledTime;
+                return;
+            }
+
             SendUserMessage(trimmed, false, nativeActionHandled);
+        }
+
+        private void TrySendQueuedUserMessage()
+        {
+            if (string.IsNullOrEmpty(_pendingUserMessage)) return;
+            if (SpeechStillFinishing &&
+                Time.unscaledTime - _pendingUserMessageAt < QueuedMessageMaxWaitSeconds)
+                return;
+
+            string message = _pendingUserMessage;
+            bool nativeActionHandled = _pendingUserMessageNativeAction;
+            _pendingUserMessage = null;
+            _pendingUserMessageNativeAction = false;
+            SendUserMessage(message, false, nativeActionHandled);
         }
 
         private static void ApplyImmediateNativeCancellation(string text)
@@ -1827,6 +1855,26 @@ namespace LilithMod
 
         private float _speechEndedAt = -600f;
 
+        /// <summary>
+        /// True while she is still speaking, or within the beat just after. Anything
+        /// that would start a new reply waits on this: cutting her off mid-sentence
+        /// reads as a malfunction rather than an interruption.
+        /// </summary>
+        private bool SpeechStillFinishing =>
+            _replyPlaybackActive ||
+            Time.unscaledTime - _speechEndedAt < InteractionAfterSpeechSeconds;
+
+        private string _pendingUserMessage;
+        private bool _pendingUserMessageNativeAction;
+        private float _pendingUserMessageAt;
+
+        /// <summary>
+        /// A held message is sent regardless once this long has passed. Waiting on
+        /// playback means a stuck _replyPlaybackActive would swallow what the player
+        /// typed and never answer it, which is far worse than talking over her.
+        /// </summary>
+        private const float QueuedMessageMaxWaitSeconds = 20f;
+
         private static float _lastNativeDialogueAt = -600f;
 
         /// <summary>Called from the dialogue gate whenever the game itself speaks.</summary>
@@ -1869,8 +1917,7 @@ namespace LilithMod
             // interaction reply lands mid-sentence and CancelCurrent drops the rest
             // of the previous one. Held rather than dropped: the pending interaction
             // is still waiting when playback ends.
-            if (_replyPlaybackActive) return;
-            if (Time.unscaledTime - _speechEndedAt < InteractionAfterSpeechSeconds) return;
+            if (SpeechStillFinishing) return;
 
             string kind = _pendingInteraction;
             _pendingInteraction = null;
