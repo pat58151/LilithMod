@@ -170,7 +170,8 @@ try {
             $body = @{
                 text = $warmText; text_lang = $language; ref_audio_path = $refAudio
                 prompt_text = $promptText; prompt_lang = $promptLang; media_type = "wav"
-                streaming_mode = $false; text_split_method = "cut5"; fragment_interval = 0.3
+                streaming_mode = $false; parallel_infer = $false
+                text_split_method = "cut5"; fragment_interval = 0.3
             } | ConvertTo-Json -Compress
             $bodyBytes = [Text.Encoding]::UTF8.GetBytes($body)
             Invoke-WebRequest -UseBasicParsing -Uri ($origin + "/tts") -Method Post -ContentType "application/json; charset=utf-8" -Body $bodyBytes -TimeoutSec 180 | Out-Null

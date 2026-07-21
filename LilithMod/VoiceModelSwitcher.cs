@@ -117,6 +117,7 @@ namespace LilithMod
                     prompt_lang = profile?.PromptLanguage ?? VoiceConfig.PromptLang,
                     media_type = "wav",
                     streaming_mode = false,
+                    parallel_infer = false,
                     text_split_method = VoiceConfig.TextSplitMethod,
                     fragment_interval = VoiceConfig.FragmentInterval,
                 };

@@ -623,6 +623,17 @@ Doorstop, the game asks Steam to relaunch it, and Steam inherits Doorstop's
 disable variables from that first process. Steam then persists with the poisoned
 environment and every later game launch from that Steam session is vanilla.
 
+**Correction, verified 2026-07-21 after a fresh reinstall.** Do not read the
+above as "a clean Steam session prevents this". A launch was inspected where
+`steam.exe` had no `DOORSTOP_*` variables beforehand, and the resulting
+`Lilith.exe` **still had `DOORSTOP_DISABLE=TRUE`** - yet loaded 133 BepInEx
+modules and ran correctly. So the variable gets set on essentially every launch,
+and `ignore_disable_switch = true` is what makes it harmless. That setting is
+load-bearing on every single launch, not a one-time repair for a poisoned Steam
+session. If it is ever lost - a BepInEx upgrade rewriting `doorstop_config.ini`,
+a fresh install that skips `reapply-mod.ps1` - the game goes vanilla immediately,
+with healthy-looking BepInEx logs written by the bootstrap process.
+
 The stale `HKCU\...\Run\Lilith` entry pointing directly at `Lilith.exe` made this
 chain happen at sign-in, but it was a trigger rather than the injection failure
 itself. `install-startup.ps1` now removes only that known legacy direct-game

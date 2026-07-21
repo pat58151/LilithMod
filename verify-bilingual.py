@@ -8,6 +8,7 @@ Follows the pattern of verify-voice.py.
 """
 
 import os
+import re
 import subprocess
 import sys
 
@@ -62,7 +63,10 @@ voice_setup = read(MOD_DIR, "VoiceSetup.cs")
 note_journal = read(MOD_DIR, "NoteJournal.cs")
 speech_input = read(MOD_DIR, "SpeechInputService.cs")
 voice_monitor = read(MOD_DIR, "VoiceServiceMonitor.cs")
+tts = read(MOD_DIR, "TtsClient.cs")
+switcher = read(MOD_DIR, "VoiceModelSwitcher.cs")
 ptt = read(ROOT, "runtime", "push_to_talk.py")
+precache = read(ROOT, "runtime", "precache-game-voice.py")
 requirements = read(ROOT, "runtime", "speech-input-requirements.txt")
 window_focus = read(MOD_DIR, "WindowFocus.cs")
 launcher = read(ROOT, "runtime", "start-lilith.ps1")
@@ -179,7 +183,10 @@ check("InitializeAsync" in chat and "LiveInformationService" in chat,
 check(not os.path.exists(os.path.join(MOD_DIR, "AnthropicClient.cs")) and
       "CfgAnthropic" not in plugin and "Claude API key" not in plugin,
       "Anthropic and Claude dependencies must be removed")
-check("BuildLetter(PersonaPrompt.CurrentDisplayLanguage())" in chat and
+# Tolerates wrapping and extra arguments: BuildLetter grew a loveLetter
+# parameter and wrapped across two lines, which failed a literal-substring check
+# while the code was correct. What matters is which language is passed.
+check(re.search(r"BuildLetter\(\s*PersonaPrompt\.CurrentDisplayLanguage\(\)", chat) and
       "current game display language" in persona and
       "Use only the current game display language" in chat and
       "RequestTextCompletionAsync" in chat,
@@ -289,6 +296,11 @@ check("s_beganKeyboardInput" in window_focus,
 check("WindowStyle Hidden" in launcher and "/set_gpt_weights" in launcher and
       "/set_sovits_weights" in launcher and "service-startup.log" in launcher,
       "The hidden launcher must select, warm, and log all voice services")
+check("parallel_infer = false" in tts.lower() and
+      "parallel_infer = false" in switcher.lower() and
+      "parallel_infer = $false" in launcher.lower() and
+      '"parallel_infer": false' in precache.lower(),
+      "Every GPT-SoVITS request must avoid the pathologically slow ROCm parallel path")
 check("ExecuteNativeAction" in chat and "TimerSystem.Instance" in chat and
       "AlarmSystem.SetAlarm" in chat and '"timer_cancel"' in chat and
       '"alarm_cancel"' in chat,

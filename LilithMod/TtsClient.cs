@@ -77,6 +77,9 @@ namespace LilithMod
                 prompt_lang = _cfg.PromptLang,
                 media_type = "wav",
                 streaming_mode = false,
+                // MIOpen's batched path falls back to undersized workspaces on
+                // this ROCm stack. Serial inference is 4-10x faster here.
+                parallel_infer = false,
                 text_split_method = _cfg.TextSplitMethod,
                 fragment_interval = _cfg.FragmentInterval,
             };

@@ -129,7 +129,10 @@ def main() -> None:
             "prompt_text": prompt_text, "prompt_lang": prompt_lang, "media_type": "wav",
             "streaming_mode": False, "text_split_method": "cut0" if batched else "cut5",
             "batch_size": len(batch_texts) if batched else 1, "split_bucket": True,
-            "parallel_infer": True, "fragment_interval": separator_seconds,
+            # ROCm/MIOpen's parallel path repeatedly falls back because its
+            # convolution workspace is undersized. Serial is substantially
+            # faster and still preserves batch separators for cache splitting.
+            "parallel_infer": False, "fragment_interval": separator_seconds,
         }, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
             args.endpoint, data=payload,
