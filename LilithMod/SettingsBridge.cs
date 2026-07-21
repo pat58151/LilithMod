@@ -849,6 +849,7 @@ namespace LilithMod
                 LilithModPlugin.CfgReplaceGameVoice.Value == synthesis) return;
             LilithModPlugin.CfgVoiceSynthesisPreferred.Value = synthesis;
             LilithModPlugin.CfgReplaceGameVoice.Value = synthesis && VoiceServiceMonitor.IsAvailable;
+            if (!synthesis) LlmChatController.StopSynthPlaybackForNativeVoice();
             LilithModPlugin.SaveConfig();
             LilithModPlugin.Logger.LogInfo(
                 synthesis ? "[Voice] Vocal synthesis selected." : "[Voice] Native Chinese voice selected.");

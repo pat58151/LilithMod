@@ -42,6 +42,19 @@ if r.returncode != 0:
     sys.exit(1)
 print("[verify-bilingual] Build succeeded")
 
+# Exercise the memory store itself in an isolated output folder. Source-shape
+# assertions cannot catch broken caps, duplicate exclusion, or backup recovery.
+memory_harness = os.path.join(ROOT, "tests", "MemoryStoreHarness", "MemoryStoreHarness.csproj")
+r = subprocess.run(
+    [DOTNET, "run", "--project", memory_harness, "-c", "Release"],
+    capture_output=True, text=True, cwd=ROOT,
+)
+if r.returncode != 0 or "MEMORY HARNESS PASS" not in r.stdout:
+    print("VERIFY FAIL - memory harness failed")
+    print((r.stdout + r.stderr).strip())
+    sys.exit(1)
+print("[verify-bilingual] Memory behavior passed")
+
 
 def read(*parts):
     path = os.path.join(*parts)
@@ -58,7 +71,9 @@ chat = read(MOD_DIR, "LlmChatController.cs")
 plugin = read(MOD_DIR, "LilithModPlugin.cs")
 persona = read(MOD_DIR, "PersonaPrompt.cs")
 dynamic = read(MOD_DIR, "DynamicContext.cs")
+foreground = read(MOD_DIR, "ForegroundActivity.cs")
 memory = read(MOD_DIR, "MemoryStore.cs")
+memory_vectorizer = read(MOD_DIR, "MemoryVectorizer.cs")
 live_info = read(MOD_DIR, "LiveInformationService.cs")
 integrations = read(MOD_DIR, "ModIntegrations.cs")
 game_voice = read(MOD_DIR, "GameVoiceCoordinator.cs")
@@ -75,6 +90,7 @@ requirements = read(ROOT, "runtime", "speech-input-requirements.txt")
 window_focus = read(MOD_DIR, "WindowFocus.cs")
 launcher = read(ROOT, "runtime", "start-lilith.ps1")
 voice_player = read(MOD_DIR, "VoicePlayer.cs")
+installer = read(ROOT, "installer", "LilithMod.iss")
 
 # -- 2. The sentence pair type ------------------------------------------------
 check(utterance, "LilithMod/Utterance.cs is missing")
@@ -190,14 +206,58 @@ for marker, why in [
 check("IsSleep" in dynamic and "IsLieDown" in dynamic and "NightSleepStartTime" in dynamic,
       "Persona context must include live posture and the native bedtime")
 check("DateTime.Now" in dynamic, "Persona context must use local system time")
+check("ForegroundActivity.Context" in dynamic and "ForegroundActivity.Poll" in chat and
+      "CfgForegroundAwareness" in plugin,
+      "Transient foreground awareness must be polled and added to dynamic context")
+check("appmanifest_*.acf" in foreground and "libraryfolders.vdf" in foreground and
+      "DiscordCanary" in foreground,
+      "Foreground awareness must resolve local Steam games and Discord variants")
+check("Path.GetFileName(executable)" in foreground and '"app:" + executableName' in foreground,
+      "Unknown foreground applications must fall back to their executable filename")
+check('processName.Equals("Code"' in foreground and "Visual Studio Code" in foreground,
+      "VS Code must be reported by its friendly name instead of Code.exe")
+check("GetWindowText" not in foreground and "Window titles are never read" in foreground,
+      "Foreground awareness must never inspect sensitive window, channel, or document titles")
+check("ModInputActive" in foreground and "__keep_previous__" in foreground and
+      "ModInputActive" in window_focus,
+      "Opening Lilith's own input must preserve the previously focused game or Discord")
 check("MaxConversations" in memory and "MaxInteractions" in memory and "MEMORY.md" in memory,
       "Conversations and interactions must be capped separately, or pats evict talking")
 check("RecordLongTerm" in memory and "MaxLongTerm" in memory,
       "Notes must be able to leave a long-term entry")
 check("StartsWith(\"[\")" in memory,
       "The legacy single-list memory.json must still load, or existing installs forget")
-check("ConversationContext" in memory and "ConversationContext" in chat,
+check("QualifyingConversationContext" in memory and "QualifyingConversationContext" in chat,
       "Notes must be written from conversations only, not from pats")
+check("conversationsAlreadyInHistory" in memory and "completedHistoryTurns" in chat,
+      "Persisted conversations already present in session history must be excluded")
+check("QualifyingConversationContext" in memory and "ClearQualifyingConversations" in chat,
+      "Notes must use and then clear their own qualifying conversation buffer")
+check("RelevantEpisodes" in memory and "MaxRelevantLongTerm" in memory,
+      "Long-term memory must be selected for relevance instead of sent wholesale")
+check("RecordEpisode" in memory and "RecordSemanticFacts" in memory and
+      "SourceConversationIds" in memory,
+      "Durable memory must separate sourced episodes from stable semantic facts")
+check("MemoryVectorizer.Similarity" in memory and "NormalizationForm.FormKC" in memory_vectorizer,
+      "Durable recall must use the local multilingual feature embedding")
+check("TokenConcepts" in memory_vectorizer and 'AddConcept("work"' in memory_vectorizer and
+      'AddConcept("anxiety"' in memory_vectorizer and 'AddConcept("relationship"' in memory_vectorizer,
+      "Local vectors must expand curated personal-topic and emotion synonyms")
+check("Importance" in memory and "EmotionalWeight" in memory and "RecallCount" in memory,
+      "Episode ranking must include significance and recall metadata")
+check("RecordDurableMemoryAsync" in chat and 'root["episode"]' in chat and
+      'root["facts"]' in chat,
+      "Durable consolidation must extract a structured episode and stable facts")
+check("CfgEpisodicMemoryInterval" in plugin and "DurableMemorySnapshot" in chat and
+      "MarkDurableConsolidated" in chat,
+      "Episodic consolidation must run independently of rare notes")
+check('"WindowHours", 12.0' in plugin and '"SessionGapHours", 2.0' in plugin and
+      "sessionGapHours" in memory,
+      "Episodic memory must use its own 12-hour window and split sessions after two hours")
+check("File.Replace" in memory and '".bak"' in memory,
+      "Memory saves must be atomic and recoverable from a backup")
+check("MEMORY.md.bak" in installer and "memory.json.bak" in installer,
+      "Permanent uninstall must remove readable mirrors and recovery copies")
 check("SearXNG" in live_info and "SmartReader" in live_info and
       "api.open-meteo.com" in live_info and "ip-api.com/json" in live_info and
       "NeedsLiveInformation" in chat,
@@ -507,6 +567,14 @@ check("LanguageIsCurrent" in switcher and "LanguageIsCurrent" in tts,
 # case the flag they normally read is false - so the decision is recorded instead.
 check("NativeAudioSuppressed" in game_voice and "NativeAudioSuppressed" in integrations,
       "A cached replacement must suppress the game's own audio, or both play at once")
+check("SynthVoiceSelected" in chat and chat.count("SynthVoiceSelected") >= 3,
+      "Generated replies must follow the selected voice mode, not merely an installed synthesizer")
+check("StopSynthPlaybackForNativeVoice" in settings and "CancelCurrent(true)" in chat and
+      "public void Stop()" in voice_player,
+      "Selecting native Chinese must stop synth audio that was already queued or playing")
+check("PlaybackActive" in speech and "PlaybackActive" in game_voice and
+      "SuppressNativeAudioForThisLine();" in game_voice,
+      "Native Chinese audio must remain suppressed for the full active synth clip")
 # Runtime-built lines carry no id, so the catalogue cannot reach them. Their
 # Japanese is fetched once and kept, never awaited on the dialogue path.
 dynamic_cache = read(MOD_DIR, "DynamicLineCache.cs")

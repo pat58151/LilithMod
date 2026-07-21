@@ -91,8 +91,9 @@ namespace LilithMod
         /// already inside PlaySync is allowed to finish - cutting audio mid-word is
         /// worse than a short overlap, and cancellation is observed between sentences.
         /// </summary>
-        public void CancelCurrent()
+        public void CancelCurrent(bool stopPlayback = false)
         {
+            if (stopPlayback) _voicePlayer.Stop();
             // Cancelled, never discarded: a discarded cue leaked the coordinator's
             // pending entry forever and left its bubble suppressed with no re-show.
             // A cancelled one still flows through and clears that entry.
@@ -118,6 +119,7 @@ namespace LilithMod
         }
 
         private volatile bool _abandonRun;
+        internal bool PlaybackActive { get; private set; }
 
         /// <summary>
         /// Hands a dropped utterance's cue back cancelled: pending entry cleared and
@@ -370,6 +372,7 @@ namespace LilithMod
 
         private void SetPlaybackActive(bool active)
         {
+            PlaybackActive = active;
             try
             {
                 if (active)

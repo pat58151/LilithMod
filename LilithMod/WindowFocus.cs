@@ -13,6 +13,7 @@ namespace LilithMod
         private static IntPtr? s_originalExStyle = null;
         private static bool s_chatInputActive;
         private static bool s_settingsInputActive;
+        internal static bool ModInputActive => s_chatInputActive || s_settingsInputActive;
         // Whether click-through is currently suspended, so Begin/End stay balanced.
         private static bool s_beganKeyboardInput;
 

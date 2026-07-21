@@ -105,7 +105,7 @@ folder, in `README.txt`.
 
 ## 3. Speaking to her
 
-F8 listens, and submits about 2.5 seconds after you stop. Transcription is
+F8 listens, and submits about 1.5 seconds after you stop. Transcription is
 local — no audio leaves the machine.
 
 **The installer can do all of this**: tick *speech input* during setup and skip

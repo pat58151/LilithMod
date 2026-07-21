@@ -16,7 +16,7 @@ which needs an API key you supply.
 
   F7        Open the chat bar. Type, press Enter, she answers.
   F8        Speak instead. It listens, and submits on its own after about
-            2.5 seconds of silence. Press F8 again to cancel.
+            1.5 seconds of silence. Press F8 again to cancel.
   Escape    Close the chat bar.
 
 Both keys can be rebound in Settings / Controls. They cannot be bound to the
@@ -75,7 +75,7 @@ and can answer questions about the weather or look something up.
   WHAT LEAVES YOUR MACHINE
 -------------------------------------------------------------------------------
 
-Only four things ever do, and only when you cause them.
+Only five kinds of information do, and only while the related feature is used.
 
   What you type or say    Sent to the DeepSeek API, with the recent
                           conversation, so she can answer.
@@ -91,7 +91,16 @@ Only four things ever do, and only when you cause them.
   Asking to search Google Only an encoded Google results URL is opened in your
                           default browser. The mod does not read the results.
 
+  Foreground awareness   The active game name, Discord, or the executable filename
+                          is included with DeepSeek requests. Window, channel,
+                          message, tab, and document titles are never read.
+
 Her voice, her memory and her notes never leave this machine.
+
+To disable foreground awareness:
+
+    [Awareness]
+    ForegroundApplication = false
 
 To avoid the location lookup, set your own coordinates in
 BepInEx\config\LilithMod.cfg:

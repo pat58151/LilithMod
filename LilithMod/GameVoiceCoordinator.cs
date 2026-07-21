@@ -159,21 +159,25 @@ namespace LilithMod
             // Hold the game off briefly after she speaks, or it answers over the top
             // of her reply. _allowOriginalShow is excluded: that is a line already
             // synthesised and coming back to be shown.
+            bool modAudioPlaying = LilithModPlugin.VoiceProcessor != null &&
+                LilithModPlugin.VoiceProcessor.PlaybackActive;
             if (node != null && bubble != null && !_allowOriginalShow &&
-                Time.unscaledTime - _modSpokeAt < NativeSuppressedAfterModSeconds)
+                (modAudioPlaying || Time.unscaledTime - _modSpokeAt < NativeSuppressedAfterModSeconds))
             {
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                 {
                     LilithModPlugin.Logger.LogInfo(
                         $"[Voice] Suppressed native line {node.lineId} (id {node.id}); " +
+                        (modAudioPlaying ? "synth playback is still active." :
                         "the mod spoke less than " +
-                        $"{NativeSuppressedAfterModSeconds:0.#}s ago.");
+                        $"{NativeSuppressedAfterModSeconds:0.#}s ago."));
                 }
                 // Dropped, not deferred: the game has no queue to hold it in, and a
                 // reaction shown four seconds late is worse than one not shown. The
                 // game already tore the previous bubble down before this gate ran,
                 // so if that bubble was her reply, put it back.
                 LlmChatController.RequestReplyBubbleRestore();
+                SuppressNativeAudioForThisLine();
                 return false;
             }
             // Past every drop gate, so this node will reach the screen - either now

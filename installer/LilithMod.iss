@@ -308,9 +308,11 @@ begin
     AppDir := AddBackslash(ExpandConstant('{app}'));
     PluginDir := AppDir + 'BepInEx\plugins\LilithMod\';
     CfgDir := AppDir + 'BepInEx\config\';
-    { memory.json and notes.json are the only irreplaceable things the mod
-      creates — her memory of the user's conversations. Default is KEEP. }
+    { The JSON memory and its readable Markdown mirror are irreplaceable.
+      Default is KEEP. }
     HasData := FileExists(PluginDir + 'memory.json') or
+               FileExists(PluginDir + 'memory.json.bak') or
+               FileExists(PluginDir + 'MEMORY.md') or
                FileExists(PluginDir + 'notes.json') or
                DirExists(PluginDir + 'voice-cache') or
                DirExists(PluginDir + 'custom') or
@@ -325,6 +327,11 @@ begin
                 mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDNO then
       begin
         DeleteFile(PluginDir + 'memory.json');
+        DeleteFile(PluginDir + 'memory.json.bak');
+        DeleteFile(PluginDir + 'memory.json.tmp');
+        DeleteFile(PluginDir + 'MEMORY.md');
+        DeleteFile(PluginDir + 'MEMORY.md.bak');
+        DeleteFile(PluginDir + 'MEMORY.md.tmp');
         DeleteFile(PluginDir + 'notes.json');
         DelTree(PluginDir + 'voice-cache', True, True, True);
         DelTree(PluginDir + 'custom', True, True, True);

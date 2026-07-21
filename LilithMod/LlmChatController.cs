@@ -85,6 +85,7 @@ namespace LilithMod
         private string _pendingInteraction;
         private float _interactionReplyAt;
         private bool _letterInFlight;
+        private bool _memoryInFlight;
         private string _speechCommandPath;
         private string _pushToTalkTriggerPath;
         private readonly Queue<string> _speechCommandQueue = new Queue<string>();
@@ -145,13 +146,14 @@ namespace LilithMod
             // Initialise conversation.
             _history = new List<Message>
             {
-                new Message { Role = "system", Content = BuildSystemPrompt() }
+                new Message { Role = "system", Content = BuildSystemPrompt(0, null) }
             };
             ScheduleNextAmbient();
         }
 
         private void Update()
         {
+            ForegroundActivity.Poll();
             ApplyConfiguredHotkey(Hotkey, false);
             if (_chatDisabled || !_hotkeyValid)
                 return;
@@ -1045,6 +1047,21 @@ namespace LilithMod
             if (!string.IsNullOrWhiteSpace(kind)) InteractionQueue.Enqueue(kind);
         }
 
+        internal static void StopSynthPlaybackForNativeVoice()
+        {
+            LilithModPlugin.VoiceProcessor?.CancelCurrent(true);
+            if (_instance == null) return;
+            _instance._replyPlaybackActive = false;
+            _instance._currentReplyEnglish = null;
+            _instance._speechEndedAt = Time.unscaledTime;
+            _instance._replyHideAt = Time.unscaledTime + 1f;
+        }
+
+        private static bool SynthVoiceSelected =>
+            LilithModPlugin.CfgReplaceGameVoice != null &&
+            LilithModPlugin.CfgReplaceGameVoice.Value &&
+            VoiceConfig.Enabled && LilithModPlugin.VoiceProcessor != null;
+
         private void SendUserMessage(string userInput, bool ambient, bool nativeActionHandled = false)
         {
             // Cancel previous request.
@@ -1058,7 +1075,8 @@ namespace LilithMod
             // Append user message.
             lock (_history)
             {
-                _history[0].Content = BuildSystemPrompt();
+                int completedHistoryTurns = (_history.Count - 1) / 2;
+                _history[0].Content = BuildSystemPrompt(completedHistoryTurns, userInput);
                 if (!ambient) _history.Add(new Message { Role = "user", Content = userInput });
             }
 
@@ -1255,7 +1273,8 @@ namespace LilithMod
         }
 
         private async Task<string> RequestTextCompletionAsync(
-            string systemPrompt, string userPrompt, int maxTokens, CancellationToken token)
+            string systemPrompt, string userPrompt, int maxTokens, CancellationToken token,
+            bool jsonResponse = false)
         {
             if (string.IsNullOrWhiteSpace(ApiKey))
                 throw new InvalidOperationException("DeepSeek API key is not configured.");
@@ -1271,6 +1290,8 @@ namespace LilithMod
                 ["stream"] = false,
                 ["max_tokens"] = maxTokens
             };
+            if (jsonResponse)
+                payload["response_format"] = JObject.FromObject(new { type = "json_object" });
             if (BaseUrl.IndexOf("api.deepseek.com", StringComparison.OrdinalIgnoreCase) >= 0)
                 payload["thinking"] = JObject.FromObject(new { type = "disabled" });
             return await SendCompletionAsync(payload, token);
@@ -1383,7 +1404,7 @@ namespace LilithMod
                         RememberAndMaybeWrite(result.UserInput, result.Text, result.NativeActionHandled);
                     }
 
-                    if (VoiceConfig.Enabled && LilithModPlugin.VoiceProcessor != null)
+                    if (SynthVoiceSelected)
                     {
                         _currentReplyEnglish = new System.Collections.Generic.List<string> { result.Text };
                         _replyPlaybackActive = true;
@@ -1441,7 +1462,7 @@ namespace LilithMod
                         result.NativeActionHandled);
                 }
 
-                if (!VoiceConfig.Enabled || LilithModPlugin.VoiceProcessor == null)
+                if (!SynthVoiceSelected)
                 {
                     // No audio to pace the subtitles, so show the reply in one piece.
                     DisplayReplyText(string.Join(" ", english));
@@ -1682,11 +1703,11 @@ namespace LilithMod
             }
         }
 
-        private static string BuildSystemPrompt()
+        private static string BuildSystemPrompt(int completedHistoryTurns, string currentMessage)
         {
             string prompt = PersonaPrompt.Build(
                 PersonaPrompt.CurrentVoiceLanguage(), PersonaPrompt.CurrentDisplayLanguage());
-            string memory = MemoryStore.Context();
+            string memory = MemoryStore.Context(completedHistoryTurns, currentMessage);
             return string.IsNullOrEmpty(memory) ? prompt : prompt + "\n" + memory;
         }
 
@@ -1786,12 +1807,14 @@ namespace LilithMod
 
         private void RememberAndMaybeWrite(string user, string lilith, bool nativeActionHandled)
         {
-            MemoryStore.RecordConversation(user, lilith);
+            bool substantial = IsSubstantialExchange(user, lilith, nativeActionHandled);
+            MemoryStore.RecordConversation(user, lilith, substantial);
             if (_letterInFlight) return;
-            if (!IsSubstantialExchange(user, lilith, nativeActionHandled)) return;
+            if (!substantial) return;
 
             double windowHours = LilithModPlugin.CfgNoteWindowHours.Value;
             NoteJournal.RecordQualifying(windowHours, IsPersonalExchange(user));
+            TryConsolidateMemory();
             if (!NoteJournal.ShouldWrite(
                     LilithModPlugin.CfgNoteMinConversations.Value,
                     windowHours,
@@ -1800,7 +1823,8 @@ namespace LilithMod
                 return;
 
             _letterInFlight = true;
-            string letterMemory = MemoryStore.ConversationContext();
+            string letterMemory = MemoryStore.QualifyingConversationContext(
+                DateTime.UtcNow.AddHours(-windowHours));
             float noteRoll = UnityEngine.Random.value;
             string lengthRule;
             int letterMaxTokens;
@@ -1857,7 +1881,7 @@ namespace LilithMod
                         // Only now: a failed request must not consume the cooldown,
                         // or a transient outage silently costs a keepsake.
                         NoteJournal.MarkWritten();
-                        await RecordLongTermSummaryAsync(letterMemory);
+                        MemoryStore.ClearQualifyingConversations();
                     }
                 }
                 catch (Exception ex)
@@ -1869,40 +1893,84 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Distils the stretch of talking a note came out of into one line of
-        /// long-term memory. Written in the third person and about the player, not
-        /// about her feelings: this is the record she is later allowed to allude to,
-        /// and prose in her own voice would come back out as a quotation.
-        ///
-        /// Runs after the note is queued and never blocks it - failing here costs a
-        /// memory, not the keepsake the player is about to receive.
+        /// Periodically distils substantial conversation into one sourced episode and
+        /// stable player facts. This is independent of the rarer handwritten notes.
         /// </summary>
-        private async Task RecordLongTermSummaryAsync(string letterMemory)
+        private void TryConsolidateMemory()
         {
-            if (string.IsNullOrWhiteSpace(letterMemory)) return;
+            if (_memoryInFlight || LilithModPlugin.CfgEpisodicMemoryEnabled == null ||
+                !LilithModPlugin.CfgEpisodicMemoryEnabled.Value) return;
+            int interval = Math.Max(2, LilithModPlugin.CfgEpisodicMemoryInterval.Value);
+            double windowHours = Math.Max(1, LilithModPlugin.CfgEpisodicMemoryWindowHours.Value);
+            double sessionGapHours = Math.Max(0.25,
+                LilithModPlugin.CfgEpisodicMemorySessionGapHours.Value);
+            MemoryStore.ConversationSnapshot snapshot = MemoryStore.DurableMemorySnapshot(
+                DateTime.UtcNow.AddHours(-windowHours), interval, sessionGapHours);
+            if (string.IsNullOrWhiteSpace(snapshot.Context)) return;
+
+            _memoryInFlight = true;
+            Task.Run(async () =>
+            {
+                try
+                {
+                    if (await RecordDurableMemoryAsync(snapshot.Context, snapshot.ConversationIds))
+                        MemoryStore.MarkDurableConsolidated(snapshot.ThroughUtc);
+                }
+                finally { _memoryInFlight = false; }
+            });
+        }
+
+        private async Task<bool> RecordDurableMemoryAsync(
+            string letterMemory, List<string> sourceConversationIds)
+        {
+            if (string.IsNullOrWhiteSpace(letterMemory)) return false;
             try
             {
-                string summary = await RequestTextCompletionAsync(
-                    "You summarise conversations into a single line for later recall.",
-                    "From the exchanges below, write ONE sentence in English, under 30 words, " +
-                    "naming what the player talked about and anything they revealed about their " +
-                    "life, mood, or circumstances. Third person, factual, no quotes, no roleplay, " +
-                    "no commentary on Lilith. If nothing personal was said, reply exactly NOTHING.\n" +
+                string json = await RequestTextCompletionAsync(
+                    "Extract durable companion memory from conversations. Be conservative and factual. " +
+                    "Never infer a fact the player did not state. Return JSON only.",
+                    "Return this shape: {\"episode\":{\"summary\":\"one factual English sentence under 35 words\",\"topics\":[\"original-language terms and English aliases\"],\"people\":[],\"importance\":0.0,\"emotional_weight\":0.0},\"facts\":[{\"key\":\"stable category such as work.role\",\"statement\":\"one current stable fact\",\"topics\":[],\"confidence\":0.0}]}. " +
+                    "Importance and emotional_weight are 0 to 1. Facts are only stable information likely " +
+                    "to remain useful later. Omit temporary states, guesses, and facts about Lilith. " +
+                    "Use an empty facts array when there are none. Include the player's own wording in " +
+                    "topics, plus short English aliases, so later recall works across languages.\n" +
                     letterMemory,
-                    120,
-                    CancellationToken.None);
+                    420,
+                    CancellationToken.None,
+                    true);
 
-                if (string.IsNullOrWhiteSpace(summary)) return;
-                summary = summary.Trim();
-                if (summary.StartsWith("NOTHING", StringComparison.OrdinalIgnoreCase)) return;
+                JObject root = ParseJsonObject(json);
+                MemoryStore.EpisodeData episode = root["episode"]?.ToObject<MemoryStore.EpisodeData>();
+                List<MemoryStore.FactData> facts = root["facts"]?.ToObject<List<MemoryStore.FactData>>()
+                    ?? new List<MemoryStore.FactData>();
+                if (episode == null && facts.Count == 0) return false;
 
-                MemoryStore.RecordLongTerm(summary);
-                LilithModPlugin.Logger.LogInfo("[Memory] Long-term entry written alongside the note.");
+                MemoryStore.RecordEpisode(episode, sourceConversationIds);
+                MemoryStore.RecordSemanticFacts(facts, sourceConversationIds);
+                LilithModPlugin.Logger.LogInfo(
+                    $"[Memory] Durable episode and {facts.Count} fact(s) consolidated.");
+                return true;
             }
             catch (Exception ex)
             {
-                LilithModPlugin.Logger.LogWarning($"[Memory] Could not summarise for long-term memory: {ex.Message}");
+                LilithModPlugin.Logger.LogWarning($"[Memory] Could not extract durable memory: {ex.Message}");
+                return false;
             }
+        }
+
+        private static JObject ParseJsonObject(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new InvalidOperationException("Memory extraction returned nothing.");
+            string trimmed = value.Trim();
+            if (trimmed.StartsWith("```", StringComparison.Ordinal))
+            {
+                int firstBreak = trimmed.IndexOf('\n');
+                int lastFence = trimmed.LastIndexOf("```", StringComparison.Ordinal);
+                if (firstBreak >= 0 && lastFence > firstBreak)
+                    trimmed = trimmed.Substring(firstBreak + 1, lastFence - firstBreak - 1).Trim();
+            }
+            return JObject.Parse(trimmed);
         }
 
         /// <summary>

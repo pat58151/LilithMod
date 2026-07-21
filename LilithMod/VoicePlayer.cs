@@ -11,6 +11,9 @@ namespace LilithMod
     /// </summary>
     public class VoicePlayer : IDisposable
     {
+        private readonly object _gate = new object();
+        private WaveOutEvent _currentOutput;
+
         /// <summary>
         /// Play the given WAV bytes and block until audio finishes.
         /// Returns only after the sound has fully played or an error occurs.
@@ -35,29 +38,47 @@ namespace LilithMod
                 };
 
                 output.Init(reader);
-                output.Play();
+                lock (_gate) _currentOutput = output;
+                try
+                {
+                    output.Play();
 
-                // Never wait unbounded: if PlaybackStopped is not raised - a device
-                // failure or a wedged driver - an infinite wait would park the voice
-                // thread forever and silently drop every later reply. Allow the clip's
-                // own duration plus a margin, then give up.
-                var limit = reader.TotalTime + TimeSpan.FromSeconds(10);
-                if (!done.Wait(limit))
-                {
-                    LilithModPlugin.Logger.LogWarning(
-                        $"[Voice] Playback did not signal completion within {limit.TotalSeconds:F0}s; abandoning this clip.");
+                    // Never wait unbounded: if PlaybackStopped is not raised - a device
+                    // failure or a wedged driver - an infinite wait would park the voice
+                    // thread forever and silently drop every later reply. Allow the clip's
+                    // own duration plus a margin, then give up.
+                    var limit = reader.TotalTime + TimeSpan.FromSeconds(10);
+                    if (!done.Wait(limit))
+                    {
+                        LilithModPlugin.Logger.LogWarning(
+                            $"[Voice] Playback did not signal completion within {limit.TotalSeconds:F0}s; abandoning this clip.");
+                    }
+                    else if (playbackError != null)
+                    {
+                        LilithModPlugin.Logger.LogWarning(
+                            $"[Voice] Playback device error: {playbackError.Message}");
+                    }
                 }
-                else if (playbackError != null)
+                finally
                 {
-                    LilithModPlugin.Logger.LogWarning(
-                        $"[Voice] Playback device error: {playbackError.Message}");
+                    lock (_gate)
+                        if (ReferenceEquals(_currentOutput, output)) _currentOutput = null;
                 }
+            }
+        }
+
+        public void Stop()
+        {
+            lock (_gate)
+            {
+                try { _currentOutput?.Stop(); }
+                catch { }
             }
         }
 
         public void Dispose()
         {
-            // Nothing to keep alive; everything is created and disposed per call.
+            Stop();
         }
     }
 }

@@ -15,7 +15,7 @@ namespace LilithMod
                 if (character != null && character.IsSleep)
                 {
                     posture = "sleeping";
-                    tone = "Her consciousness does not need sleep; she is choosing to rest beside the player and drift closer to their dreams. Keep the reply especially soft and brief.";
+                    tone = "Her consciousness does not need sleep; she is choosing to rest beside the player and drift closer to their dreams. She is drowsy, not curt: answer half-asleep and murmuring, but still warm and doting - a sleepy endearment, a soft reassurance, coming closer rather than pushing away. Short because she is drowsy, never because she is cold, and never scold the player for waking her.";
                 }
                 else if (character != null && character.IsLieDown)
                 {
@@ -30,7 +30,8 @@ namespace LilithMod
             }
             catch { }
 
-            return $"Current context: local time {now:dddd, yyyy-MM-dd HH:mm zzz}; Lilith is {posture}. {tone}";
+            return $"Current context: local time {now:dddd, yyyy-MM-dd HH:mm zzz}; " +
+                $"Lilith is {posture}. {tone}" + ForegroundActivity.Context();
         }
 
         private static bool IsNearBedtime(DateTime now)

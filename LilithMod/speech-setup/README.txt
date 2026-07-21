@@ -4,7 +4,7 @@ LILITH SPEECH INPUT SETUP
 This is about TALKING TO Lilith. For her voice, see the voice-setup folder
 next to this one - the two are independent and either works without the other.
 
-Press F8, speak, then stop. After 2.5 seconds of silence what you said is
+Press F8, speak, then stop. After 1.5 seconds of silence what you said is
 transcribed and sent. Press F8 again to cancel. F7 opens the same bar to type
 instead. Both keys are rebindable under Settings -> Controls.
 
@@ -75,7 +75,7 @@ ACCURACY
                        model can also start emitting these words on unclear
                        audio.
 
-  --silence            seconds of quiet that end an utterance. Default 2.5.
+  --silence            seconds of quiet that end an utterance. Default 1.5.
 
   --vad                silero (default) classifies speech directly and needs no
                        tuning. energy is a fallback that compares loudness

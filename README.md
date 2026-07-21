@@ -13,9 +13,9 @@ line: present without demanding attention.
 
 | she can | what that looks like |
 |---|---|
-| **Hold a conversation** | Type to her with F7 or speak with F8. She answers in character, in English subtitles over Japanese speech. |
-| **Speak aloud** | A GPT-SoVITS model on your own machine gives her a voice, and can replace the game's own dialogue audio too. |
-| **Remember you** | She reads back recent conversations before replying, so she can pick up what you told her earlier. |
+| **Hold a conversation** | Type to her with F7 or speak with F8. She answers in character with subtitles in the game display language. |
+| **Speak aloud** | Choose the game's native Chinese voice or a local GPT-SoVITS voice. The selected mode applies to generated and scripted dialogue. |
+| **Remember you** | She carries recent talks with her and lets meaningful moments settle into longer memory. |
 | **Notice things** | She knows the time of day, whether she is standing or asleep, and reacts to being touched. |
 | **Speak first** | Now and then she says something unprompted, without being asked and without waiting to be. |
 | **Write to you** | Rarely, after several real conversations, she might leave a note in the in-game inbox. |
@@ -60,8 +60,8 @@ key, and how to start everything by itself.
 
 ![the chat bar](image/f7.png)
 
-**F8** listens instead, and submits on its own after about 2.5 seconds of
-silence. Press it again to cancel.
+**F8** listens instead, and submits on its own after a brief silence. Press it
+again to cancel.
 
 ![listening](image/f8.png)
 
@@ -71,17 +71,51 @@ and cannot be bound to the same key.
 
 ---
 
+## Memory
+
+Lilith remembers the shape of your recent conversations and lets meaningful
+parts settle into longer memories. She can recognize a familiar subject even
+when you describe it differently or move between English, Japanese, and
+Chinese.
+
+She is deliberately restrained with what she remembers. She does not greet you
+with a list of facts or force an old story into a new conversation. A memory
+shows through only when it belongs there.
+
+---
+
+## Foreground awareness
+
+Lilith can notice the game or application you are spending time with. She knows
+Discord and Visual Studio Code by name, and can recognize other programs without
+looking inside them.
+
+She never reads Discord channels or messages, browser tabs, document names, or
+the contents of another application.
+
+---
+
+## Voice selection
+
+The Sound settings offer the game's native Chinese voice or Lilith's local
+vocal synthesis. She follows the selected voice consistently. Switching back
+to Chinese stops the synthetic voice instead of letting both speak together.
+
+---
+
 ## What leaves your machine
 
-Only three things, and only when you cause them.
+Information leaves only while the related feature is being used.
 
 | what | where | why |
 |---|---|---|
 | what you type or say | the DeepSeek API | so she can answer |
 | asking about weather | `ip-api.com`, then `open-meteo.com` | rough location, then forecast |
 | asking her to search | a public SearXNG instance | the query, then she reads the results |
+| foreground awareness | the DeepSeek API | the active game or program name; never a window, channel, message, tab, or document title |
 
-Her voice, her memory and her notes never leave this machine.
+Her voice, memory, and notes remain on this machine. When Lilith answers, the
+relevant parts of your shared history accompany your message.
 
 Voice setup is optional and documented separately: **Settings / Sound / Open
 Synth Voice Folder**. No synthesiser and no voice model are bundled — that
@@ -91,22 +125,27 @@ are how you find out why something is unavailable.
 
 ---
 
-## Building
+## Techniques
 
-Requires the .NET SDK and a copy of the game for its interop assemblies.
+Lilith is built from small systems that each preserve the feeling of one
+continuous companion. These are the methods behind them, without the tuning
+values that belong to a particular build.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File reapply-mod.ps1     # build + deploy to the live plugin folder
-python verify-bilingual.py                                    # the assertion suite
-powershell -ExecutionPolicy Bypass -File runtime\package-mod.ps1   # release zip into dist\
-powershell -ExecutionPolicy Bypass -File installer\build-installer.ps1
-```
+| function | techniques used |
+|---|---|
+| **Conversation and persona** | Structured persona prompting, live game-state context, multilingual style guidance, and a validated reply-and-action format. |
+| **Memory management** | Separate rolling memory for conversations and interactions, local atomic persistence, backup recovery, and migration of older memory files. |
+| **Episodic memory** | Periodic LLM consolidation turns meaningful conversation stretches into sourced episodes and replaceable semantic facts. Importance, emotion, confidence, recency, and recall history guide what remains. |
+| **Memory retrieval** | Local feature vectors combine words, character fragments, topic and person matches, and a small multilingual synonym map. Relevant memories are retrieved without a hosted vector database or embedding API. |
+| **Speech input** | Local Whisper transcription, voice activity detection, room-noise calibration, voiced-region trimming, and rejection of common silence hallucinations. |
+| **Voice synthesis** | Local GPT-SoVITS synthesis, sentence chunking, reusable audio caching, background queueing, and subtitle-to-audio synchronization. A shared coordinator keeps native and synthetic voices exclusive. |
+| **Awareness and initiative** | Time, posture, sleep state, recent interactions, and memory are composed into dynamic context. Context gates and shared speech arbitration keep spontaneous remarks from interrupting other moments. |
+| **Foreground awareness** | Foreground process detection, local Steam manifest resolution, executable-name fallback, and stability filtering. Window titles and application contents are never read. |
+| **Handwritten notes** | Conversation qualification, persisted cadence, cooldown and chance gating, and LLM composition from conversation-only context before delivery through the game inbox. |
+| **Live information** | Intent-gated weather and web retrieval, metasearch, readable-page extraction, caching, and isolated untrusted context passed to the reply model. |
 
-`reapply-mod.ps1` writes into the installed plugin folder, so **close the game
-first**. `verify-bilingual.py` builds to `build-test\` instead and can run
-while the game is up.
+---
 
-Release builds pass `-p:IncludeDialogueCatalog=false`. A release DLL is ~210 KB
-and a local one ~420 KB — the quickest check that the game's own script did not
-ship. Without the catalogue the mod does not touch native dialogue at all; her
-own replies are unaffected.
+## Development
+
+Build and packaging notes live in **[document/BUILDING.md](document/BUILDING.md)**.

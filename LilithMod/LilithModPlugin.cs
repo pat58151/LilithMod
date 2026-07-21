@@ -23,6 +23,10 @@ namespace LilithMod
         internal static ConfigEntry<string> CfgSystemPrompt;
         internal static ConfigEntry<string> CfgSearXngEndpoints;
         internal static ConfigEntry<int> CfgMaxHistoryTurns;
+        internal static ConfigEntry<bool> CfgEpisodicMemoryEnabled;
+        internal static ConfigEntry<int> CfgEpisodicMemoryInterval;
+        internal static ConfigEntry<double> CfgEpisodicMemoryWindowHours;
+        internal static ConfigEntry<double> CfgEpisodicMemorySessionGapHours;
         internal static ConfigEntry<int> CfgTimeoutSeconds;
         internal static ConfigEntry<string> CfgHotkey;
         internal static ConfigEntry<double> CfgWeatherLatitude;
@@ -38,6 +42,7 @@ namespace LilithMod
         internal static ConfigEntry<bool> CfgAmbientEnabled;
         internal static ConfigEntry<int> CfgAmbientMinMinutes;
         internal static ConfigEntry<int> CfgAmbientMaxMinutes;
+        internal static ConfigEntry<bool> CfgForegroundAwareness;
         internal static ConfigEntry<bool> CfgReplaceGameVoice;
         internal static ConfigEntry<bool> CfgVoiceSynthesisPreferred;
         internal static ConfigEntry<float> CfgLilithOpacity;
@@ -164,6 +169,15 @@ namespace LilithMod
             CfgMaxHistoryTurns = Config.Bind("LLM", "HistoryTurns", 15,
                 "How many past exchanges to keep as context. Replaces the older "
                 + "'MaxHistoryTurns' entry, which is now ignored.");
+            CfgEpisodicMemoryEnabled = Config.Bind("Memory", "EpisodicMemory", true,
+                "Consolidate substantial conversations into durable episodes and stable facts.");
+            CfgEpisodicMemoryInterval = Config.Bind("Memory", "ConversationsPerEpisode", 10,
+                "Substantial conversations required before one durable memory consolidation. " +
+                "Each consolidation uses one short LLM request.");
+            CfgEpisodicMemoryWindowHours = Config.Bind("Memory", "WindowHours", 12.0,
+                "Maximum age in hours of conversations grouped into an episode.");
+            CfgEpisodicMemorySessionGapHours = Config.Bind("Memory", "SessionGapHours", 2.0,
+                "A quiet gap this long starts a new episode instead of merging unrelated chats.");
             CfgTimeoutSeconds = Config.Bind("LLM", "TimeoutSeconds", 30, "Request timeout.");
             CfgHotkey = Config.Bind("LLM", "Hotkey", "F7",
                 "Key that opens the chat box. A letter (A-Z), digit (0-9), or F1-F12. "
@@ -232,6 +246,9 @@ namespace LilithMod
                 "Minimum interval between spontaneous remarks.");
             CfgAmbientMaxMinutes = Config.Bind("Companion", "AmbientMaxMinutes", 25,
                 "Maximum interval between spontaneous remarks.");
+            CfgForegroundAwareness = Config.Bind("Awareness", "ForegroundApplication", true,
+                "Let Lilith know the active Steam/Epic/GOG game name, Discord, or executable name. " +
+                "Never reads general window titles, channels, messages, tabs, or documents.");
             CfgReplaceGameVoice = Config.Bind("Voice", "ReplaceAllGameVoice", true,
                 "Replace built-in dialogue voice with cached GPT-SoVITS speech.");
             CfgVoiceSynthesisPreferred = Config.Bind("Voice", "VocalSynthesisPreferred",
