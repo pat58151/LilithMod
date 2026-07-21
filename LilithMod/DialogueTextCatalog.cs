@@ -15,6 +15,29 @@ namespace LilithMod
             new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         private static bool _warnedMissing;
 
+        /// <summary>
+        /// Whether there is a catalogue to translate native dialogue with.
+        ///
+        /// False in distribution builds, where the game's script is deliberately not
+        /// compiled in. Without this check the replacement path still ran, fell back
+        /// to node.text - the game's Chinese source string - and handed that to the
+        /// Japanese voice. Every release install did it; local builds never could,
+        /// because they always have the catalogue.
+        /// </summary>
+        internal static bool Available
+        {
+            get
+            {
+                lock (Sync)
+                {
+                    if (_japanese == null) _japanese = Load("LilithMod.Dialogue.ja.tsv");
+                    if (_japanese.Count > 0) return true;
+                    if (_chinese == null) _chinese = Load("LilithMod.Dialogue.zh.tsv");
+                    return _chinese.Count > 0;
+                }
+            }
+        }
+
         internal static bool TryGet(int lineId, string language, out string text)
         {
             bool japanese = language != null &&

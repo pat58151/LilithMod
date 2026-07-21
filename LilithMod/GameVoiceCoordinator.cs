@@ -47,7 +47,8 @@ namespace LilithMod
         /// </summary>
         internal static bool HoldingForSynthesis =>
             !_allowOriginalShow && !VoiceServiceMonitor.EverAvailable &&
-            SynthesisPreferred() && Time.unscaledTime < VoiceGraceSeconds;
+            SynthesisPreferred() && DialogueTextCatalog.Available &&
+            Time.unscaledTime < VoiceGraceSeconds;
 
         private static bool SynthesisPreferred()
         {
@@ -135,6 +136,7 @@ namespace LilithMod
                         _instance == null ? "coordinator not awake" :
                         !LilithModPlugin.CfgReplaceGameVoice.Value ? "ReplaceGameVoice off" :
                         !VoiceConfig.Enabled ? "voice disabled" :
+                        !DialogueTextCatalog.Available ? "no dialogue catalogue in this build" :
                         LilithModPlugin.VoiceProcessor == null ? "voice processor not ready" :
                         "unknown";
                     LilithModPlugin.Logger.LogInfo(

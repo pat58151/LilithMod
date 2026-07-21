@@ -440,6 +440,20 @@ check("WarmUpSentences" in speech,
       "Warm-up sentences are gone - first synthesis would take the cold-start hit, "
       "and NoteServiceAnswered would never fire early")
 
+# -- The distribution build must not replace dialogue it cannot translate -----
+# Release builds omit the game's script for licensing. Without this the
+# replacement path still ran, fell back to the Chinese source string and fed it
+# to the Japanese voice - broken for every stranger, and invisible here, because
+# a local build always has the catalogue.
+catalog = read(MOD_DIR, "DialogueTextCatalog.cs")
+check("internal static bool Available" in catalog,
+      "DialogueTextCatalog must expose whether a catalogue exists at all")
+check("DialogueTextCatalog.Available" in integrations,
+      "Native voice replacement must be off entirely when there is no catalogue, so "
+      "the bubble gate and the audio prefixes turn off together")
+check("DialogueTextCatalog.Available" in game_voice,
+      "A line must not be held for synthesis that cannot be translated")
+
 # -- The weather feature discloses what it contacts ---------------------------
 # Asking about the weather sends the player's IP to a third party. That is a
 # reasonable default but not an obvious one, so every language's help must say

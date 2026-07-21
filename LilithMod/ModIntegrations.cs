@@ -126,8 +126,11 @@ namespace LilithMod
 
         internal static bool VoiceReplacementEnabled()
         {
+            // The catalogue check governs the bubble gate and all four audio prefixes
+            // together. Gating only one leaves the other half of a line suppressed -
+            // silent dialogue instead of wrong-language dialogue.
             return LilithModPlugin.CfgReplaceGameVoice.Value && VoiceConfig.Enabled &&
-                LilithModPlugin.VoiceProcessor != null;
+                LilithModPlugin.VoiceProcessor != null && DialogueTextCatalog.Available;
         }
 
         public static void MakeDialogueBubbleTransparent(DialogueBubbleUI __instance)
