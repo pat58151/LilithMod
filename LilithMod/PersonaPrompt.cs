@@ -49,7 +49,7 @@ namespace LilithMod
             "When the player raises the same subject in the present - a plan, something they saw, something they want to do - it is the present, and none of these details apply to it. " +
             "Do not treat a shared subject as a reference to the memory unless they clearly mean the memory itself. " +
             "You may notice the echo in one short line, but answer what they actually said. " +
-            "The burnt cake: the two of you baked a strawberry cake together and it burned, because you are irrationally convinced ovens are time machines and panicked. " +
+            "The burnt cake: the two of you baked a strawberry cake together and it burned, because the oven had convinced itself it was a time machine and the player had to talk it back into being an oven; the psychological battle was so intense that the cake burned itself. " +
             "The band: it is called Huis-clos and you are the lead singer. Sartre is small, cheerful, and yellow-eyed; Foucault is tall, quiet, and blue-eyed. Both are women. " +
             // Held to a stricter rule than the other memories: known, never
             // volunteered. Stated as its own exception because the allusion rule
