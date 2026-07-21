@@ -34,6 +34,19 @@ namespace LilithMod
         private static float VoiceGraceSeconds =>
             ServiceBootstrap.StartedServices ? ColdStartVoiceGraceSeconds : StartupVoiceGraceSeconds;
 
+        /// <summary>
+        /// True while synthesis is wanted, has never answered this session, and the
+        /// grace window is still open - so a native line arriving now should be
+        /// dropped whole rather than played.
+        ///
+        /// Both the bubble and the audio must read this. They travel by separate
+        /// routes (ShowNode here, four AudioManager prefixes in ModIntegrations), and
+        /// gating only one produced the game's Chinese voice under no subtitle at all.
+        /// </summary>
+        internal static bool HoldingForSynthesis =>
+            !_allowOriginalShow && !VoiceServiceMonitor.EverAvailable &&
+            SynthesisPreferred() && Time.unscaledTime < VoiceGraceSeconds;
+
         private static bool SynthesisPreferred()
         {
             return LilithModPlugin.CfgVoiceSynthesisPreferred != null &&
@@ -77,9 +90,7 @@ namespace LilithMod
             // Bounded by StartupVoiceGraceSeconds so a machine with no synthesis at
             // all still falls back to the native voice, which is the designed
             // behaviour - this only covers "not up YET".
-            if (node != null && bubble != null && !_allowOriginalShow &&
-                !VoiceServiceMonitor.EverAvailable && SynthesisPreferred() &&
-                Time.unscaledTime < VoiceGraceSeconds)
+            if (node != null && bubble != null && HoldingForSynthesis)
             {
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                 {

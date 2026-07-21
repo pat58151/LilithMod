@@ -79,7 +79,19 @@ namespace LilithMod
 
         public static bool ReplaceGameVoice(DialogueNode node)
         {
-            return !VoiceReplacementEnabled();
+            return AllowNativeVoice();
+        }
+
+        /// <summary>
+        /// Whether the game's own audio should play. Normally that is simply "the mod
+        /// is not replacing it", but during the synthesis grace window neither side
+        /// should be heard: the mod cannot synthesise yet, and letting the native clip
+        /// through means Chinese audio under a subtitle the bubble gate already
+        /// dropped. Both halves of a line live or die together.
+        /// </summary>
+        private static bool AllowNativeVoice()
+        {
+            return !VoiceReplacementEnabled() && !GameVoiceCoordinator.HoldingForSynthesis;
         }
 
         public static bool GateDialogueNode(DialogueBubbleUI __instance, DialogueNode node)
@@ -96,18 +108,20 @@ namespace LilithMod
 
         public static bool ReplaceVoiceBySoundId(string soundId)
         {
-            return !VoiceReplacementEnabled();
+            return AllowNativeVoice();
         }
 
         public static bool ReplaceVoiceByName(string voiceName)
         {
-            return !VoiceReplacementEnabled();
+            return AllowNativeVoice();
         }
 
         public static bool ReplaceResolvedDialogueVoice(AudioClip clip, bool isDialogueLine)
         {
-            if (!isDialogueLine || !VoiceReplacementEnabled()) return true;
-            return false;
+            // Only dialogue is ours to suppress; other audio through this path is
+            // sound effects, which the mod has no business silencing.
+            if (!isDialogueLine) return true;
+            return AllowNativeVoice();
         }
 
         internal static bool VoiceReplacementEnabled()

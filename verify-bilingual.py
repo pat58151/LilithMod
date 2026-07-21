@@ -131,6 +131,14 @@ check("2951001" in game_voice and "2951002" in game_voice and "_alarmDialogueUnt
 check("nameof(AudioManager.PlayVoice)" in integrations and
       "new[] { typeof(string), typeof(bool) }" in integrations,
       "Both native PlayVoice overloads must be suppressed during replacement")
+# The bubble and the audio reach the player by different routes. Gating one but
+# not the other yielded the game's Chinese voice under no subtitle at all, so
+# assert the single shared predicate rather than either call site.
+check("HoldingForSynthesis" in game_voice and "EverAvailable" in game_voice,
+      "The synthesis grace window must be one predicate in GameVoiceCoordinator")
+check(len(re.findall(r"return AllowNativeVoice\(\);", integrations)) >= 3 and
+      "GameVoiceCoordinator.HoldingForSynthesis" in integrations,
+      "Every native-audio prefix must honour the grace window, not just the bubble")
 
 # -- 6. Reply parsing and its fallbacks ---------------------------------------
 check("ParseUtterances" in chat, "A tolerant reply parser is required")
