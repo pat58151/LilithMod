@@ -217,4 +217,17 @@ catch {
     Write-StartupLog ("Push-to-talk startup failed: " + $_.Exception.Message)
 }
 
-if (-not $ServicesOnly) { Start-Process $gameExe }
+if (-not $ServicesOnly) {
+    # Never start a second copy. The game is single-instance, so a second process
+    # initialises BepInEx, logs a convincing load, hands off to the copy already
+    # running and exits - leaving "the mod loaded" in a log written by a process
+    # that is not the one on screen. See HANDOFF gotcha 1.
+    $running = @(Get-Process -Name "Lilith" -ErrorAction SilentlyContinue)
+    if ($running.Count -gt 0) {
+        Write-StartupLog "Game already running (PID $($running[0].Id)); not starting a second copy."
+    }
+    else {
+        Start-Process $gameExe
+        Write-StartupLog "Game started."
+    }
+}

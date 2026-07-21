@@ -164,6 +164,11 @@ Read this section before debugging anything.
    session and produced a confident, wrong diagnosis blaming Il2CppInterop.
    **Confirm the PID writing the log is the PID rendering the game.**
 
+   `start-lilith.ps1` now refuses to start a second copy when one is already
+   running, so the launcher itself can no longer cause this. Anything that
+   launches `Lilith.exe` outside the launcher still can - see the incident note
+   at the end of this file.
+
 2. **`Config.Bind` keeps whatever is already in the cfg.** Changing a default in
    code does nothing on an existing install. To actually ship a new prompt,
    bind a *new key name* - that is why the prompt lives under
@@ -593,3 +598,40 @@ player never asked for. `TryAmbientRemark` **reschedules** rather than leaving
 itself due - otherwise pasting a key mid-session is answered by a remark firing
 instantly out of nowhere. Interaction replies go through `AmbientAllowed`; the
 interaction is still recorded to memory when the reply is skipped.
+
+### Incident: "the mod unapplied itself", 2026-07-21
+
+**Not reproduced, and not explained.** Recorded because the next person to see
+it should not re-derive the search.
+
+Symptom: the game came up looking vanilla. Every artifact contradicted that.
+`LilithMod.dll` was the current build, `doorstop_config.ini` had `enabled = true`
+with the right target assembly, `LilithMod.cfg` still held the API key and
+bindings, and `LogOutput.log` showed a clean `Loading [LilithMod 1.0.0]` ->
+`Loaded.` -> all Harmony patches installed -> `integrations installed`. The two
+duplicated-looking `python.exe` pairs were checked and are innocent: parent and
+child (a launcher stub re-execing the real interpreter), with a single owner on
+port 9880.
+
+What the search did turn up is a **stray `HKCU\...\Run\Lilith` entry pointing at
+`Lilith.exe` directly.** `install-startup.ps1` never creates it - that script
+installs a desktop shortcut running the full launcher, and a Startup shortcut
+running it with `-ServicesOnly`. So on that machine login started the game by one
+path while the services started by another, which is why the BepInEx log
+timestamp *preceded* the services the launcher starts before the game. That
+ordering is impossible for the launcher to produce and was the thread worth
+pulling.
+
+Whether it caused the vanilla window is **unproven**. The plausible mechanism is
+that a directly-launched Steam game restarts itself through Steam and the two
+processes collide over BepInEx's startup mutex - which is gotcha 6, and there is
+an `AbandonedMutexException` preloader log from an earlier date. Suggestive only.
+
+The fix applied was to the launcher rather than to one machine's registry: it now
+refuses to start a second copy. Evidence to capture if this recurs, since
+`LogOutput.log` is overwritten every launch and the last one is unrecoverable:
+
+```powershell
+Get-Process Lilith | Select-Object Id,StartTime          # more than one is the answer
+Get-Content "$game\BepInEx\LogOutput.log" -Wait -Tail 5  # is it growing?
+```
