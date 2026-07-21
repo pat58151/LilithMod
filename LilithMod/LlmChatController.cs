@@ -894,6 +894,29 @@ namespace LilithMod
         private static bool TryApplyImmediateNativeAction(string text)
         {
             string value = text?.ToLowerInvariant() ?? string.Empty;
+
+            // App launch is checked first, before the timer/alarm parsing, so a phrase
+            // like "open steam" fires immediately and never falls through to the alarm
+            // clock parser. Only allowed names launch; anything else is left to the LLM,
+            // which omits the action and lets her decline in words. Gated by config.
+            if (LilithModPlugin.CfgAllowOpenApps != null && LilithModPlugin.CfgAllowOpenApps.Value)
+            {
+                // Lazy name + trailing punctuation class: a spoken transcript arrives as
+                // "Open Discord." and the period must not become part of the name.
+                Match appMatch = Regex.Match(value.Trim(),
+                    @"^(?:lilith[\s,.!~]+)?(?:please\s+)?(?:open|launch|start)\s+(?:the\s+)?(?<app>[a-z0-9_.\-]+?)[\s.!?~]*$",
+                    RegexOptions.IgnoreCase);
+                if (appMatch.Success)
+                {
+                    string appName = appMatch.Groups["app"].Value.Trim().ToLowerInvariant();
+                    if (AppLauncher.GateOpen && AppLauncher.GetAllowedNames().Contains(appName) && AppLauncher.TryOpen(appName))
+                    {
+                        LilithModPlugin.Logger.LogInfo("[NativeAction] Local app launch for '" + appName + "'.");
+                        return true;
+                    }
+                }
+            }
+
             bool timerNamed = value.Contains("timer") || value.Contains("タイマー") || value.Contains("计时");
             bool alarmNamed = value.Contains("alarm") || value.Contains("アラーム") || value.Contains("闹钟");
             bool cancel = value.Contains("cancel") || value.Contains("stop") ||
@@ -1517,6 +1540,17 @@ namespace LilithMod
                         AlarmSystem.CancelAlarm();
                         LilithModPlugin.Logger.LogInfo("[NativeAction] Alarm cancelled.");
                         break;
+                    case "open_app":
+                    {
+                        string app = (string)action["app"];
+                        if (string.IsNullOrWhiteSpace(app))
+                            throw new InvalidOperationException("open_app action missing app name.");
+                        if (LilithModPlugin.CfgAllowOpenApps == null || !LilithModPlugin.CfgAllowOpenApps.Value)
+                            throw new InvalidOperationException("App opening is disabled.");
+                        if (!AppLauncher.TryOpen(app))
+                            throw new InvalidOperationException($"Could not open app '{app}'.");
+                        break;
+                    }
                 }
             }
             catch (Exception ex)

@@ -117,6 +117,13 @@ namespace LilithMod
                 "{\"type\":\"timer\",\"seconds\":300}, {\"type\":\"alarm\",\"local_time\":\"yyyy-MM-ddTHH:mm:ss\"}, " +
                 "{\"type\":\"timer_cancel\"}, or {\"type\":\"alarm_cancel\"}. Calculate relative times from the current local time. " +
                 "Omit action for every other request and when the requested time is ambiguous. " +
+                (LilithModPlugin.CfgAllowOpenApps != null && LilithModPlugin.CfgAllowOpenApps.Value
+                    ? "When the player explicitly asks to open or launch an app, also add one top-level action: " +
+                      "{\"type\":\"open_app\",\"app\":\"<name>\"}, using an allowed name exactly as written. " +
+                      "Allowed names: " + string.Join(", ", AppLauncher.GetAllowedNames()) + ". Never use a name not in this list. " +
+                      "In your reply give one short, excited acknowledgement line, varied each time and never the same phrasing twice. " +
+                      "Honor an explicit open request even while you are sleeping - sound drowsy if you like, but still include the action. "
+                    : string.Empty) +
                 "Each shown line must mean exactly the same thing as its spoken line. " +
                 // One sentence per object is what lets her voice start on the first
                 // sentence instead of the whole reply, and it pairs each subtitle

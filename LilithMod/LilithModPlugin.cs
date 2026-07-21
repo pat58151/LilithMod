@@ -43,11 +43,13 @@ namespace LilithMod
         internal static ConfigEntry<float> CfgLilithOpacity;
         internal static ConfigEntry<bool> CfgPushToTalkEnabled;
         internal static ConfigEntry<string> CfgPushToTalkKey;
+        internal static ConfigEntry<bool> CfgWakeWord;
         internal static ConfigEntry<int> CfgNoteMinConversations;
         internal static ConfigEntry<int> CfgNoteMinMessageLength;
         internal static ConfigEntry<double> CfgNoteWindowHours;
         internal static ConfigEntry<double> CfgNoteCooldownHours;
         internal static ConfigEntry<float> CfgNoteChance;
+        internal static ConfigEntry<bool> CfgAllowOpenApps;
 
         // Voice settings – optional TTS via a local GPT‑SoVITS service.
         internal static ConfigEntry<bool> CfgVoiceEnabled;
@@ -240,6 +242,13 @@ namespace LilithMod
                 "Enable the external push-to-talk transcriber.");
             CfgPushToTalkKey = Config.Bind("VoiceInput", "PushToTalkKey", "F8",
                 "Press this key to start and stop speaking. F1-F12, A-Z, or 0-9.");
+            // "WakeWordEnabled" is burned (see the note above): existing configs
+            // still carry the old listener's value and would silently pre-enable
+            // this. A fresh key keeps those installs inert until opted in.
+            CfgWakeWord = Config.Bind("VoiceInput", "WakeWord", false,
+                "Listen for her name and start recording without pressing the push-to-talk key. "
+                + "Needs the speech listener, an API key, and a wake-word model. "
+                + "Keeps the microphone open while enabled.");
 
             // Notes are meant to be keepsakes, so all three gates are deliberately
             // strict: substance, then time, then chance.
@@ -257,6 +266,15 @@ namespace LilithMod
             CfgNoteChance = Config.Bind("Letters", "Chance", 0.2f,
                 "Chance a note is written once it is otherwise due, so it does not arrive on a felt schedule. "
                 + "Re-rolled per qualifying message, so small values still add up.");
+
+            CfgAllowOpenApps = Config.Bind("Apps", "AllowOpenApps", false,
+                "Allow Lilith to open sanctioned applications when asked (discord, steam, etc.). "
+                + "The allowed list lives in plugins/LilithMod/apps/lilith-apps.txt and can be edited at any time.");
+            // Create the default allowed-apps list on first run, so it can be edited
+            // before the feature is ever switched on. AppLauncher owns the defaults;
+            // reading the names is what triggers the lazy file creation.
+            try { AppLauncher.GetAllowedNames(); }
+            catch (System.Exception ex) { Log.LogWarning("[Apps] Could not prepare allowed-apps list: " + ex.Message); }
 
             NoteJournal.Initialize();
 

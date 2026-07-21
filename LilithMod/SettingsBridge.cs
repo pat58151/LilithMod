@@ -31,6 +31,10 @@ namespace LilithMod
         private TMP_InputField _pushToTalkKeyField;
         private Slider _opacity;
         private TMP_Text _opacityLabel;
+        private ButtonToggle _allowOpenAppsToggle;
+        private TMP_Text _allowOpenAppsLabel;
+        private ButtonToggle _wakeWordToggle;
+        private TMP_Text _wakeWordLabel;
         private float _nextSync;
         private float _nextOpacityRefresh;
         private float _lastAppliedOpacity = -1f;
@@ -160,6 +164,8 @@ namespace LilithMod
                 }
             }
 
+            BuildAppRows(view);
+
             _deepSeekLabel = deepSeekLabel;
             _hotkeyLabel = hotkeyLabel;
             _pushToTalkLabel = pushToTalkKeyLabel;
@@ -232,6 +238,163 @@ namespace LilithMod
             LilithModPlugin.Logger.LogInfo("[Settings] API, voice, memory, and display rows ready.");
         }
 
+        /// <summary>
+        /// The two Lilith-tab rows for the "open apps" feature: a toggle cloned from the
+        /// native Lock Move row, and a "Lilith's list" action row cloned from the native
+        /// action-row template (the same one Help uses). Placed before the forced label
+        /// refresh in BuildRows, so RefreshLabels localises the toggle label immediately.
+        /// The toggle's native listener is severed and its state is polled in Sync(),
+        /// matching the reveal-eye toggle rather than marshalling a managed delegate onto
+        /// an Il2Cpp UnityEvent.
+        /// </summary>
+        private void BuildAppRows(TraySettingView view)
+        {
+            // --- Toggle row (Allow open apps) ---
+            Transform lockRow = view.GetRowOf(view._closeMovementToggle.transform);
+            if (lockRow == null)
+            {
+                LilithModPlugin.Logger.LogWarning("[Settings] Could not find the Lock Move row to clone the apps toggle.");
+                return;
+            }
+            GameObject toggleRowObj = UnityEngine.Object.Instantiate(lockRow.gameObject, lockRow.parent);
+            toggleRowObj.name = "LilithAllowOpenApps";
+
+            // The game's settings toggles are ButtonToggle (UI.Common), not
+            // UnityEngine.UI.Toggle. Its OnValueChanged is a plain C# event wired at
+            // runtime, so the clone arrives unsubscribed - clicking it cannot drive
+            // the native movement lock, and there is nothing to sever.
+            _allowOpenAppsToggle = toggleRowObj.GetComponentInChildren<ButtonToggle>(true);
+            if (_allowOpenAppsToggle != null)
+            {
+                _allowOpenAppsToggle.SetValue(LilithModPlugin.CfgAllowOpenApps.Value, false);
+            }
+            else
+            {
+                LilithModPlugin.Logger.LogWarning("[Settings] Cloned apps toggle row has no ButtonToggle component.");
+            }
+
+            // The label is the row's first text that is NOT part of the Toggle control.
+            _allowOpenAppsLabel = null;
+            var toggleTexts = toggleRowObj.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < toggleTexts.Length; i++)
+            {
+                TMP_Text candidate = toggleTexts[i];
+                if (candidate == null) continue;
+                if (_allowOpenAppsToggle != null &&
+                    candidate.transform.IsChildOf(_allowOpenAppsToggle.transform)) continue;
+                _allowOpenAppsLabel = candidate;
+                break;
+            }
+            if (_allowOpenAppsLabel == null && toggleTexts.Length > 0)
+                _allowOpenAppsLabel = toggleTexts[0];
+            if (_allowOpenAppsLabel != null)
+            {
+                TraySettingView.StripLabelLocalizer(_allowOpenAppsLabel);
+                SetWrappedLabel(_allowOpenAppsLabel, "Allow Lilith\nto open Apps");
+            }
+
+            toggleRowObj.SetActive(true);
+            if (_allowOpenAppsToggle != null)
+                view.MapRow(_allowOpenAppsToggle, TraySettingView.TabLilith);
+
+            // --- Toggle row (Wake word) ---
+            // Same clone-and-poll shape as the apps toggle above.
+            GameObject wakeRowObj = UnityEngine.Object.Instantiate(lockRow.gameObject, lockRow.parent);
+            wakeRowObj.name = "LilithWakeWord";
+            _wakeWordToggle = wakeRowObj.GetComponentInChildren<ButtonToggle>(true);
+            if (_wakeWordToggle != null)
+            {
+                _wakeWordToggle.SetValue(LilithModPlugin.CfgWakeWord.Value, false);
+            }
+            else
+            {
+                LilithModPlugin.Logger.LogWarning("[Settings] Cloned wake word row has no ButtonToggle component.");
+            }
+            _wakeWordLabel = null;
+            var wakeTexts = wakeRowObj.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < wakeTexts.Length; i++)
+            {
+                TMP_Text candidate = wakeTexts[i];
+                if (candidate == null) continue;
+                if (_wakeWordToggle != null &&
+                    candidate.transform.IsChildOf(_wakeWordToggle.transform)) continue;
+                _wakeWordLabel = candidate;
+                break;
+            }
+            if (_wakeWordLabel == null && wakeTexts.Length > 0)
+                _wakeWordLabel = wakeTexts[0];
+            if (_wakeWordLabel != null)
+            {
+                TraySettingView.StripLabelLocalizer(_wakeWordLabel);
+                SetWrappedLabel(_wakeWordLabel, "Wake word\n(call her name)");
+            }
+            wakeRowObj.SetActive(true);
+            if (_wakeWordToggle != null)
+                view.MapRow(_wakeWordToggle, TraySettingView.TabLilith);
+
+            // --- Action row (Lilith's list) ---
+            // Cloned from the native action-row template, exactly like Help - not from
+            // the Help clone - so its click listener is only the open-list action.
+            Transform actionRow = view.GetRowOf(view._openMusicFolderLabel.transform);
+            Transform listRow = null;
+            if (actionRow != null)
+            {
+                TMP_Text listLabel = view.CloneActionRow(
+                    actionRow, "LilithAllowedAppsList",
+                    Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
+                        new System.Action(AppLauncher.OpenAllowedList)));
+                if (listLabel != null)
+                {
+                    listLabel.richText = true;
+                    // English only, deliberately never localised and never greyed: it is
+                    // how the player reaches the file that defines everything else here.
+                    SetWrappedLabel(listLabel, "<u>Lilith's list</u>");
+                    listRow = view.GetRowOf(listLabel.transform);
+                    if (listRow != null)
+                    {
+                        listRow.gameObject.SetActive(true);
+                        view.MapRow(listLabel, TraySettingView.TabLilith);
+                    }
+                }
+            }
+
+            // Order, below the realm schedule slider: wake word, then the apps
+            // toggle, then its list row.
+            Transform toggleRow = toggleRowObj.transform;
+            Transform wakeRow = wakeRowObj.transform;
+            Transform realmScheduleRow = view._adjustFantasyScheduleSlider != null
+                ? view.GetRowOf(view._adjustFantasyScheduleSlider.transform) : null;
+            if (realmScheduleRow != null && wakeRow.parent == realmScheduleRow.parent)
+                wakeRow.SetSiblingIndex(realmScheduleRow.GetSiblingIndex() + 1);
+            if (toggleRow.parent == wakeRow.parent)
+                toggleRow.SetSiblingIndex(wakeRow.GetSiblingIndex() + 1);
+            if (listRow != null && listRow.parent == toggleRow.parent)
+                listRow.SetSiblingIndex(toggleRow.GetSiblingIndex() + 1);
+
+            // Fresh clones arrive default-coloured; style for current availability
+            // now instead of waiting for an availability flip that may never come.
+            StyleToggleRow(_allowOpenAppsToggle, _allowOpenAppsLabel, HasApiKey);
+            StyleToggleRow(_wakeWordToggle, _wakeWordLabel,
+                SpeechInputService.IsAvailable && HasApiKey);
+        }
+
+        /// <summary>
+        /// Greys a cloned toggle row the way Vocal Synthesis greys its button. The
+        /// saved preference is left alone, so the toggle recovers by itself when
+        /// whatever it needs comes back.
+        /// </summary>
+        private static void StyleToggleRow(ButtonToggle toggle, TMP_Text label, bool available)
+        {
+            if (toggle == null) return;
+            toggle.enabled = available;
+            if (toggle._button != null) toggle._button.interactable = available;
+            Color color = available ? Color.white : DisabledColor;
+            if (toggle._buttonImage != null) toggle._buttonImage.color = color;
+            foreach (TMP_Text text in toggle.GetComponentsInChildren<TMP_Text>(true))
+                if (text != null) text.color = color;
+            if (label != null) label.color = color;
+        }
+
         private void Sync()
         {
             string deepSeek = _deepSeekKey.text?.Trim() ?? string.Empty;
@@ -269,6 +432,25 @@ namespace LilithMod
                 if (Math.Abs(opacity - LilithModPlugin.CfgLilithOpacity.Value) > 0.001f)
                     LilithModPlugin.CfgLilithOpacity.Value = opacity;
                 ApplyLilithOpacity(opacity);
+            }
+
+            // Polled rather than listener-driven: the native UnityEvent was severed on
+            // the clone, so this is what carries a click through to the config.
+            if (_allowOpenAppsToggle != null &&
+                _allowOpenAppsToggle.IsOn != LilithModPlugin.CfgAllowOpenApps.Value)
+            {
+                LilithModPlugin.CfgAllowOpenApps.Value = _allowOpenAppsToggle.IsOn;
+                LilithModPlugin.SaveConfig();
+                LilithModPlugin.Logger.LogInfo(
+                    "[Settings] Allow Lilith to open apps set to " + _allowOpenAppsToggle.IsOn + ".");
+            }
+            if (_wakeWordToggle != null &&
+                _wakeWordToggle.IsOn != LilithModPlugin.CfgWakeWord.Value)
+            {
+                LilithModPlugin.CfgWakeWord.Value = _wakeWordToggle.IsOn;
+                LilithModPlugin.SaveConfig();
+                LilithModPlugin.Logger.LogInfo(
+                    "[Settings] Wake word set to " + _wakeWordToggle.IsOn + ".");
             }
         }
 
@@ -533,6 +715,10 @@ namespace LilithMod
             _hotkeyField.interactable = available;
             if (_hotkeyField.textComponent != null) _hotkeyField.textComponent.color = color;
             if (_hotkeyLabel != null) _hotkeyLabel.color = color;
+            // Everything she does with a reply needs the key too.
+            StyleToggleRow(_allowOpenAppsToggle, _allowOpenAppsLabel, available);
+            StyleToggleRow(_wakeWordToggle, _wakeWordLabel,
+                available && SpeechInputService.IsAvailable);
         }
 
         /// <summary>
@@ -554,6 +740,8 @@ namespace LilithMod
             if (_pushToTalkKeyField.textComponent != null)
                 _pushToTalkKeyField.textComponent.color = color;
             if (_pushToTalkLabel != null) _pushToTalkLabel.color = color;
+            // The wake word rides the same listener as push-to-talk.
+            StyleToggleRow(_wakeWordToggle, _wakeWordLabel, available);
         }
 
         private void RefreshSynthesisAvailability()
@@ -663,6 +851,10 @@ namespace LilithMod
                 ja ? "音声合成\nフォルダを開く" : zh ? "打开合成\n语音文件夹" : "Open Synth\nVoice Folder");
             SetWrappedLabel(_opacityLabel,
                 ja ? "不透明度" : zh ? "不透明度" : "Opacity");
+            SetWrappedLabel(_allowOpenAppsLabel,
+                ja ? "アプリ起動を\n許可" : zh ? "允许莉莉丝\n打开应用" : "Allow Lilith\nto open Apps");
+            SetWrappedLabel(_wakeWordLabel,
+                ja ? "ウェイクワード\n(名前で呼ぶ)" : zh ? "唤醒词\n(呼唤名字)" : "Wake word\n(call her name)");
             // Native row, relabelled by this mod and localiser-stripped, so it needs
             // the same treatment as the cloned ones.
             ApplySynthesisLabel(language);
