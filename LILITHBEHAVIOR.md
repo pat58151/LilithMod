@@ -2,8 +2,8 @@
 
 Written 2026-07-21. What she does, when, and why - as a brief for tuning it.
 
-This is the *behaviour* layer only. Installation is `INSTALLER-HANDOFF.md`,
-portability is `PORTABILITY.md`, open faults are `PROBLEM.md`.
+This is the *behaviour* layer only. Installation and packaging are
+`PORTABILITY.md`.
 
 Every number here is a real constant in the code. Where a value was chosen by
 measurement rather than taste, the measurement is given, because that is what
@@ -254,7 +254,6 @@ Typing while F8 listens wins: what is typed is used and the transcript discarded
   Japanese in the English `shown` field sometimes. Costs another round trip when
   it happens. A bad exchange is four calls and ~4-5 s.
 - **Rapid-click lockout**, section 3.
-- Everything in `PROBLEM.md`.
 
 ## 9. If you change one thing
 

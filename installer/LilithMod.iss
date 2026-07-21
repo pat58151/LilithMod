@@ -1,7 +1,7 @@
 ; Inno Setup script for LilithMod.
 ; Build with installer\build-installer.ps1 — it stages the payload (the release
 ; zip, extracted) into installer\payload\ and passes /DAppVersion=<version>.
-; The install rules implemented here come from INSTALLER-HANDOFF.md.
+; The install rules implemented here come from PORTABILITY.md.
 
 #ifndef AppVersion
   #define AppVersion "1.0.0.0"
@@ -173,7 +173,7 @@ begin
     end;
 end;
 
-{ The single most important step (INSTALLER-HANDOFF.md section 3): Steam passes
+{ The single most important step (PORTABILITY.md, installer step 3): Steam passes
   DOORSTOP_DISABLE=TRUE on essentially every launch. Without
   ignore_disable_switch = true the mod silently never loads and every log looks
   healthy. Rewrite if needed, then RE-READ and verify — never trust a

@@ -34,7 +34,8 @@ case that was broken and could never be noticed here.
   locations.
 - The reference WAV, voice models, and dialogue catalogue. These are the game
   developers' assets. They are gitignored and excluded from the release zip by
-  `package-mod.ps1`, and that must stay true - see HANDOFF §3a.
+  `package-mod.ps1`, and that must stay true. They are for local use only and
+  must never be committed or redistributed.
 
 ## What an installer must do
 
@@ -52,7 +53,7 @@ Ordered. Several steps are non-obvious and were each learned from a failure.
    optional.** Steam passes `DOORSTOP_DISABLE=TRUE` to the game on essentially
    every launch; without this the mod silently does not load while BepInEx logs
    look perfectly healthy. This is the single highest-value thing the installer
-   does. Verified live - see the incident note in HANDOFF.
+   does. Verified live on this machine.
    Note the current implementations rewrite `ignore_disable_switch = false`
    by regex, which silently does nothing if a future BepInEx drops or renames
    the key. An installer should assert the setting is present afterwards

@@ -144,7 +144,7 @@ namespace LilithMod
                 $"{ms} ms for {text?.Length ?? 0} chars ({language}), {bytes / 1024} KB audio";
             if (ms >= SlowSynthesisMs)
                 LilithModPlugin.Logger.LogWarning(
-                    $"[Voice] Slow synthesis: {detail}. Expected 2-3 s; see PROBLEM.md.");
+                    $"[Voice] Slow synthesis: {detail}. Expected 2-3 s.");
             else
                 LilithModPlugin.Logger.LogInfo($"[Voice] Synthesized in {detail}.");
         }

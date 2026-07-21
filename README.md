@@ -128,11 +128,7 @@ own replies are unaffected.
 | file | what it covers |
 |---|---|
 | [LILITHBEHAVIOR.md](LILITHBEHAVIOR.md) | every timing constant, and the measurement behind it. Read before tuning anything |
-| [PORTABILITY.md](PORTABILITY.md) | what is machine-specific, and what an installer has to do |
-| [INSTALLER-HANDOFF.md](INSTALLER-HANDOFF.md) / [INSTALLER-DONE.md](INSTALLER-DONE.md) | the installer brief and what was built against it |
-| [PROBLEM.md](PROBLEM.md) | open faults |
-| [HANDOFF.md](HANDOFF.md) | the long-form development record |
-| [DIALOGUE-LOCATIONS.md](DIALOGUE-LOCATIONS.md) | where the game keeps its dialogue |
+| [PORTABILITY.md](PORTABILITY.md) | what is machine-specific, what an installer has to do, and what must never ship |
 
 Two things in `LILITHBEHAVIOR.md` are worth knowing before changing code:
 nothing may interrupt a line she is already speaking (four separate paths defer

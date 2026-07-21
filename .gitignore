@@ -56,3 +56,12 @@ LilithMod/DevHooks.cs
 # Staged release-zip contents for the installer build; recreated every build.
 installer/payload/
 dynamic-lines.ja.json
+
+# Development records. Kept locally, not published: they are handoff notes and
+# solved-problem archives, carry this machine's absolute paths, and
+# DIALOGUE-LOCATIONS.md maps the game developers' own content.
+HANDOFF.md
+DIALOGUE-LOCATIONS.md
+INSTALLER-HANDOFF.md
+INSTALLER-DONE.md
+PROBLEM.md
