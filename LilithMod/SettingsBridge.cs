@@ -22,6 +22,7 @@ namespace LilithMod
         private TMP_Text _voiceFolderLabel;
         private TMP_Text _speechFolderLabel;
         private TMP_Text _helpLabel;
+        private TMP_Text _deepSeekLabel;
         private TMP_Text _hotkeyLabel;
         private bool _lastChatAvailability = true;
         private static readonly Color DisabledColor = new Color(0.45f, 0.45f, 0.45f, 1f);
@@ -61,7 +62,7 @@ namespace LilithMod
                 RefreshSynthesisAvailability();
                 RefreshSpeechAvailability();
                 RefreshChatAvailability();
-                RefreshHelpLabel();
+                RefreshLabels();
             }
 
             bool settingsVisible = _view != null && _view.IsVisible;
@@ -159,20 +160,22 @@ namespace LilithMod
                 }
             }
 
-            SetWrappedLabel(deepSeekLabel, "DeepSeek\nAPI Key");
+            _deepSeekLabel = deepSeekLabel;
             _hotkeyLabel = hotkeyLabel;
-            SetWrappedLabel(hotkeyLabel, "Open chat");
+            _pushToTalkLabel = pushToTalkKeyLabel;
             // Underlined so it reads as something to click rather than a setting
             // name. Rich text is off by default on cloned rows.
-            if (_helpLabel != null) _helpLabel.richText = true;
-            _helpLanguage = null;
-            RefreshHelpLabel();
-            SetWrappedLabel(_speechFolderLabel, "Open Speech\nInput Folder");
-            // Two lines: the row is narrow, so this sits better than one long label.
-            SetWrappedLabel(_voiceFolderLabel, "Open Synth\nVoice Folder");
-            _pushToTalkLabel = pushToTalkKeyLabel;
-            SetWrappedLabel(pushToTalkKeyLabel, "Push-to-talk");
-            SetWrappedLabel(_opacityLabel, "Opacity");
+            if (_helpLabel != null)
+            {
+                _helpLabel.richText = true;
+                // Left in English deliberately: "Help" reads as itself in every
+                // language this game ships, and the file it opens is English anyway.
+                SetWrappedLabel(_helpLabel, "<u>Help</u>");
+            }
+            // Force a re-apply: the rows were just rebuilt, so whatever language was
+            // applied to the previous set does not describe these.
+            _labelLanguage = null;
+            RefreshLabels();
 
             _deepSeekKey.text = LilithModPlugin.CfgApiKey.Value ?? string.Empty;
             _hotkeyField.text = LilithModPlugin.CfgHotkey.Value ?? "F7";
@@ -613,25 +616,41 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// The Help label follows the game's display language, and is re-checked on
-        /// the refresh tick so changing language applies without a restart - the
-        /// same contract the speech recogniser uses.
+        /// Labels on the rows this mod adds follow the game's display language, and
+        /// are re-checked on the refresh tick so switching language applies without
+        /// a restart - the same contract the speech recogniser uses.
+        ///
+        /// The native rows are localised by the game itself. These are clones with
+        /// their localiser stripped, so nothing else will ever set their text.
+        /// Help is excluded on purpose; see where it is assigned.
         /// </summary>
-        private void RefreshHelpLabel()
+        private void RefreshLabels()
         {
-            if (_helpLabel == null) return;
-            string language = HelpLanguage();
-            if (language == _helpLanguage) return;
-            _helpLanguage = language;
-            string text =
-                language == "ja" ? "ヘルプ" :
-                language == "zh" ? "帮助" :
-                "Help";
-            SetWrappedLabel(_helpLabel, "<u>" + text + "</u>");
+            string language = UiLanguage();
+            if (language == _labelLanguage) return;
+            _labelLanguage = language;
+
+            bool ja = language == "ja";
+            bool zh = language == "zh";
+
+            SetWrappedLabel(_deepSeekLabel,
+                ja ? "DeepSeek\nAPIキー" : zh ? "DeepSeek\nAPI 密钥" : "DeepSeek\nAPI Key");
+            SetWrappedLabel(_hotkeyLabel,
+                ja ? "チャットを開く" : zh ? "打开聊天" : "Open chat");
+            SetWrappedLabel(_pushToTalkLabel,
+                ja ? "音声入力キー" : zh ? "语音输入键" : "Push-to-talk");
+            // Two lines on the folder buttons: the row is narrow, so this sits
+            // better than one long label.
+            SetWrappedLabel(_speechFolderLabel,
+                ja ? "音声入力\nフォルダを開く" : zh ? "打开语音\n输入文件夹" : "Open Speech\nInput Folder");
+            SetWrappedLabel(_voiceFolderLabel,
+                ja ? "音声合成\nフォルダを開く" : zh ? "打开合成\n语音文件夹" : "Open Synth\nVoice Folder");
+            SetWrappedLabel(_opacityLabel,
+                ja ? "不透明度" : zh ? "不透明度" : "Opacity");
         }
 
         /// <summary>"en", "ja" or "zh" - never null, so it is safe to compare.</summary>
-        private static string HelpLanguage()
+        private static string UiLanguage()
         {
             try
             {
@@ -646,7 +665,7 @@ namespace LilithMod
             }
         }
 
-        private string _helpLanguage;
+        private string _labelLanguage;
 
         /// <summary>
         /// Opens the mod overview in whatever handles .txt. Like the folder buttons
@@ -664,7 +683,7 @@ namespace LilithMod
                 string root = Path.GetDirectoryName(
                     System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".";
                 string helpFolder = Path.Combine(root, "help");
-                string file = Path.Combine(helpFolder, $"OVERVIEW.{HelpLanguage()}.txt");
+                string file = Path.Combine(helpFolder, $"OVERVIEW.{UiLanguage()}.txt");
                 if (!File.Exists(file)) file = Path.Combine(helpFolder, "OVERVIEW.txt");
                 if (!File.Exists(file))
                 {

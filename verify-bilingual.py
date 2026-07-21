@@ -313,9 +313,29 @@ check("StartCountdown((float)seconds, false)" in chat and
       "TryApplyImmediateNativeAction" in chat and "TryParseDuration" in chat and
       "TryParseAlarmClock" in chat,
       "Native English timer confirmation must stay muted and cancellation must be immediate")
-check('SetWrappedLabel(_voiceFolderLabel, "Open Synth\\nVoice Folder")' in settings and
+# Checks the property, not the call's formatting: whatever the folder labels are
+# set to, in every language, must break over two lines. A literal-match version of
+# this broke the moment the labels became a per-language expression.
+def _folder_label_args(field):
+    match = re.search(r"SetWrappedLabel\(" + field + r",(.*?)\);", settings, re.S)
+    return re.findall(r'"((?:[^"\\]|\\.)*)"', match.group(1)) if match else []
+
+_voice_labels = _folder_label_args("_voiceFolderLabel")
+_speech_labels = _folder_label_args("_speechFolderLabel")
+check(len(_voice_labels) >= 3 and all("\\n" in v for v in _voice_labels) and
+      len(_speech_labels) >= 3 and all("\\n" in v for v in _speech_labels) and
       'labels[i].enableWordWrapping = false' in settings,
-      "The vocal synthesis folder row must be labelled over two lines")
+      "The folder rows must be labelled over two lines in every language")
+
+# The rows this mod adds are clones with their localiser stripped, so nothing but
+# this refresh will ever translate them.
+check("RefreshLabels()" in settings and "_labelLanguage" in settings and
+      "PersonaPrompt.CurrentDisplayLanguage()" in settings,
+      "Added settings rows must follow the game display language at runtime")
+
+# Deliberate exception, and easy to 'fix' by mistake later.
+check(re.search(r'SetWrappedLabel\(_helpLabel,\s*"<u>Help</u>"\)', settings) is not None,
+      "The Help label stays English; it reads as itself in every shipped language")
 check("NoteJournal" in chat and "notes.json" in note_journal and
       "MinConversationsPerNote" in plugin and "CooldownHours" in plugin,
       "Note cadence must persist across restarts, or the counter resets every launch")
