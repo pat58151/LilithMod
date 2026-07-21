@@ -329,9 +329,12 @@ check(len(_voice_labels) >= 3 and all("\\n" in v for v in _voice_labels) and
 
 # The rows this mod adds are clones with their localiser stripped, so nothing but
 # this refresh will ever translate them.
+# TextVariableResolver, not PersonaPrompt: the latter reports her subtitle
+# language, which voice-config.ini pins independently of the game's UI language.
 check("RefreshLabels()" in settings and "_labelLanguage" in settings and
-      "PersonaPrompt.CurrentDisplayLanguage()" in settings,
-      "Added settings rows must follow the game display language at runtime")
+      re.search(r"UiLanguage\(\).*?TextVariableResolver\.CurrentLanguage\(\)",
+                settings, re.S) is not None,
+      "Added settings rows must follow the game's own UI language at runtime")
 
 # Deliberate exception, and easy to 'fix' by mistake later.
 check(re.search(r'SetWrappedLabel\(_helpLabel,\s*"<u>Help</u>"\)', settings) is not None,

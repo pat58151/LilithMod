@@ -194,19 +194,19 @@ namespace LilithMod
             }
 
             view.MapRow(_deepSeekKey, TraySettingView.TabMe);
-            // Ordered by claiming last place before the speech folder row does, so
-            // Me reads: API key, Help, then the folder button at the bottom.
-            if (_helpLabel != null)
-            {
-                view.MapRow(_helpLabel, TraySettingView.TabMe);
-                Transform row = view.GetRowOf(_helpLabel.transform);
-                if (row != null) row.SetAsLastSibling();
-            }
+            // Order is decided by who claims last place LAST, so these two blocks
+            // read bottom-up: Me ends up API key, Open Speech Input Folder, Help.
             if (_speechFolderLabel != null)
             {
                 view.MapRow(_speechFolderLabel, TraySettingView.TabMe);
-                // Last sibling overall, which puts it at the bottom of its own tab.
                 Transform row = view.GetRowOf(_speechFolderLabel.transform);
+                if (row != null) row.SetAsLastSibling();
+            }
+            if (_helpLabel != null)
+            {
+                view.MapRow(_helpLabel, TraySettingView.TabMe);
+                // Last of all: Help sits at the very bottom of the tab.
+                Transform row = view.GetRowOf(_helpLabel.transform);
                 if (row != null) row.SetAsLastSibling();
             }
             view.MapRow(_hotkeyField, TraySettingView.TabControls);
@@ -633,8 +633,9 @@ namespace LilithMod
             bool ja = language == "ja";
             bool zh = language == "zh";
 
-            SetWrappedLabel(_deepSeekLabel,
-                ja ? "DeepSeek\nAPIキー" : zh ? "DeepSeek\nAPI 密钥" : "DeepSeek\nAPI Key");
+            // Left in English like Help: it is a product name plus "API Key", which
+            // is what the service itself calls it in every language.
+            SetWrappedLabel(_deepSeekLabel, "DeepSeek\nAPI Key");
             SetWrappedLabel(_hotkeyLabel,
                 ja ? "チャットを開く" : zh ? "打开聊天" : "Open chat");
             SetWrappedLabel(_pushToTalkLabel,
@@ -649,12 +650,20 @@ namespace LilithMod
                 ja ? "不透明度" : zh ? "不透明度" : "Opacity");
         }
 
-        /// <summary>"en", "ja" or "zh" - never null, so it is safe to compare.</summary>
+        /// <summary>
+        /// The game's own UI language - "en", "ja" or "zh", never null so it is safe
+        /// to compare.
+        ///
+        /// Deliberately NOT PersonaPrompt.CurrentDisplayLanguage(). That returns her
+        /// *subtitle* language, which voice-config.ini pins independently of the game
+        /// so she can speak Japanese under English subtitles. Using it here meant the
+        /// settings labels never moved when the game language changed.
+        /// </summary>
         private static string UiLanguage()
         {
             try
             {
-                string language = PersonaPrompt.CurrentDisplayLanguage() ?? "en";
+                string language = TextVariableResolver.CurrentLanguage() ?? "en";
                 if (language.StartsWith("ja", StringComparison.OrdinalIgnoreCase)) return "ja";
                 if (language.StartsWith("zh", StringComparison.OrdinalIgnoreCase)) return "zh";
                 return "en";
