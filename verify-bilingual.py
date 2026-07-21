@@ -486,6 +486,21 @@ check("text = node.text;" not in game_voice,
 # grace window.
 check("NativeAudioAllowed" in game_voice and "NativeAudioAllowed" in integrations,
       "A line handed back unreplaced must keep its own audio, or it plays silently")
+# Cached audio needs no service: the language switch is a no-op when the weights
+# already match and the rest is a file read. Gating replacement on the service
+# alone left 1800 cached lines unusable while it started, which is what made the
+# first line of a session play in the game's own Chinese.
+check("CacheReplacementPossible" in game_voice and "IsCached" in tts and
+      "IsCached" in speech and "cachedOnly" in game_voice,
+      "A line whose audio is already cached must be replaceable while synthesis "
+      "is still starting, not held hostage to the service handshake")
+check("LanguageIsCurrent" in switcher and "LanguageIsCurrent" in tts,
+      "A cache hit must confirm the running weights match the language, or she "
+      "speaks cached audio in the wrong voice")
+# The bubble gate and the four audio prefixes have to agree, and in the cached
+# case the flag they normally read is false - so the decision is recorded instead.
+check("NativeAudioSuppressed" in game_voice and "NativeAudioSuppressed" in integrations,
+      "A cached replacement must suppress the game's own audio, or both play at once")
 # Runtime-built lines carry no id, so the catalogue cannot reach them. Their
 # Japanese is fetched once and kept, never awaited on the dialogue path.
 dynamic_cache = read(MOD_DIR, "DynamicLineCache.cs")

@@ -35,6 +35,17 @@ namespace LilithMod
             }
         }
 
+        /// <summary>
+        /// Whether the running service is already on this language, so a cached
+        /// line can be played without contacting it. Cache files are keyed by
+        /// language, but the weights still have to match or she would speak the
+        /// cached audio in the wrong voice.
+        /// </summary>
+        internal static bool LanguageIsCurrent(string language)
+        {
+            return StateIdentity() == DesiredIdentity(Normalize(language));
+        }
+
         internal static void EnsureLanguage(string language, CancellationToken token)
         {
             language = Normalize(language);

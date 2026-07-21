@@ -95,6 +95,10 @@ namespace LilithMod
             // be let through even though replacement is otherwise on. Checked first:
             // suppressing it here is what turned wrong-language speech into silence.
             if (GameVoiceCoordinator.NativeAudioAllowed) return true;
+            // The mirror: a line replaced from cache while the service is down. The
+            // flag below is false in that case, so without this the game's own audio
+            // would play underneath her cached voice.
+            if (GameVoiceCoordinator.NativeAudioSuppressed) return false;
             return !VoiceReplacementEnabled() && !GameVoiceCoordinator.HoldingForSynthesis;
         }
 

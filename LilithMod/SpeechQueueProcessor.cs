@@ -53,6 +53,12 @@ namespace LilithMod
         public ConcurrentQueue<bool> VoiceFailureQueue { get; } = new ConcurrentQueue<bool>();
         public ConcurrentQueue<bool> ReplyFinishedQueue { get; } = new ConcurrentQueue<bool>();
 
+        /// <summary>
+        /// Whether this line's audio is already synthesised on disk. Read from the
+        /// main thread by the dialogue gate, which is a file existence check.
+        /// </summary>
+        internal bool IsCached(string text, string language) => _ttsClient.IsCached(text, language);
+
         /// <summary>Thread-safe enqueue for the Unity main thread.</summary>
         public void Enqueue(Utterance utterance)
         {

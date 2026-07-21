@@ -149,6 +149,21 @@ namespace LilithMod
                 LilithModPlugin.Logger.LogInfo($"[Voice] Synthesized in {detail}.");
         }
 
+        /// <summary>
+        /// Whether this line's audio is already on disk. A cache hit needs no
+        /// service at all - EnsureLanguage returns immediately when the language
+        /// already matches, and the rest is a file read - so the dialogue gate can
+        /// replace a cached line while synthesis is still starting up.
+        /// </summary>
+        internal bool IsCached(string text, string language)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            string effectiveLanguage = string.IsNullOrEmpty(language) ? _cfg.TextLang : language;
+            if (!VoiceModelSwitcher.LanguageIsCurrent(effectiveLanguage)) return false;
+            try { return File.Exists(CachePath(text, effectiveLanguage)); }
+            catch { return false; }
+        }
+
         private string CachePath(string text, string language)
         {
             string modelIdentity = (_cfg.CacheIdentity ?? language) + "\n";

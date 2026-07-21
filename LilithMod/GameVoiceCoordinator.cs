@@ -19,17 +19,41 @@ namespace LilithMod
         private static float _modSpokeAt = -600f;
 
         /// <summary>
-        /// Lets a declined line keep its own audio. The audio prefixes fire
-        /// separately from the bubble gate and cannot tell which line was declined;
-        /// without this they suppress it and the line plays silently.
+        /// The gate's decision about the line it just saw, which the four audio
+        /// prefixes cannot work out for themselves - they fire separately and are
+        /// told only a sound id. Declined lines must keep their own audio or they
+        /// play silently; replaced ones must lose it or the game talks over her.
+        /// Last decision wins, and it only has to outlast the gap between a bubble
+        /// and its audio.
         /// </summary>
-        private static float _nativeAudioAllowedUntil = -600f;
+        private const float NativeAudioDecisionSeconds = 2f;
 
-        internal static bool NativeAudioAllowed => Time.unscaledTime < _nativeAudioAllowedUntil;
+        private static float _nativeAudioDecisionAt = -600f;
+        private static bool _nativeAudioAllow;
+
+        private static bool DecisionFresh =>
+            Time.unscaledTime < _nativeAudioDecisionAt + NativeAudioDecisionSeconds;
+
+        internal static bool NativeAudioAllowed => DecisionFresh && _nativeAudioAllow;
+
+        /// <summary>
+        /// Set when a line is replaced from cache while synthesis is not reachable.
+        /// The usual suppression rides on VoiceReplacementEnabled, which is false in
+        /// exactly that case, so without this the cached Japanese would play under
+        /// the game's own Chinese audio.
+        /// </summary>
+        internal static bool NativeAudioSuppressed => DecisionFresh && !_nativeAudioAllow;
 
         private static void AllowNativeAudioForThisLine()
         {
-            _nativeAudioAllowedUntil = Time.unscaledTime + 2f;
+            _nativeAudioDecisionAt = Time.unscaledTime;
+            _nativeAudioAllow = true;
+        }
+
+        private static void SuppressNativeAudioForThisLine()
+        {
+            _nativeAudioDecisionAt = Time.unscaledTime;
+            _nativeAudioAllow = false;
         }
 
         /// <summary>
@@ -63,6 +87,20 @@ namespace LilithMod
             return LilithModPlugin.CfgVoiceSynthesisPreferred != null &&
                    LilithModPlugin.CfgVoiceSynthesisPreferred.Value &&
                    VoiceConfig.Enabled;
+        }
+
+        /// <summary>
+        /// Everything replacement needs except a reachable service. A line whose
+        /// audio is already cached needs nothing more than this: the cache is read
+        /// from disk and the language switch is a no-op when the weights already
+        /// match. Cached lines are therefore replaceable while the service is still
+        /// loading, or not running at all - which is what used to make the first
+        /// line of a session play in the game's own Chinese.
+        /// </summary>
+        private static bool CacheReplacementPossible()
+        {
+            return SynthesisPreferred() && DialogueTextCatalog.Available &&
+                   LilithModPlugin.VoiceProcessor != null;
         }
         private readonly HashSet<long> _pendingNodes = new HashSet<long>();
 
@@ -113,11 +151,17 @@ namespace LilithMod
             // "not up YET", never "not installed".
             if (node != null && bubble != null && HoldingForSynthesis)
             {
+                // Dropping was always the second-best answer. If this line's audio
+                // is already on disk it can be spoken now, with no service at all,
+                // so try that before giving up on it.
+                if (_instance != null && !_instance.QueueNode(bubble, node, cachedOnly: true))
+                    return false;
+
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                 {
                     LilithModPlugin.Logger.LogInfo(
                         $"[Voice] Dropped native line {node.lineId} (id {node.id}); " +
-                        "synthesis is preferred but has not come up yet.");
+                        "synthesis is preferred but has not come up yet, and this line is not cached.");
                 }
                 return false;
             }
@@ -148,7 +192,17 @@ namespace LilithMod
             // line itself stale.
             if (!_allowOriginalShow && node != null && bubble != null && _instance != null)
                 _instance._latestNodeForBubble[bubble.Pointer.ToInt64()] = node.Pointer.ToInt64();
-            if (_allowOriginalShow || !ModIntegrations.VoiceReplacementEnabled() ||
+            // Replacement is normally gated on the service being reachable. A
+            // cached line does not need it, so the gate falls back to "is this one
+            // already on disk" before handing the line to the game's own voice.
+            bool replacing = ModIntegrations.VoiceReplacementEnabled();
+            if (!replacing && !_allowOriginalShow && node != null && bubble != null &&
+                _instance != null && CacheReplacementPossible() &&
+                !_instance.QueueNode(bubble, node, cachedOnly: true))
+            {
+                return false;
+            }
+            if (_allowOriginalShow || !replacing ||
                 _instance == null || bubble == null || node == null)
             {
                 // Which early-out fired matters: a line that slips through here keeps
@@ -175,7 +229,15 @@ namespace LilithMod
             return _instance.QueueNode(bubble, node);
         }
 
-        private bool QueueNode(DialogueBubbleUI bubble, DialogueNode node)
+        /// <summary>
+        /// Returns true to let the game show the line with its own voice, false when
+        /// the line has been held for replacement audio.
+        /// </summary>
+        /// <param name="cachedOnly">
+        /// Replace only if the audio is already on disk. Set when synthesis is not
+        /// reachable, where anything needing a real request would hang the line.
+        /// </param>
+        private bool QueueNode(DialogueBubbleUI bubble, DialogueNode node, bool cachedOnly = false)
         {
             long key = node.Pointer.ToInt64();
             if (_pendingNodes.Contains(key)) return false;
@@ -233,8 +295,26 @@ namespace LilithMod
                 return true;
             }
 
+            // Synthesis is not reachable, so only a line already on disk can be
+            // spoken. Anything else keeps the game's own voice rather than hanging
+            // on a request that cannot be served.
+            if (cachedOnly && !LilithModPlugin.VoiceProcessor.IsCached(text, language))
+            {
+                AllowNativeAudioForThisLine();
+                if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                    LilithModPlugin.Logger.LogInfo(
+                        $"[Voice] Original voice kept for line {node.lineId} (id {node.id}): " +
+                        "synthesis unreachable and no cached audio for this line.");
+                return true;
+            }
+
             var cue = new NativeDialogueCue(bubble, node, key);
             _pendingNodes.Add(key);
+            // The four audio prefixes decide separately and cannot see this line, so
+            // the decision is recorded for them. Without it a cached replacement
+            // plays under the game's own audio, since the flag they usually read is
+            // false in exactly the case this path exists for.
+            SuppressNativeAudioForThisLine();
             LilithModPlugin.VoiceProcessor.Enqueue(new Utterance
             {
                 JaText = text,
@@ -244,7 +324,9 @@ namespace LilithMod
                 NativeDialogue = cue
             });
             if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
-                LilithModPlugin.Logger.LogInfo($"[Voice] Holding line {node.lineId} until {language} audio is ready.");
+                LilithModPlugin.Logger.LogInfo(
+                    $"[Voice] Holding line {node.lineId} until {language} audio is ready" +
+                    (cachedOnly ? " (from cache; synthesis not reachable)." : "."));
             // Holding this line leaves the bubble the game just tore down empty for
             // the whole synthesis wait. If that bubble was her reply mid-playback,
             // restore it; the held line takes the bubble back when its audio lands.
