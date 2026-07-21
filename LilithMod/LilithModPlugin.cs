@@ -237,7 +237,7 @@ namespace LilithMod
 
             // Notes are meant to be keepsakes, so all three gates are deliberately
             // strict: substance, then time, then chance.
-            CfgNoteMinConversations = Config.Bind("Letters", "MinConversationsPerNote", 7,
+            CfgNoteMinConversations = Config.Bind("Letters", "MinConversationsPerNote", 10,
                 "Messages from the player, substantial enough to count, required before a note becomes possible.");
             CfgNoteMinMessageLength = Config.Bind("Letters", "MinMessageLength", 18,
                 "Characters a player message needs before it counts toward a note.");
@@ -245,8 +245,12 @@ namespace LilithMod
                 "Those conversations must all fall inside this many hours, so a note comes out of one stretch of talking.");
             CfgNoteCooldownHours = Config.Bind("Letters", "CooldownHours", 36.0,
                 "Minimum hours between notes.");
-            CfgNoteChance = Config.Bind("Letters", "Chance", 0.4f,
-                "Chance a note is written once it is otherwise due, so it does not arrive on a felt schedule.");
+            // Rolled again on every substantial message once the count is met, not
+            // once per stretch of talking - so a high value compounds fast. At 0.4 a
+            // note was near-certain within five messages of becoming eligible.
+            CfgNoteChance = Config.Bind("Letters", "Chance", 0.15f,
+                "Chance a note is written once it is otherwise due, so it does not arrive on a felt schedule. "
+                + "Re-rolled per qualifying message, so small values still add up.");
 
             NoteJournal.Initialize();
 
