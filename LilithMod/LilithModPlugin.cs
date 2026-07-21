@@ -248,7 +248,7 @@ namespace LilithMod
             // Rolled again on every substantial message once the count is met, not
             // once per stretch of talking - so a high value compounds fast. At 0.4 a
             // note was near-certain within five messages of becoming eligible.
-            CfgNoteChance = Config.Bind("Letters", "Chance", 0.15f,
+            CfgNoteChance = Config.Bind("Letters", "Chance", 0.2f,
                 "Chance a note is written once it is otherwise due, so it does not arrive on a felt schedule. "
                 + "Re-rolled per qualifying message, so small values still add up.");
 
