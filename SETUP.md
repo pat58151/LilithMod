@@ -45,8 +45,10 @@ Out of the box she writes but does not speak. Her voice comes from
 machine — nothing is uploaded, and a GPU makes it much faster but is not
 required. Budget about 2 GB.
 
-**No voice model is included, deliberately.** One trained on the game's audio is
-the developers' work and is not mine to distribute, so you bring your own.
+**No voice model is included, and that is the good part.** She has no fixed
+voice — she has whichever one you give her. Train her from an hour of audio you
+like, or pick up a model someone has already shared. The Lilith on your desktop
+can sound like nobody else's.
 
 1. **Install GPT-SoVITS.** Take the Windows integrated package from its
    releases page — the one that bundles its own Python. Unpack it anywhere.
