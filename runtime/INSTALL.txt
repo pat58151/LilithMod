@@ -43,6 +43,10 @@ OPTIONAL - HER VOICE
 --------------------
 Out of the box she writes but does not speak.
 
+The setup program offers to download the synthesis base for you (the
+"voice synthesis base" box). If you ticked it, all that is left is adding
+a voice.
+
 No voice model is included - the mod works with any GPT-SoVITS voice model
 you provide. Instructions are in
 
@@ -53,8 +57,11 @@ or through Settings -> Sound -> Open Synth Voice Folder.
 
 OPTIONAL - TALKING TO HER
 -------------------------
-Press F8 and speak instead of typing. Needs Python and a speech model, both
-local. Instructions are in
+Press F8 and speak instead of typing. Everything runs locally.
+
+The setup program offers to download this too (the "speech input" box).
+If you ticked it, nothing more to do - the listener starts with the game.
+Otherwise, instructions are in
 
     BepInEx\plugins\LilithMod\speech-setup\README.txt
 

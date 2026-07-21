@@ -45,6 +45,13 @@ Out of the box she writes but does not speak. Her voice comes from
 machine — nothing is uploaded, and a GPU makes it much faster but is not
 required. Budget about 2 GB.
 
+**The installer can do steps 1 and 5 for you**: tick *voice synthesis base*
+during setup and it downloads GPT-SoVITS, a Python runtime and the pretrained
+base models into `%LOCALAPPDATA%\LilithMod`, wired so the server starts with
+the game. You still do steps 2–4 — the base deliberately includes no voice. The
+same script can be run by hand later:
+`voice-setup\install-voice-synth.ps1` in the plugin folder.
+
 **No voice model is included, and that is the good part.** She has no fixed
 voice — she has whichever one you give her. Train her from an hour of audio you
 like, or pick up a model someone has already shared. The Lilith on your desktop
@@ -101,15 +108,17 @@ folder, in `README.txt`.
 F8 listens, and submits about 2.5 seconds after you stop. Transcription is
 local — no audio leaves the machine.
 
-This part is **not in the release zip**; it needs the scripts from this
-repository. Clone it, then from the repository folder:
+**The installer can do all of this**: tick *speech input* during setup and skip
+this section. By hand, run the same script from the plugin folder (or from a
+repository clone):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File runtime\install-speech-input.ps1
+powershell -ExecutionPolicy Bypass -File speech-setup\install-speech-input.ps1
 ```
 
-That builds a `.speech-runtime` environment with Python 3.12. Then run the
-listener, pointing it at the plugin folder inside the game directory:
+That builds a Python 3.12 environment under `%LOCALAPPDATA%\LilithMod` — no
+system Python needed — and puts the launcher in place so the listener starts
+with the game. To run the listener by hand instead:
 
 ```powershell
 python runtime\push_to_talk.py `
@@ -133,7 +142,10 @@ folder.
 
 ## 4. Starting it all by itself
 
-Also repository-only. `runtime\start-lilith.ps1` brings up the voice server,
+If either installer box was ticked, this already works: the mod finds the
+launcher in `%LOCALAPPDATA%\LilithMod` and starts the services with the game.
+
+From a repository clone, `runtime\start-lilith.ps1` brings up the voice server,
 the speech listener and the game together, each hidden, with output going to
 logs in the plugin folder.
 

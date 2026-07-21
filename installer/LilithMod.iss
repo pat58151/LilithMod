@@ -35,7 +35,15 @@ SolidCompression=yes
 ; Keep the uninstaller with the loader instead of littering the game root.
 UninstallFilesDir={app}\BepInEx
 UninstallDisplayName=LilithMod (for {#GameFolderName})
+SetupIconFile=..\image\icon.ico
+UninstallDisplayIcon={uninstallexe}
 WizardStyle=modern
+
+[Tasks]
+; Both unchecked: the mod runs chat-only with neither, and each is a
+; multi-gigabyte download nobody should get by accident.
+Name: "voicesynth"; Description: "Download the voice synthesis base (GPT-SoVITS runtime, several GB). No voice is included - you add one later."; Flags: unchecked
+Name: "speechinput"; Description: "Download speech input - talk to her with F8 (local speech recognition, about 2 GB)."; Flags: unchecked
 
 [Messages]
 SelectDirDesc=Where is {#GameFolderName} installed?
@@ -47,6 +55,12 @@ FinishedLabel=LilithMod is installed.%n%nIMPORTANT — the first launch takes se
 Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Run]
+; The component installers run as the original user (the runtimes land in that
+; user's %LOCALAPPDATA%), in visible consoles, one at a time - they share
+; uv.exe and running both at once would race on it. Each is idempotent and
+; re-runnable by hand from the plugin folder if the download fails mid-way.
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\BepInEx\plugins\LilithMod\voice-setup\install-voice-synth.ps1"" -PluginFolder ""{app}\BepInEx\plugins\LilithMod"""; StatusMsg: "Downloading the voice synthesis base (several GB)..."; Tasks: voicesynth; Flags: runasoriginaluser waituntilterminated
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\BepInEx\plugins\LilithMod\speech-setup\install-speech-input.ps1"" -PluginFolder ""{app}\BepInEx\plugins\LilithMod"""; StatusMsg: "Downloading speech input (about 2 GB)..."; Tasks: speechinput; Flags: runasoriginaluser waituntilterminated
 ; Never launch Lilith.exe directly: with Steam closed that can leave Steam
 ; holding DOORSTOP_DISABLE=TRUE, which silently disables the mod on later
 ; launches until Steam is fully restarted.
@@ -284,7 +298,7 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  AppDir, PluginDir, CfgDir: String;
+  AppDir, PluginDir, CfgDir, LocalData: String;
   HasData: Boolean;
 begin
   if CurUninstallStep = usPostUninstall then
@@ -319,5 +333,18 @@ begin
         RemoveDir(AppDir + 'BepInEx\config');
         RemoveDir(AppDir + 'BepInEx');
       end;
+    { The optional runtimes live outside the game folder. Asked separately from
+      the personal data above, because a voice trained inside this folder is as
+      irreplaceable as her memory - default is KEEP. }
+    LocalData := ExpandConstant('{localappdata}') + '\LilithMod';
+    if DirExists(LocalData) then
+      if MsgBox('Remove the downloaded voice and speech runtimes?' + #13#10#13#10 +
+                LocalData + #13#10#13#10 +
+                'This frees several GB. If you trained or copied a voice model ' +
+                'inside this folder, it will be deleted with it.' + #13#10#13#10 +
+                'Yes = delete the folder.' + #13#10 +
+                'No = keep it (a reinstall picks it up again).',
+                mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+        DelTree(LocalData, True, True, True);
   end;
 end;

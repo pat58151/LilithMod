@@ -68,6 +68,23 @@ try {
     Get-ChildItem $pluginOut -Include *.pdb, *.cfg -Recurse -File |
         Remove-Item -Force -ErrorAction SilentlyContinue
 
+    # Optional-component material: the installer's tick boxes run these scripts
+    # from the plugin folder, and they copy the launcher trio to
+    # %LOCALAPPDATA%\LilithMod. Placed before the guard below so anything wrong
+    # here is audited like everything else.
+    $speechSetupOut = Join-Path $pluginOut "speech-setup"
+    $voiceSetupOut = Join-Path $pluginOut "voice-setup"
+    $launcherOut = Join-Path $voiceSetupOut "launcher"
+    New-Item -ItemType Directory -Path $speechSetupOut, $voiceSetupOut, $launcherOut -Force | Out-Null
+    Copy-Item (Join-Path $scriptDir "push_to_talk.py") $speechSetupOut -Force
+    Copy-Item (Join-Path $scriptDir "speech-input-requirements.txt") $speechSetupOut -Force
+    Copy-Item (Join-Path $scriptDir "install-speech-input.ps1") $speechSetupOut -Force
+    Copy-Item (Join-Path $scriptDir "install-voice-synth.ps1") $voiceSetupOut -Force
+    Copy-Item (Join-Path $ProjectFolder "voice-runtime\requirements-inference.txt") $voiceSetupOut -Force
+    Copy-Item (Join-Path $scriptDir "start-lilith.ps1") $launcherOut -Force
+    Copy-Item (Join-Path $scriptDir "push_to_talk.py") $launcherOut -Force
+    Copy-Item (Join-Path $ProjectFolder "start-tts.ps1") $launcherOut -Force
+
     # Guard rather than trust: if a dumped script, cached audio, or a config
     # holding a key ever reaches the staging folder, fail instead of shipping it.
     $forbidden = Get-ChildItem $pluginOut -Recurse -File | Where-Object {
