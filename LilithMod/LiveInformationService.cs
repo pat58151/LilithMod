@@ -99,6 +99,25 @@ namespace LilithMod
         {
             try
             {
+                // Configured coordinates skip the IP lookup rather than overriding its
+                // result: a player who pinned a location did so to stop their address
+                // being sent anywhere, and a request made and then discarded would
+                // have defeated the point.
+                if (!_latitude.HasValue || !_longitude.HasValue)
+                {
+                    double configuredLat = LilithModPlugin.CfgWeatherLatitude?.Value ?? 0.0;
+                    double configuredLon = LilithModPlugin.CfgWeatherLongitude?.Value ?? 0.0;
+                    if (configuredLat != 0.0 || configuredLon != 0.0)
+                    {
+                        _latitude = configuredLat;
+                        _longitude = configuredLon;
+                        string configuredName = LilithModPlugin.CfgWeatherLocationName?.Value;
+                        _locationName = string.IsNullOrWhiteSpace(configuredName) ? null : configuredName.Trim();
+                        LilithModPlugin.Logger.LogInfo(
+                            "[LiveInfo] Using the configured location; skipping the IP lookup.");
+                    }
+                }
+
                 if (!_latitude.HasValue || !_longitude.HasValue)
                 {
                     string ipJson = await GetStringAsync(

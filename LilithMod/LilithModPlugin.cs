@@ -25,6 +25,9 @@ namespace LilithMod
         internal static ConfigEntry<int> CfgMaxHistoryTurns;
         internal static ConfigEntry<int> CfgTimeoutSeconds;
         internal static ConfigEntry<string> CfgHotkey;
+        internal static ConfigEntry<double> CfgWeatherLatitude;
+        internal static ConfigEntry<double> CfgWeatherLongitude;
+        internal static ConfigEntry<string> CfgWeatherLocationName;
         internal static ConfigEntry<bool> CfgLogDiagnostics;
         internal static ConfigEntry<bool> CfgForceSynthesisUnavailable;
         internal static ConfigEntry<bool> CfgForceSleeping;
@@ -178,6 +181,19 @@ namespace LilithMod
             CfgServiceLauncher = Config.Bind("Services", "LauncherScript", "",
                 "Full path to start-lilith.ps1. Empty means derive it from the voice "
                 + "runtime location in voice-config.ini.");
+
+            // Weather needs coordinates from somewhere. By default they are derived
+            // from the public IP, which means contacting a third party and telling it
+            // roughly where the player is. Setting these skips that lookup entirely -
+            // it is the privacy escape hatch as much as the VPN fix.
+            CfgWeatherLatitude = Config.Bind("Weather", "Latitude", 0.0,
+                "Your latitude, if you would rather not have it detected from your IP address. "
+                + "Set both this and Longitude to skip the location lookup. 0 means detect.");
+            CfgWeatherLongitude = Config.Bind("Weather", "Longitude", 0.0,
+                "Your longitude. See Latitude.");
+            CfgWeatherLocationName = Config.Bind("Weather", "LocationName", "",
+                "What to call that place when she mentions it. Optional; only used with "
+                + "Latitude and Longitude.");
 
             CfgLogDiagnostics = Config.Bind("Debug", "LogDiagnostics", false,
                 "Verbose per-frame input and window-focus logging. Only needed when "

@@ -72,6 +72,37 @@ and can answer questions about the weather or look something up.
 
 
 -------------------------------------------------------------------------------
+  WHAT LEAVES YOUR MACHINE
+-------------------------------------------------------------------------------
+
+Only three things ever do, and only when you cause them.
+
+  What you type or say    Sent to the DeepSeek API, with the recent
+                          conversation, so she can answer.
+
+  Asking about weather    Your public IP address goes to ip-api.com, which
+                          returns your rough location, and those coordinates go
+                          to open-meteo.com. Neither needs an account. Note
+                          ip-api.com is contacted over plain HTTP, not HTTPS.
+
+  Asking her to search    The query goes to a public SearXNG instance, and she
+                          reads the pages it returns.
+
+Her voice, her memory and her notes never leave this machine.
+
+To avoid the location lookup, set your own coordinates in
+BepInEx\config\LilithMod.cfg:
+
+    [Weather]
+    Latitude = 13.7563
+    Longitude = 100.5018
+    LocationName = Bangkok
+
+With both set, ip-api.com is never contacted at all. This is also the fix if a
+VPN gives her the weather for the wrong country.
+
+
+-------------------------------------------------------------------------------
   NOTES
 -------------------------------------------------------------------------------
 

@@ -440,6 +440,22 @@ check("WarmUpSentences" in speech,
       "Warm-up sentences are gone - first synthesis would take the cold-start hit, "
       "and NoteServiceAnswered would never fire early")
 
+# -- The weather feature discloses what it contacts ---------------------------
+# Asking about the weather sends the player's IP to a third party. That is a
+# reasonable default but not an obvious one, so every language's help must say
+# so, and the config escape hatch must exist to make the disclosure actionable.
+for help_file in ("OVERVIEW.txt", "OVERVIEW.ja.txt", "OVERVIEW.zh.txt"):
+    body = read(MOD_DIR, "help", help_file)
+    check(body and "ip-api.com" in body and "open-meteo.com" in body,
+          f"help/{help_file} does not disclose the weather lookup's third parties")
+    check(body and "[Weather]" in body,
+          f"help/{help_file} does not show how to pin a location instead")
+check("CfgWeatherLatitude" in plugin and "CfgWeatherLongitude" in plugin,
+      "The weather location override must exist, or the help files describe a setting "
+      "that does nothing")
+check("skipping the IP lookup" in live_info,
+      "Configured coordinates must skip the IP lookup, not just override its result")
+
 # -- Result -------------------------------------------------------------------
 if failures:
     print("VERIFY FAIL")
