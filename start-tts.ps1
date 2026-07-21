@@ -47,6 +47,21 @@ foreach ($p in @($python, $Config, (Join-Path $appDir "api_v2.py"))) {
 # failed' rather than an encoding problem. Force UTF-8.
 $env:PYTHONIOENCODING = "utf-8"
 
+# MIOpen picks a convolution solver per input shape, and speech is
+# variable-length, so a machine that has not built up ~/.miopen yet pays that
+# search on nearly every sentence. Measured on a cleared cache, six varied
+# Japanese sentences, idle machine:
+#
+#   warm cache, default      median 2279 ms
+#   cold cache, default      median 4745 ms   <- what a new install gets
+#   cold cache, FAST         median 2523 ms
+#
+# FAST swaps the exhaustive search for heuristics and erases the gap, so the
+# first session is as quick as the hundredth. It costs nothing once warm - the
+# same six sentences measured identically on a warm cache either way.
+# See document\MIOPEN.md.
+$env:MIOPEN_FIND_MODE = "FAST"
+
 # api_v2.py resolves bert_base_path / cnhuhbert_base_path relative to its own
 # working directory, so it has to run from the app folder.
 Push-Location $appDir
