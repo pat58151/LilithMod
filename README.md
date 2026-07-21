@@ -27,24 +27,6 @@ them grey out rather than failing.
 
 ---
 
-## Things you might not notice at first
-
-- **She never talks over herself.** Nothing interrupts a line already in
-  progress — not your next message, not the game's own dialogue, not an ambient
-  remark that came due. Four separate paths wait rather than cut her off.
-- **Long replies arrive in pieces.** She speaks the first sentence while the
-  rest is still being synthesised, so she starts answering in about the time a
-  short reply would take.
-- **Speech and subtitles are independent.** Japanese, English or Chinese for
-  either, in any combination. Japanese spoken under English subtitles is the
-  intended default, and the game's own dialogue can be revoiced the same way.
-- **Her settings live in the game's menu**, in whatever language the game is
-  set to — not in a separate launcher or a config file you have to find.
-- **Everything runs on your machine** except the language model. Her voice, her
-  memory and her notes never leave it.
-
----
-
 ## Install
 
 Download the latest release and run `LilithMod-Setup-<version>.exe`. It finds
@@ -111,9 +93,10 @@ With both set it is never contacted at all. This is also the fix when a VPN
 gives her the wrong country's weather.
 
 Voice setup is optional and documented separately: **Settings / Sound / Open
-Synth Voice Folder**. Speech input likewise, under **Settings / Me**. Neither
-folder button ever greys out — they are how you find out why something is
-unavailable.
+Synth Voice Folder**. No synthesiser and no voice model are bundled — that
+folder explains how to install one and point the mod at it. Speech input
+likewise, under **Settings / Me**. Neither folder button ever greys out — they
+are how you find out why something is unavailable.
 
 ---
 
@@ -136,13 +119,3 @@ Release builds pass `-p:IncludeDialogueCatalog=false`. A release DLL is ~210 KB
 and a local one ~420 KB — the quickest check that the game's own script did not
 ship. Without the catalogue the mod does not touch native dialogue at all; her
 own replies are unaffected.
-
----
-
-## Content boundary
-
-The game's dialogue, its audio, and the voice model fine-tuned from that audio
-are the developers' content. They are gitignored, excluded from the release
-package, and are for local use only. Do not commit or redistribute them.
-
-The mod ships no game assets. It reads what is already installed.
