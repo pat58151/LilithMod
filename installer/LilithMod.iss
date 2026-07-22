@@ -5,7 +5,7 @@
 ; which is kept locally and not published.
 
 #ifndef AppVersion
-  #define AppVersion "1.0.0.0"
+  #define AppVersion "1.0.1.0"
 #endif
 #ifndef PayloadDir
   #define PayloadDir "payload"

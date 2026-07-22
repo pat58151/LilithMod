@@ -12,7 +12,7 @@ tools.
 
 | Component | Version |
 |---|---|
-| LilithMod | 1.0.0 |
+| LilithMod | 1.0.1 |
 | Game | 1.0.1 |
 | Runtime | BepInEx 6 IL2CPP |
 | Target framework | .NET Standard 2.1 |
