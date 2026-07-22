@@ -57,6 +57,10 @@ Download the latest release and run `LilithMod-Setup-<version>.exe`. It finds
 the game through Steam, installs BepInEx, and sets the one Doorstop flag that
 Steam otherwise silently breaks.
 
+Each release names the game version it was built against — currently
+*The NOexistenceN of Lilith* v1.0.1. A game update may break the mod until a
+release catches up.
+
 Then, in game: **Settings / Me / DeepSeek API Key**. Paste a key. Without one,
 F7 and F8 do nothing by design.
 
