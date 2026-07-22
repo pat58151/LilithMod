@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 
 namespace LilithMod
@@ -18,6 +19,10 @@ namespace LilithMod
         private const int MaxRelevantFacts = 6;
 
         private static readonly object Gate = new object();
+        private static readonly HashSet<string> ForgetStopWords = new HashSet<string>(
+            new[] { "the", "this", "that", "what", "said", "told", "about", "player",
+                    "their", "from", "with", "memory", "remember", "forget" },
+            StringComparer.OrdinalIgnoreCase);
         private static State _state = new State();
         private static string _jsonPath;
         private static string _markdownPath;
@@ -442,6 +447,98 @@ namespace LilithMod
             }
         }
 
+        public static int Forget(string query)
+        {
+            if (string.IsNullOrWhiteSpace(query)) return 0;
+            lock (Gate)
+            {
+                var sourceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (MemoryItem item in _state.LongTerm)
+                    if (MatchesQuery(query, SearchText(item)))
+                        AddSourceIds(sourceIds, item.SourceConversationIds);
+                foreach (SemanticFact fact in _state.SemanticFacts)
+                    if (MatchesQuery(query, FactSearchText(fact)))
+                        AddSourceIds(sourceIds, fact.SourceConversationIds);
+
+                int removed = 0;
+                removed += _state.LongTerm.RemoveAll(item => MatchesQuery(query, SearchText(item)));
+                removed += _state.SemanticFacts.RemoveAll(fact =>
+                    MatchesQuery(query, FactSearchText(fact)));
+                removed += _state.Conversations.RemoveAll(item =>
+                    sourceIds.Contains(item.Id ?? string.Empty) ||
+                    MatchesQuery(query, item.Summary));
+                removed += _state.PendingNoteConversations.RemoveAll(item =>
+                    sourceIds.Contains(item.Id ?? string.Empty) ||
+                    MatchesQuery(query, item.Summary));
+
+                if (removed > 0)
+                {
+                    Save();
+                    PurgeBackups();
+                }
+                return removed;
+            }
+        }
+
+        public static int ForgetFact(string key, string query)
+        {
+            lock (Gate)
+            {
+                var sourceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                Predicate<SemanticFact> matches;
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    string normalizedKey = Compact(key, 80).ToLowerInvariant();
+                    matches = fact => string.Equals(
+                        fact.Key, normalizedKey, StringComparison.OrdinalIgnoreCase);
+                }
+                else matches = fact => !string.IsNullOrWhiteSpace(query) &&
+                    MatchesQuery(query, FactSearchText(fact));
+
+                foreach (SemanticFact fact in _state.SemanticFacts)
+                    if (matches(fact)) AddSourceIds(sourceIds, fact.SourceConversationIds);
+                int removed = _state.SemanticFacts.RemoveAll(matches);
+                if (!string.IsNullOrWhiteSpace(query) || sourceIds.Count > 0)
+                {
+                    bool useQueryFallback = sourceIds.Count == 0 &&
+                        !string.IsNullOrWhiteSpace(query);
+                    removed += _state.Conversations.RemoveAll(item =>
+                        sourceIds.Contains(item.Id ?? string.Empty) ||
+                        (useQueryFallback && MatchesQuery(query, item.Summary)));
+                    removed += _state.PendingNoteConversations.RemoveAll(item =>
+                        sourceIds.Contains(item.Id ?? string.Empty) ||
+                        (useQueryFallback && MatchesQuery(query, item.Summary)));
+                }
+                if (removed > 0)
+                {
+                    Save();
+                    PurgeBackups();
+                }
+                return removed;
+            }
+        }
+
+        public static void CorrectFact(FactData fact)
+        {
+            if (fact == null || string.IsNullOrWhiteSpace(fact.Statement)) return;
+            RecordSemanticFacts(new List<FactData> { fact }, new List<string>());
+            lock (Gate) PurgeBackups();
+        }
+
+        public static int ForgetAll()
+        {
+            lock (Gate)
+            {
+                int removed = _state.Conversations.Count + _state.Interactions.Count +
+                    _state.LongTerm.Count + _state.PendingNoteConversations.Count +
+                    _state.SemanticFacts.Count;
+                _state = new State();
+                Save();
+                PurgeBackups();
+                return removed;
+            }
+        }
+
         private static void Add(List<MemoryItem> ring, int cap, string kind, string summary)
         {
             if (string.IsNullOrWhiteSpace(summary)) return;
@@ -502,6 +599,23 @@ namespace LilithMod
             }
         }
 
+        private static void PurgeBackups()
+        {
+            foreach (string path in new[]
+            {
+                _jsonPath + ".bak", _jsonPath + ".tmp",
+                _markdownPath + ".bak", _markdownPath + ".tmp"
+            })
+            {
+                try { if (File.Exists(path)) File.Delete(path); }
+                catch (Exception ex)
+                {
+                    LilithModPlugin.Logger.LogWarning(
+                        $"[Memory] Could not remove stale backup '{Path.GetFileName(path)}': {ex.Message}");
+                }
+            }
+        }
+
         private static List<MemoryItem> RelevantEpisodes(string currentMessage)
         {
             var matches = new List<ScoredEpisode>();
@@ -555,6 +669,39 @@ namespace LilithMod
             return (item.Summary ?? string.Empty) + " " +
                 string.Join(" ", item.Topics ?? new List<string>()) + " " +
                 string.Join(" ", item.People ?? new List<string>());
+        }
+
+        private static string FactSearchText(SemanticFact fact)
+        {
+            return (fact.Key ?? string.Empty) + " " + (fact.Statement ?? string.Empty) + " " +
+                string.Join(" ", fact.Topics ?? new List<string>());
+        }
+
+        internal static bool MatchesQuery(string query, string candidate)
+        {
+            if (string.IsNullOrWhiteSpace(query) || string.IsNullOrWhiteSpace(candidate))
+                return false;
+            string target = candidate.Normalize().ToLowerInvariant();
+            foreach (Match match in Regex.Matches(
+                query.Normalize().ToLowerInvariant(), @"[\p{L}\p{N}]+"))
+            {
+                string term = match.Value;
+                bool cjk = term.IndexOfAny(new[] { 'あ', 'ア', '一', '龯' }) >= 0 ||
+                    Regex.IsMatch(term, @"[\u3040-\u30ff\u3400-\u9fff]");
+                if ((!cjk && term.Length < 3) || ForgetStopWords.Contains(term)) continue;
+                string pattern = cjk
+                    ? Regex.Escape(term)
+                    : @"(?<![\p{L}\p{N}])" + Regex.Escape(term) + @"(?![\p{L}\p{N}])";
+                if (Regex.IsMatch(target, pattern, RegexOptions.IgnoreCase)) return true;
+            }
+            return MemoryVectorizer.Similarity(query, candidate) >= 0.11f;
+        }
+
+        private static void AddSourceIds(HashSet<string> target, List<string> sourceIds)
+        {
+            if (sourceIds == null) return;
+            foreach (string id in sourceIds)
+                if (!string.IsNullOrWhiteSpace(id)) target.Add(id);
         }
 
         private static bool HasDirectMatch(string query, List<string> terms)

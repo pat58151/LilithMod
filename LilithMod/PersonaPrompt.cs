@@ -93,15 +93,26 @@ namespace LilithMod
                 ? string.Empty
                 : "For the shown field: " +
                   string.Format(StyleFormatFor(displayLanguage), "Write");
+            bool sharedText = SameLanguage(voiceLanguage, displayLanguage);
             return Identity + PlayerNameLine() + style + shownStyle +
-                $"Your spoken field must be {spoken}. Your shown field must be {shown}. " +
-                (shown == "English"
+                $"Your spoken field must be {spoken}. " +
+                (sharedText
+                    ? "Speech and in-game text use the same language. Omit shown; spoken is used for both. "
+                    : $"Your shown field must be {shown}. ") +
+                (!sharedText && shown == "English"
                     ? "The shown field must contain English only. Never put Japanese or Chinese text in shown. "
                     : "") +
-                "Reply with JSON only: {\"lines\":[{\"spoken\":\"...\",\"shown\":\"...\"}]}. " +
+                (sharedText
+                    ? "Reply with JSON only: {\"lines\":[{\"spoken\":\"...\"}]}. "
+                    : "Reply with JSON only: {\"lines\":[{\"spoken\":\"...\",\"shown\":\"...\"}]}. ") +
                 "When the player explicitly asks for a timer or alarm, also add one top-level action: " +
                 "{\"type\":\"timer\",\"seconds\":300}, {\"type\":\"alarm\",\"local_time\":\"yyyy-MM-ddTHH:mm:ss\"}, " +
                 "{\"type\":\"timer_cancel\"}, or {\"type\":\"alarm_cancel\"}. Calculate relative times from the current local time. " +
+                "When the player explicitly asks you to forget a subject, use {\"type\":\"forget_memory\",\"query\":\"specific subject plus useful aliases\"}. " +
+                "Use {\"type\":\"forget_all_memory\"} only when they explicitly ask you to forget everything. " +
+                "When the player says an established fact is no longer true without giving a replacement, use {\"type\":\"forget_fact\",\"key\":\"stable category\",\"query\":\"old fact and aliases\"}. " +
+                "When they explicitly correct or replace a stable fact about themselves, use {\"type\":\"update_memory\",\"key\":\"stable category\",\"statement\":\"one factual English sentence\",\"topics\":[\"their wording\",\"English aliases\"],\"replaces\":\"old fact and aliases\",\"confidence\":1.0}. " +
+                "Never change memory from a guess, temporary feeling, hypothetical, or statement about Lilith. " +
                 "Omit action for every other request and when the requested time is ambiguous. " +
                 (LilithModPlugin.CfgAllowOpenApps != null && LilithModPlugin.CfgAllowOpenApps.Value
                     ? "When the player explicitly asks to open or launch an app, also add one top-level action: " +
@@ -200,6 +211,11 @@ namespace LilithMod
         {
             return IsChinese(first) == IsChinese(second)
                 && IsEnglish(first) == IsEnglish(second);
+        }
+
+        internal static bool VoiceMatchesDisplayLanguage()
+        {
+            return SameLanguage(CurrentVoiceLanguage(), CurrentDisplayLanguage());
         }
 
         private static bool IsChinese(string language)

@@ -216,6 +216,13 @@ check("MaxConversations" in memory and "MaxInteractions" in memory and "MEMORY.m
       "Conversations and interactions must be capped separately, or pats evict talking")
 check("RecordLongTerm" in memory and "MaxLongTerm" in memory,
       "Notes must be able to leave a long-term entry")
+check("public static int Forget(" in memory and "ForgetFact" in memory and
+      "CorrectFact" in memory and "ForgetAll" in memory and "PurgeBackups" in memory,
+      "Memory must support correction and forgetting without stale backups")
+check('case "forget_memory"' in chat and 'case "forget_fact"' in chat and
+      'case "forget_all_memory"' in chat and 'case "update_memory"' in chat and
+      "RemoveCurrentMemoryCommand" in chat,
+      "Conversational memory actions must not re-save forget commands")
 check("StartsWith(\"[\")" in memory,
       "The legacy single-list memory.json must still load, or existing installs forget")
 check("QualifyingConversationContext" in memory and "QualifyingConversationContext" in chat,

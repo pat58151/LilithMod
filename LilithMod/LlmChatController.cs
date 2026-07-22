@@ -70,6 +70,12 @@ namespace LilithMod
         private DialogueNode _replyNode;
         private List<Message> _history;
         private ConcurrentQueue<ChatResult> _replyQueue = new ConcurrentQueue<ChatResult>();
+        private readonly ConcurrentQueue<StreamedReplyLine> _streamedReplyQueue =
+            new ConcurrentQueue<StreamedReplyLine>();
+        private long _requestSerial;
+        private long _activeRequestId;
+        private long _streamPlaybackRequestId;
+        private int _streamedLinesAccepted;
 
         private CancellationTokenSource _cts;
         private Task _currentRequest;
@@ -197,6 +203,10 @@ namespace LilithMod
 
             if (IsPanelVisible())
                 ScrollInputText();
+
+            // Streamed lines are queued before their final result by the same producer.
+            while (_streamedReplyQueue.TryDequeue(out StreamedReplyLine streamed))
+                HandleStreamedReplyLine(streamed);
 
             // --- Drain reply queue (main thread only) ---
             while (_replyQueue.TryDequeue(out ChatResult result))
@@ -1012,6 +1022,9 @@ namespace LilithMod
         {
             // Cancel previous request.
             CancelCurrentRequest();
+            long requestId = Interlocked.Increment(ref _requestSerial);
+            _activeRequestId = requestId;
+            bool streamToVoice = SynthVoiceSelected;
 
             // Create new CTS with timeout.
             _cts = new CancellationTokenSource(TimeSpan.FromSeconds(TimeoutSeconds));
@@ -1051,20 +1064,24 @@ namespace LilithMod
                         };
                     }
                     string reply = await RequestCompletionAsync(
-                        messagesSnapshot, ambient ? userInput : null, token);
+                        messagesSnapshot, ambient ? userInput : null, token,
+                        streamToVoice
+                            ? new Action<Utterance>(utterance => _streamedReplyQueue.Enqueue(
+                                new StreamedReplyLine { RequestId = requestId, Utterance = utterance }))
+                            : null);
                     if (!token.IsCancellationRequested)
                     {
                         // An empty completion would otherwise render as a blank bubble.
                         if (string.IsNullOrWhiteSpace(reply))
-                            _replyQueue.Enqueue(new ChatResult { Ok = false, Error = "model returned an empty reply", UserInput = userInput, Ambient = ambient, NativeActionHandled = nativeActionHandled });
+                            _replyQueue.Enqueue(new ChatResult { Ok = false, Error = "model returned an empty reply", UserInput = userInput, Ambient = ambient, NativeActionHandled = nativeActionHandled, RequestId = requestId });
                         else
-                            _replyQueue.Enqueue(new ChatResult { Ok = true, Text = reply, UserInput = userInput, Ambient = ambient, NativeActionHandled = nativeActionHandled });
+                            _replyQueue.Enqueue(new ChatResult { Ok = true, Text = reply, UserInput = userInput, Ambient = ambient, NativeActionHandled = nativeActionHandled, RequestId = requestId });
                     }
                 }
                 catch (Exception ex)
                 {
                     if (!token.IsCancellationRequested)
-                        _replyQueue.Enqueue(new ChatResult { Ok = false, Error = ex.Message, UserInput = userInput, Ambient = ambient, NativeActionHandled = nativeActionHandled });
+                        _replyQueue.Enqueue(new ChatResult { Ok = false, Error = ex.Message, UserInput = userInput, Ambient = ambient, NativeActionHandled = nativeActionHandled, RequestId = requestId });
                 }
                 finally
                 {
@@ -1090,7 +1107,9 @@ namespace LilithMod
             }
         }
 
-        private async Task<string> RequestCompletionAsync(List<Message> messages, string ambientPrompt, CancellationToken token)
+        private async Task<string> RequestCompletionAsync(
+            List<Message> messages, string ambientPrompt, CancellationToken token,
+            Action<Utterance> onStreamedLine)
         {
             if (string.IsNullOrWhiteSpace(ApiKey))
                 throw new InvalidOperationException("API key is not configured.");
@@ -1101,7 +1120,7 @@ namespace LilithMod
                 ["model"] = Model,
                 ["messages"] = JArray.FromObject(
                     messages.ConvertAll(m => new { role = m.Role, content = m.Content })),
-                ["stream"] = false,
+                ["stream"] = onStreamedLine != null,
                 ["max_tokens"] = 256,
                 ["response_format"] = JObject.FromObject(new { type = "json_object" })
             };
@@ -1119,9 +1138,42 @@ namespace LilithMod
             if (BaseUrl.IndexOf("api.deepseek.com", StringComparison.OrdinalIgnoreCase) >= 0)
                 payload["thinking"] = JObject.FromObject(new { type = "disabled" });
 
-            string reply = await SendCompletionAsync(payload, token);
             string displayLanguage = PersonaPrompt.CurrentDisplayLanguage();
-            if (ReplyUsesRequestedDisplayLanguage(reply, displayLanguage)) return reply;
+            string voiceLanguage = PersonaPrompt.CurrentVoiceLanguage();
+            bool sharedText = PersonaPrompt.VoiceMatchesDisplayLanguage();
+            int streamedLineCount = 0;
+            bool acceptMoreLines = true;
+            string reply;
+            if (onStreamedLine != null)
+            {
+                try
+                {
+                    reply = await SendStreamingCompletionAsync(payload, token, item =>
+                    {
+                        if (!acceptMoreLines || streamedLineCount >= MaxUtterancesPerReply) return;
+                        Utterance utterance = ParseUtterance(item, voiceLanguage, sharedText);
+                        if (utterance == null || !ShownUsesRequestedLanguage(utterance.EnText, displayLanguage))
+                        {
+                            acceptMoreLines = false;
+                            return;
+                        }
+                        onStreamedLine(utterance);
+                        streamedLineCount++;
+                    });
+                }
+                catch when (streamedLineCount == 0 && !token.IsCancellationRequested)
+                {
+                    var fallbackPayload = (JObject)payload.DeepClone();
+                    fallbackPayload["stream"] = false;
+                    reply = await SendCompletionAsync(fallbackPayload, token);
+                }
+            }
+            else
+            {
+                reply = await SendCompletionAsync(payload, token);
+            }
+            if (ReplyUsesRequestedDisplayLanguage(reply, displayLanguage))
+                return reply;
 
             LilithModPlugin.Logger.LogWarning(
                 $"[LlmChat] Model used the wrong shown language; requesting {displayLanguage} correction.");
@@ -1131,6 +1183,7 @@ namespace LilithMod
                     "[LlmChat] Rejected reply was: " +
                     (reply == null ? "<null>" : reply.Length > 400 ? reply.Substring(0, 400) + "..." : reply));
             var correctionPayload = (JObject)payload.DeepClone();
+            correctionPayload["stream"] = false;
             var correctionMessages = (JArray)correctionPayload["messages"];
             correctionMessages.Add(JObject.FromObject(new { role = "assistant", content = reply }));
             correctionMessages.Add(JObject.FromObject(new
@@ -1144,11 +1197,17 @@ namespace LilithMod
             return reply;
         }
 
+        private static bool ShownUsesRequestedLanguage(string shown, string displayLanguage)
+        {
+            if (string.IsNullOrWhiteSpace(shown)) return false;
+            return string.IsNullOrWhiteSpace(displayLanguage) ||
+                   !displayLanguage.StartsWith("en", StringComparison.OrdinalIgnoreCase) ||
+                   !ContainsCjk(shown);
+        }
+
         private static bool ReplyUsesRequestedDisplayLanguage(string reply, string displayLanguage)
         {
-            if (string.IsNullOrWhiteSpace(displayLanguage) ||
-                !displayLanguage.StartsWith("en", StringComparison.OrdinalIgnoreCase))
-                return true;
+            if (string.IsNullOrWhiteSpace(reply)) return false;
             try
             {
                 string trimmed = reply.Trim();
@@ -1168,7 +1227,12 @@ namespace LilithMod
                 foreach (JToken line in lines)
                 {
                     string shown = (string)line["shown"] ?? (string)line["en"];
-                    if (string.IsNullOrWhiteSpace(shown) || ContainsCjk(shown)) return false;
+                    if (string.IsNullOrWhiteSpace(shown) && PersonaPrompt.VoiceMatchesDisplayLanguage())
+                        shown = (string)line["spoken"] ?? (string)line["ja"];
+                    if (string.IsNullOrWhiteSpace(shown)) return false;
+                    if (!string.IsNullOrWhiteSpace(displayLanguage) &&
+                        displayLanguage.StartsWith("en", StringComparison.OrdinalIgnoreCase) &&
+                        ContainsCjk(shown)) return false;
                 }
                 return true;
             }
@@ -1289,9 +1353,89 @@ namespace LilithMod
                 + $"(finish={lastFinishReason}, completion_tokens={lastCompletionTokens}).");
         }
 
+        private async Task<string> SendStreamingCompletionAsync(
+            JObject payload, CancellationToken token, Action<JObject> onLine)
+        {
+            string jsonPayload = JsonConvert.SerializeObject(payload);
+            using (var request = new HttpRequestMessage(
+                HttpMethod.Post, $"{BaseUrl.TrimEnd('/')}/chat/completions"))
+            {
+                request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {ApiKey}");
+                request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                using (var response = await _httpClient.SendAsync(
+                    request, HttpCompletionOption.ResponseHeadersRead, token))
+                {
+                    response.EnsureSuccessStatusCode();
+                    var parser = new StreamingReplyParser();
+                    string finishReason = null;
+                    using (Stream stream = await response.Content.ReadAsStreamAsync())
+                    using (var reader = new StreamReader(stream, Encoding.UTF8))
+                    {
+                        while (!reader.EndOfStream)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            string eventLine = await reader.ReadLineAsync();
+                            if (string.IsNullOrWhiteSpace(eventLine) ||
+                                eventLine.StartsWith(":", StringComparison.Ordinal))
+                                continue;
+                            if (!eventLine.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                                continue;
+                            string data = eventLine.Substring(5).TrimStart();
+                            if (data == "[DONE]") break;
+
+                            JObject chunk = JObject.Parse(data);
+                            JToken choice = chunk["choices"]?.FirstOrDefault();
+                            string fragment = choice?["delta"]?["content"]?.ToString();
+                            finishReason = choice?["finish_reason"]?.ToString() ?? finishReason;
+                            foreach (JObject item in parser.Append(fragment))
+                                onLine?.Invoke(item);
+                        }
+                    }
+                    timer.Stop();
+                    string content = parser.Content;
+                    if (string.IsNullOrWhiteSpace(content))
+                        throw new InvalidOperationException(
+                            $"DeepSeek returned empty streamed content (finish={finishReason ?? "missing"}).");
+                    if (LilithModPlugin.CfgLogDiagnostics != null &&
+                        LilithModPlugin.CfgLogDiagnostics.Value)
+                        LilithModPlugin.Logger.LogInfo(
+                            $"[LlmChat] Stream completed in {timer.ElapsedMilliseconds} ms " +
+                            $"(finish={finishReason ?? "missing"}).");
+                    return content;
+                }
+            }
+        }
+
         // ========== Queue processing on main thread ==========
+        private void HandleStreamedReplyLine(StreamedReplyLine streamed)
+        {
+            if (streamed == null || streamed.RequestId != _activeRequestId ||
+                streamed.Utterance == null || !SynthVoiceSelected)
+                return;
+
+            if (_streamPlaybackRequestId != streamed.RequestId)
+            {
+                LilithModPlugin.VoiceProcessor.CancelCurrent();
+                _streamPlaybackRequestId = streamed.RequestId;
+                _streamedLinesAccepted = 0;
+                _currentReplyEnglish = new List<string>();
+                _replyPlaybackActive = true;
+                _lastDisplayedSentence = null;
+                _restoreReplyBubble = false;
+            }
+
+            _streamedLinesAccepted++;
+            if (!string.IsNullOrEmpty(streamed.Utterance.EnText))
+                _currentReplyEnglish.Add(streamed.Utterance.EnText);
+            foreach (Utterance piece in UtteranceChunker.Chunk(streamed.Utterance))
+                LilithModPlugin.VoiceProcessor.Enqueue(piece);
+        }
+
         private void HandleChatResult(ChatResult result)
         {
+            if (result.RequestId != 0 && result.RequestId != _activeRequestId) return;
             if (_speechAwaitingReply && !result.Ambient)
             {
                 _speechAwaitingReply = false;
@@ -1300,22 +1444,27 @@ namespace LilithMod
 
             if (result.Ok)
             {
-                // Cancel speech from the previous reply.
-                LilithModPlugin.VoiceProcessor?.CancelCurrent();
-                _currentReplyEnglish = null;
-                _replyPlaybackActive = false;
-                // A restore fired now must not resurrect a sentence from the reply
-                // that was just cancelled.
-                _lastDisplayedSentence = null;
-                _restoreReplyBubble = false;
-
-                if (!result.NativeActionHandled)
-                    ExecuteNativeAction(result.Text);
-
+                int streamedLines = _streamPlaybackRequestId == result.RequestId
+                    ? _streamedLinesAccepted : 0;
+                if (streamedLines == 0)
+                {
+                    LilithModPlugin.VoiceProcessor?.CancelCurrent();
+                    _currentReplyEnglish = null;
+                    _replyPlaybackActive = false;
+                    _lastDisplayedSentence = null;
+                    _restoreReplyBubble = false;
+                }
                 var utterances = ParseUtterances(result.Text);
 
                 if (utterances == null)
                 {
+                    if (streamedLines > 0)
+                    {
+                        LilithModPlugin.VoiceProcessor.CompleteStreamedReply();
+                        LilithModPlugin.Logger.LogWarning(
+                            "[LlmChat] Stream ended with invalid JSON; kept the validated spoken prefix.");
+                        return;
+                    }
                     // Not the bilingual shape - an older prompt still in the cfg, or a
                     // model that ignored the format. Speak and show it as-is.
                     if (!result.Ambient)
@@ -1355,10 +1504,20 @@ namespace LilithMod
 
                 if (utterances.Count == 0)
                 {
+                    if (streamedLines > 0)
+                        LilithModPlugin.VoiceProcessor.CompleteStreamedReply();
                     LilithModPlugin.Logger.LogWarning("[LlmChat] Model returned an empty sentence list.");
                     DisplayReplyText(FallbackLines[UnityEngine.Random.Range(0, FallbackLines.Length)]);
                     return;   // deliberately not added to history
                 }
+
+                // Actions run only after the complete reply parses and validates.
+                string executedAction = result.NativeActionHandled
+                    ? null
+                    : ExecuteNativeAction(result.Text);
+                bool forgetAction = executedAction == "forget_memory" ||
+                    executedAction == "forget_fact" || executedAction == "forget_all_memory";
+                if (forgetAction) RemoveCurrentMemoryCommand(result.UserInput);
 
                 // Store spoken text in history, not response markup.
                 var spoken = new System.Collections.Generic.List<string>();
@@ -1371,10 +1530,10 @@ namespace LilithMod
 
                 lock (_history)
                 {
-                    if (!result.Ambient)
+                    if (!result.Ambient && !forgetAction)
                         _history.Add(new Message { Role = "assistant", Content = string.Join(" ", spoken) });
                 }
-                if (!result.Ambient)
+                if (!result.Ambient && !forgetAction)
                 {
                     TrimHistory();
                     RememberAndMaybeWrite(result.UserInput, string.Join(" ", spoken),
@@ -1383,6 +1542,7 @@ namespace LilithMod
 
                 if (!SynthVoiceSelected)
                 {
+                    if (streamedLines > 0) LilithModPlugin.VoiceProcessor?.CancelCurrent(true);
                     // No audio to pace the subtitles, so show the reply in one piece.
                     DisplayReplyText(string.Join(" ", english));
                     _replyHideAt = Time.unscaledTime + 6f;
@@ -1396,14 +1556,17 @@ namespace LilithMod
 
                 // Split long replies so later pieces synthesize during playback.
                 var queued = new System.Collections.Generic.List<Utterance>();
-                foreach (var u in utterances)
-                    queued.AddRange(UtteranceChunker.Chunk(u));
+                for (int i = Math.Min(streamedLines, utterances.Count); i < utterances.Count; i++)
+                    queued.AddRange(UtteranceChunker.Chunk(utterances[i]));
 
                 for (int i = 0; i < queued.Count; i++)
                 {
-                    queued[i].EndOfReply = i == queued.Count - 1;
+                    if (streamedLines == 0)
+                        queued[i].EndOfReply = i == queued.Count - 1;
                     LilithModPlugin.VoiceProcessor.Enqueue(queued[i]);
                 }
+                if (streamedLines > 0)
+                    LilithModPlugin.VoiceProcessor.CompleteStreamedReply();
 
                 LilithModPlugin.Logger.LogInfo(
                     $"[LlmChat] LLM reply queued ({queued.Count} synchronized piece(s) " +
@@ -1412,6 +1575,12 @@ namespace LilithMod
             else
             {
                 LilithModPlugin.Logger.LogWarning($"[LlmChat] LLM request failed: {result.Error}");
+
+                if (_streamPlaybackRequestId == result.RequestId && _streamedLinesAccepted > 0)
+                {
+                    LilithModPlugin.VoiceProcessor?.CompleteStreamedReply();
+                    return;
+                }
 
                 string fallback = FallbackLines[UnityEngine.Random.Range(0, FallbackLines.Length)];
                 if (DialogueManager.s_instance.TryGetNode(9500000, out _replyNode))
@@ -1434,9 +1603,9 @@ namespace LilithMod
         /// <summary>Full subtitle fallback for an in-flight spoken reply.</summary>
         private System.Collections.Generic.List<string> _currentReplyEnglish;
 
-        private static void ExecuteNativeAction(string text)
+        private static string ExecuteNativeAction(string text)
         {
-            if (string.IsNullOrWhiteSpace(text)) return;
+            if (string.IsNullOrWhiteSpace(text)) return null;
             try
             {
                 string json = text.Trim();
@@ -1447,11 +1616,12 @@ namespace LilithMod
                     if (firstBreak > 0 && lastFence > firstBreak)
                         json = json.Substring(firstBreak + 1, lastFence - firstBreak - 1).Trim();
                 }
-                if (!json.StartsWith("{")) return;
+                if (!json.StartsWith("{")) return null;
 
                 var action = JObject.Parse(json)["action"] as JObject;
                 string type = ((string)action?["type"])?.Trim().ToLowerInvariant();
-                if (string.IsNullOrEmpty(type)) return;
+                if (string.IsNullOrEmpty(type)) return null;
+                bool applied = false;
 
                 switch (type)
                 {
@@ -1462,10 +1632,9 @@ namespace LilithMod
                             throw new InvalidOperationException("Timer duration is outside the supported range.");
                         TimerSystem timer = TimerSystem.Instance;
                         if (timer == null) throw new InvalidOperationException("Lilith timer is unavailable.");
-                        // The LLM reply is the spoken confirmation. The native announce
-                        // uses the game display language and would add an English voice.
                         timer.StartCountdown((float)seconds, false);
                         LilithModPlugin.Logger.LogInfo($"[NativeAction] Timer started for {seconds:0} seconds.");
+                        applied = true;
                         break;
                     }
                     case "alarm":
@@ -1479,15 +1648,18 @@ namespace LilithMod
                             throw new InvalidOperationException("Alarm time is outside the supported range.");
                         AlarmSystem.SetAlarm(new Il2CppSystem.DateTime(local.Ticks));
                         LilithModPlugin.Logger.LogInfo($"[NativeAction] Alarm set for {local:yyyy-MM-dd HH:mm:ss}.");
+                        applied = true;
                         break;
                     }
                     case "timer_cancel":
                         TimerSystem.Instance?.Cancel();
                         LilithModPlugin.Logger.LogInfo("[NativeAction] Timer cancelled.");
+                        applied = true;
                         break;
                     case "alarm_cancel":
                         AlarmSystem.CancelAlarm();
                         LilithModPlugin.Logger.LogInfo("[NativeAction] Alarm cancelled.");
+                        applied = true;
                         break;
                     case "open_app":
                     {
@@ -1498,6 +1670,7 @@ namespace LilithMod
                             throw new InvalidOperationException("App opening is disabled.");
                         if (!AppLauncher.TryOpen(app))
                             throw new InvalidOperationException($"Could not open app '{app}'.");
+                        applied = true;
                         break;
                     }
                     case "search_web":
@@ -1509,14 +1682,122 @@ namespace LilithMod
                             throw new InvalidOperationException("Browser search is disabled.");
                         if (!AppLauncher.TrySearch(query))
                             throw new InvalidOperationException("Could not open browser search.");
+                        applied = true;
+                        break;
+                    }
+                    case "forget_memory":
+                    {
+                        string query = ((string)action["query"])?.Trim();
+                        if (string.IsNullOrWhiteSpace(query))
+                            throw new InvalidOperationException("forget_memory action missing query.");
+                        int removed = MemoryStore.Forget(query);
+                        _instance?.ForgetConversationHistory(query);
+                        RefreshMemorySystemPrompt();
+                        LilithModPlugin.Logger.LogInfo(
+                            $"[Memory] Forgot {removed} matching item(s) for '{query}'.");
+                        applied = true;
+                        break;
+                    }
+                    case "forget_fact":
+                    {
+                        string key = ((string)action["key"])?.Trim();
+                        string query = ((string)action["query"])?.Trim();
+                        if (string.IsNullOrWhiteSpace(key) && string.IsNullOrWhiteSpace(query))
+                            throw new InvalidOperationException("forget_fact action missing key and query.");
+                        int removed = MemoryStore.ForgetFact(key, query);
+                        if (!string.IsNullOrWhiteSpace(query))
+                            _instance?.ForgetConversationHistory(query);
+                        RefreshMemorySystemPrompt();
+                        LilithModPlugin.Logger.LogInfo($"[Memory] Removed {removed} obsolete fact(s).");
+                        applied = true;
+                        break;
+                    }
+                    case "forget_all_memory":
+                    {
+                        int removed = MemoryStore.ForgetAll();
+                        _instance?.ClearConversationHistory();
+                        RefreshMemorySystemPrompt();
+                        LilithModPlugin.Logger.LogInfo($"[Memory] Cleared {removed} stored item(s).");
+                        applied = true;
+                        break;
+                    }
+                    case "update_memory":
+                    {
+                        string key = ((string)action["key"])?.Trim();
+                        string statement = ((string)action["statement"])?.Trim();
+                        if (string.IsNullOrWhiteSpace(statement))
+                            throw new InvalidOperationException("update_memory action missing statement.");
+                        MemoryStore.ForgetFact(key, ((string)action["replaces"])?.Trim());
+                        MemoryStore.CorrectFact(new MemoryStore.FactData
+                        {
+                            Key = key,
+                            Statement = statement,
+                            Topics = action["topics"]?.ToObject<List<string>>() ?? new List<string>(),
+                            Confidence = (double?)action["confidence"] ?? 1.0
+                        });
+                        LilithModPlugin.Logger.LogInfo("[Memory] Updated an explicit player fact.");
+                        applied = true;
                         break;
                     }
                 }
+                return applied ? type : null;
             }
             catch (Exception ex)
             {
                 LilithModPlugin.Logger.LogWarning("[NativeAction] Could not apply LLM action: " + ex.Message);
+                return null;
             }
+        }
+
+        private void ForgetConversationHistory(string query)
+        {
+            lock (_history)
+            {
+                for (int i = _history.Count - 1; i >= 1; i--)
+                {
+                    if (!string.Equals(_history[i].Role, "user", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    int assistant = i + 1 < _history.Count &&
+                        string.Equals(_history[i + 1].Role, "assistant", StringComparison.OrdinalIgnoreCase)
+                        ? i + 1 : -1;
+                    bool matches = MemoryStore.MatchesQuery(query, _history[i].Content) ||
+                        (assistant >= 0 && MemoryStore.MatchesQuery(query, _history[assistant].Content));
+                    if (!matches) continue;
+                    if (assistant >= 0) _history.RemoveAt(assistant);
+                    _history.RemoveAt(i);
+                }
+            }
+        }
+
+        private void ClearConversationHistory()
+        {
+            lock (_history)
+                if (_history.Count > 1) _history.RemoveRange(1, _history.Count - 1);
+        }
+
+        private static void RemoveCurrentMemoryCommand(string userInput)
+        {
+            if (_instance == null || string.IsNullOrWhiteSpace(userInput)) return;
+            lock (_instance._history)
+            {
+                for (int i = _instance._history.Count - 1; i >= 1; i--)
+                {
+                    Message message = _instance._history[i];
+                    if (!string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(message.Content, userInput, StringComparison.Ordinal)) continue;
+                    _instance._history.RemoveAt(i);
+                    break;
+                }
+            }
+        }
+
+        private static void RefreshMemorySystemPrompt()
+        {
+            if (_instance == null) return;
+            lock (_instance._history)
+                if (_instance._history.Count > 0)
+                    _instance._history[0].Content = BuildSystemPrompt(
+                        (_instance._history.Count - 1) / 2, null);
         }
 
         /// <summary>
@@ -1570,17 +1851,11 @@ namespace LilithMod
                 var list = new System.Collections.Generic.List<Utterance>();
                 foreach (var item in array)
                 {
-                    string spoken = (string)item["spoken"] ?? (string)item["ja"];
-                    string shown = (string)item["shown"] ?? (string)item["en"];
-                    if (string.IsNullOrWhiteSpace(spoken))
-                        continue;
-
-                    list.Add(new Utterance
-                    {
-                        JaText = spoken.Trim(),
-                        EnText = (shown ?? string.Empty).Trim(),
-                        Language = PersonaPrompt.CurrentVoiceLanguage()
-                    });
+                    Utterance utterance = ParseUtterance(
+                        item, PersonaPrompt.CurrentVoiceLanguage(),
+                        PersonaPrompt.VoiceMatchesDisplayLanguage());
+                    if (utterance == null) continue;
+                    list.Add(utterance);
                     if (list.Count >= MaxUtterancesPerReply)
                     {
                         LilithModPlugin.Logger.LogWarning(
@@ -1597,6 +1872,21 @@ namespace LilithMod
             {
                 return null;
             }
+        }
+
+        private static Utterance ParseUtterance(
+            JToken item, string voiceLanguage, bool sharedText)
+        {
+            string spoken = (string)item?["spoken"] ?? (string)item?["ja"];
+            string shown = (string)item?["shown"] ?? (string)item?["en"];
+            if (string.IsNullOrWhiteSpace(spoken)) return null;
+            if (string.IsNullOrWhiteSpace(shown) && sharedText) shown = spoken;
+            return new Utterance
+            {
+                JaText = spoken.Trim(),
+                EnText = (shown ?? string.Empty).Trim(),
+                Language = voiceLanguage
+            };
         }
 
         private void TrimHistory()

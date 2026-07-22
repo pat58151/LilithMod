@@ -37,6 +37,7 @@ LilithMod/dialogue/
 
 # Build output.
 build-test*/
+build-release/
 
 # Runtime logs.
 runtime/*.log

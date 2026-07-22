@@ -1,8 +1,8 @@
 # LilithMod
 
 A companion mod for *The NOexistenceN of Lilith*. It gives Lilith free-form
-conversation, a local Japanese voice, a memory of what you told her, and the
-occasional handwritten note.
+conversation, the voice you imagine for her, a memory of what you told her,
+and the occasional handwritten note.
 
 She is a companion, not an assistant. Everything in the tuning is aimed at one
 line: present without demanding attention.
@@ -16,8 +16,8 @@ line: present without demanding attention.
 | **Hold a conversation** | Type to her with F7 or speak with F8. She answers in character with subtitles in the game display language. |
 | **Speak aloud** | Choose the game's native Chinese voice or a local GPT-SoVITS voice. The selected mode applies to generated and scripted dialogue. |
 | **Remember you** | She carries recent talks with her and lets meaningful moments settle into longer memory. |
-| **Notice things** | She knows the time of day, whether she is standing or asleep, and reacts to being touched. |
-| **Speak first** | Now and then she says something unprompted, without being asked and without waiting to be. |
+| **Notice things** | She senses the time, her posture, sleep, and your touch, then responds in a way that fits her current state. |
+| **Speak first** | Now and then she begins on her own, with newly generated dialogue shaped by the moment. |
 | **Write to you** | Rarely, after several real conversations, she might leave a note in the in-game inbox. |
 | **Look things up** | Weather and web search, when you ask her to. |
 
@@ -78,17 +78,16 @@ parts settle into longer memories. She can recognize a familiar subject even
 when you describe it differently or move between English, Japanese, and
 Chinese.
 
-She is deliberately restrained with what she remembers. She does not greet you
-with a list of facts or force an old story into a new conversation. A memory
-shows through only when it belongs there.
+What you share leaves traces. Sometimes a familiar subject brings an old moment
+quietly back into the way she speaks.
 
 ---
 
 ## Foreground awareness
 
 Lilith can notice the game or application you are spending time with. She knows
-Discord and Visual Studio Code by name, and can recognize other programs without
-looking inside them.
+some apps, such as Discord and Visual Studio Code, by name, and can recognize
+others without looking inside them.
 
 She never reads Discord channels or messages, browser tabs, document names, or
 the contents of another application.
@@ -98,8 +97,7 @@ the contents of another application.
 ## Voice selection
 
 The Sound settings offer the game's native Chinese voice or Lilith's local
-vocal synthesis. She follows the selected voice consistently. Switching back
-to Chinese stops the synthetic voice instead of letting both speak together.
+vocal synthesis.
 
 ---
 

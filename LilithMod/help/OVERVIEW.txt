@@ -67,6 +67,9 @@ She keeps the last handful of conversations and reads them back before
 replying, so she can refer to what you told her earlier. It is stored in
 memory.json beside the mod. Deleting that file makes her forget.
 
+You can also ask her to forget a subject, forget everything, or correct
+something that has changed.
+
 She also knows the time of day, whether she is standing, lying down or asleep,
 and can answer questions about the weather or look something up.
 

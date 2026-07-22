@@ -14,5 +14,12 @@ namespace LilithMod
         public string UserInput { get; set; }
         public bool Ambient { get; set; }
         public bool NativeActionHandled { get; set; }
+        public long RequestId { get; set; }
+    }
+
+    internal sealed class StreamedReplyLine
+    {
+        public long RequestId { get; set; }
+        public Utterance Utterance { get; set; }
     }
 }

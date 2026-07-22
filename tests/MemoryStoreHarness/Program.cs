@@ -94,6 +94,37 @@ internal static class Program
             Require(currentRole.Contains("engineer") && !currentRole.Contains("designer"),
                 "new semantic fact did not replace the contradictory old value");
 
+            int forgottenFact = MemoryStore.ForgetFact("work.role", "work job engineer");
+            string episodeAfterFactRemoval = MemoryStore.Context(8, "What changed with my job?");
+            Require(forgottenFact == 1 && !episodeAfterFactRemoval.Contains("engineer") &&
+                    episodeAfterFactRemoval.Contains("new job"),
+                "fact removal erased an episode or retained the obsolete fact");
+
+            MemoryStore.CorrectFact(new MemoryStore.FactData
+            {
+                Key = "work.role", Statement = "The player works as a researcher.",
+                Topics = new List<string> { "work", "job", "researcher" }, Confidence = 1.0
+            });
+            string correctedRole = MemoryStore.Context(8, "What is my current job?");
+            Require(correctedRole.Contains("researcher") && !correctedRole.Contains("engineer"),
+                "explicit correction did not replace the old fact immediately");
+
+            MemoryStore.RecordConversation(
+                "My work as a researcher is going well.", "I am glad to hear that.", true);
+            int forgottenWork = MemoryStore.Forget("work job career researcher");
+            string forgottenContext = MemoryStore.Context(8, "Tell me about hiking and my career");
+            Require(forgottenWork > 0 && !forgottenContext.Contains("researcher") &&
+                    !forgottenContext.Contains("new job") && forgottenContext.Contains("hiking"),
+                "topic forgetting did not remove matching memory while preserving other subjects");
+            Require(!MemoryStore.QualifyingConversationContext(DateTime.MinValue)
+                    .Contains("researcher"),
+                "forgotten conversation remained eligible for a future note");
+            string forgetBackup = Path.Combine(Root, "memory.json.bak");
+            Require(!File.Exists(forgetBackup) ||
+                    (!File.ReadAllText(forgetBackup).Contains("researcher") &&
+                     !File.ReadAllText(forgetBackup).Contains("new job")),
+                "topic forgetting left stale content in the backup file");
+
             MemoryStore.ClearQualifyingConversations();
             Require(MemoryStore.QualifyingConversationContext(DateTime.MinValue) == string.Empty,
                 "qualifying conversations were not cleared after a note");
@@ -136,6 +167,13 @@ internal static class Program
             Require(Count(split.Context, "Player:") == 7 && split.Context.Contains("new-1") &&
                 !split.Context.Contains("old-1"),
                 "conversation gap did not split unrelated episodic sessions");
+
+            MemoryStore.RecordLongTerm("A final memory that should be erased.");
+            Require(MemoryStore.ForgetAll() > 0 &&
+                    MemoryStore.Context(0, "final memory").Length == 0,
+                "forget everything did not clear all memory layers");
+            Require(!File.Exists(Path.Combine(Root, "memory.json.bak")),
+                "forget everything left a recoverable stale backup");
 
             Console.WriteLine("MEMORY HARNESS PASS");
         }

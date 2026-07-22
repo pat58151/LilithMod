@@ -47,10 +47,16 @@ namespace LilithMod
         /// <summary>Thread-safe enqueue for the Unity main thread.</summary>
         public void Enqueue(Utterance utterance)
         {
-            if (utterance == null || string.IsNullOrEmpty(utterance.JaText))
+            if (utterance == null || (!utterance.CompletionOnly && string.IsNullOrEmpty(utterance.JaText)))
                 return;
             _queue.Enqueue(utterance);
             _queueAvailable.Set();
+        }
+
+        /// <summary>Ends a streamed reply after all queued speech.</summary>
+        internal void CompleteStreamedReply()
+        {
+            Enqueue(new Utterance { CompletionOnly = true });
         }
 
         /// <summary>Queues plain text when no bilingual pair is available.</summary>
@@ -198,8 +204,15 @@ namespace LilithMod
                     {
                         // Already in flight since before the previous PlaySync.
                         current = next;
-                        currentWav = nextSynth.GetAwaiter().GetResult();
                         next = null;
+                        if (current.CompletionOnly)
+                        {
+                            nextSynth = null;
+                            if (_abandonRun) _abandonRun = false;
+                            else ReplyFinishedQueue.Enqueue(true);
+                            continue;
+                        }
+                        currentWav = nextSynth.GetAwaiter().GetResult();
                         nextSynth = null;
                     }
                     else
@@ -207,6 +220,12 @@ namespace LilithMod
                         if (!_queue.TryDequeue(out current))
                         {
                             WaitHandle.WaitAny(new[] { _queueAvailable, _cts.Token.WaitHandle });
+                            continue;
+                        }
+                        if (current.CompletionOnly)
+                        {
+                            if (_abandonRun) _abandonRun = false;
+                            else ReplyFinishedQueue.Enqueue(true);
                             continue;
                         }
                         // First sentence of a reply: nothing was pre-synthesised, so
@@ -252,12 +271,19 @@ namespace LilithMod
                 // Synthesize the next sentence during current playback.
                 if (_queue.TryDequeue(out next))
                 {
-                    var pending = next;
-                    nextSynth = Task.Run(
-                        () => _ttsClient.SynthesizeAsync(pending.JaText, pending.Language, _cts.Token)
-                            .GetAwaiter().GetResult());
-                    LilithModPlugin.Logger.LogInfo(
-                        "[Voice] synth started for next sentence while current one plays.");
+                    if (next.CompletionOnly)
+                    {
+                        nextSynth = null;
+                    }
+                    else
+                    {
+                        var pending = next;
+                        nextSynth = Task.Run(
+                            () => _ttsClient.SynthesizeAsync(pending.JaText, pending.Language, _cts.Token)
+                                .GetAwaiter().GetResult());
+                        LilithModPlugin.Logger.LogInfo(
+                            "[Voice] synth started for next sentence while current one plays.");
+                    }
                 }
                 else
                 {

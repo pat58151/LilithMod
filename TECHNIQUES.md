@@ -7,7 +7,7 @@ values that belong to a particular build.
 | function | techniques used |
 |---|---|
 | **Conversation and persona** | Structured persona prompting, live game-state context, multilingual style guidance, and a validated reply-and-action format. |
-| **Memory management** | Separate rolling memory for conversations and interactions, local atomic persistence, backup recovery, and migration of older memory files. |
+| **Memory management** | Separate rolling memory for conversations and interactions, conversational correction and forgetting, local atomic persistence, backup recovery, and migration of older memory files. |
 | **Episodic memory** | Periodic LLM consolidation turns meaningful conversation stretches into sourced episodes and replaceable semantic facts. Importance, emotion, confidence, recency, and recall history guide what remains. |
 | **Memory retrieval** | Local feature vectors combine words, character fragments, topic and person matches, and a small multilingual synonym map. Relevant memories are retrieved without a hosted vector database or embedding API. |
 | **Speech input** | Local Whisper transcription, voice activity detection, room-noise calibration, voiced-region trimming, and rejection of common silence hallucinations. |
