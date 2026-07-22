@@ -17,6 +17,11 @@ namespace LilithMod
         /// <summary>Whether the bubble still carries the mod's latest reply.</summary>
         private static bool _modReplyCurrent;
 
+        /// <summary>How long a reply defends the bubble against music notes.</summary>
+        private const float ReplyReadingSeconds = 30f;
+
+        private static float _replyReadingUntil = -600f;
+
         /// <summary>Line ids of the game's periodic music-listening notes.</summary>
         private static HashSet<int> _musicNoteLineIds;
 
@@ -100,7 +105,13 @@ namespace LilithMod
             if (node != null && node.id == 9500000)
             {
                 _modSpokeAt = Time.unscaledTime;
-                _modReplyCurrent = true;
+                // Armed once per new reply: bubble restores re-show this node, and
+                // letting them renew the window would suppress music notes forever.
+                if (!_modReplyCurrent)
+                {
+                    _modReplyCurrent = true;
+                    _replyReadingUntil = Time.unscaledTime + ReplyReadingSeconds;
+                }
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                     LilithModPlugin.Logger.LogInfo(
                         "[Voice] Mod reply bubble seen; native dialogue held off for " +
@@ -141,11 +152,11 @@ namespace LilithMod
             }
 
             // Music notes are periodic filler while a track plays. They must not
-            // take the bubble from a reply the player is still reading; drop the
-            // note and keep the reply. Once the bubble carries anything else,
+            // take the bubble from a reply the player is still reading, so a fresh
+            // reply defends the bubble for a bounded window; after it lapses the
             // notes flow again.
             if (node != null && bubble != null && !_allowOriginalShow && _modReplyCurrent &&
-                bubble.gameObject.activeInHierarchy && IsMusicNoteFiller(node))
+                Time.unscaledTime < _replyReadingUntil && IsMusicNoteFiller(node))
             {
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                     LilithModPlugin.Logger.LogInfo(
