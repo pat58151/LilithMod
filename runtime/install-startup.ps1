@@ -11,7 +11,7 @@ $launcher = Join-Path $ProjectFolder "runtime\start-lilith.ps1"
 $shell = New-Object -ComObject WScript.Shell
 
 # Older installs could leave a Run entry that starts Lilith.exe directly. That
-# races the service shortcut at sign-in and can leave the visible instance
+# races the launcher shortcut at sign-in and can leave the visible instance
 # running without the launcher-managed mod startup. The launcher owns startup
 # now, so remove only the known direct-game entry and leave unrelated values
 # untouched.
@@ -31,11 +31,11 @@ $gameShortcut.WindowStyle = 7
 $gameShortcut.Save()
 
 $startup = [Environment]::GetFolderPath("Startup")
-$serviceShortcut = $shell.CreateShortcut((Join-Path $startup "Lilith AI services.lnk"))
-$serviceShortcut.TargetPath = "powershell.exe"
-$serviceShortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`" -ServicesOnly"
-$serviceShortcut.WorkingDirectory = $ProjectFolder
-$serviceShortcut.WindowStyle = 7
-$serviceShortcut.Save()
+$startupShortcut = $shell.CreateShortcut((Join-Path $startup "Lilith AI services.lnk"))
+$startupShortcut.TargetPath = "powershell.exe"
+$startupShortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`""
+$startupShortcut.WorkingDirectory = $ProjectFolder
+$startupShortcut.WindowStyle = 7
+$startupShortcut.Save()
 
-Write-Host "Lilith launcher and persistent service startup installed."
+Write-Host "Lilith launcher and sign-in startup installed."

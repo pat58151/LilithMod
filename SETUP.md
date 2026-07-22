@@ -153,7 +153,8 @@ logs in the plugin folder.
 powershell -ExecutionPolicy Bypass -File runtime\install-startup.ps1
 ```
 
-That adds a desktop shortcut and a sign-in entry pointing at the launcher.
+That adds a desktop shortcut and a sign-in entry that starts the services and
+launches the game through Steam.
 
 ---
 
