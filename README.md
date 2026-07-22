@@ -114,7 +114,7 @@ Information leaves only while the related feature is being used.
 | asking her to search | a public SearXNG instance | the query, then she reads the results |
 | foreground awareness | the DeepSeek API | the active game or program name; never a window, channel, message, tab, or document title |
 
-Her voice, memory, and notes remain on this machine. When Lilith answers, the
+Her voice, memory, and notes remain on your machine. When Lilith answers, the
 relevant parts of your shared history accompany your message.
 
 Voice setup is optional and documented separately: **Settings / Sound / Open
