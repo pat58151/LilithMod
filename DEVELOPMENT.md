@@ -34,12 +34,16 @@ python verify-bilingual.py
 dotnet run --project tests\StreamingReplyHarness -c Release
 ```
 
-Normal builds write to `LilithMod\bin`. To build and deploy to the installed
-game, close the game and run:
+Normal builds write to `LilithMod\bin`. To deploy to the installed game, close
+the game, build without `-p:IncludeDialogueCatalog=false` (the catalogue is
+wanted locally), and copy the output over the plugin:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File reapply-mod.ps1 -GameDir $env:LILITH_GAME_DIR
+dotnet build LilithMod\LilithMod.csproj -c Release
+Copy-Item LilithMod\bin\Release\*.dll "$env:LILITH_GAME_DIR\BepInEx\plugins\LilithMod" -Force
 ```
+
+`reapply-mod.ps1` is only the backup/restore helper around a game reinstall.
 
 ## Package
 
