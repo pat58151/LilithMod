@@ -68,11 +68,11 @@ can sound like nobody else's.
    and level — it sets the emotional colour of everything she says — plus its
    exact transcript, punctuation included. *A poor reference is the most common
    cause of bad output. Replace it before touching anything else.*
-4. **Configure the mod.** In game, **Settings / Sound / Open Synth Voice
-   Folder**. Copy `voice-config.example.ini` to `voice-config.ini` and fill in
+4. **Configure the mod.** In game, **Settings / Sound / Open Vocal Synth
+Folder**. Copy `voice-config.example.ini` to `voice-config.ini` and fill in
    the weights, reference WAV and transcript. `SpokenLanguage` and
-   `SubtitleLanguage` are independent — `ja` speech under `en` subtitles is the
-   intended default.
+   `SubtitleLanguage` are independent. Choose the language used by your voice
+   model and the subtitle language you want to read.
 5. **Start the server**, from the GPT-SoVITS folder:
 
    ```

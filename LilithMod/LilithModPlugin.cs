@@ -48,6 +48,7 @@ namespace LilithMod
         internal static ConfigEntry<string> CfgPushToTalkKey;
         internal static ConfigEntry<bool> CfgWakeWord;
         internal static ConfigEntry<int> CfgNoteMinConversations;
+        internal static ConfigEntry<int> CfgNoteMinPersonal;
         internal static ConfigEntry<int> CfgNoteMinMessageLength;
         internal static ConfigEntry<double> CfgNoteWindowHours;
         internal static ConfigEntry<double> CfgNoteCooldownHours;
@@ -109,20 +110,14 @@ namespace LilithMod
             + "things and sometimes let a question sit unanswered.\n"
             + "\n"
             + "OUTPUT FORMAT\n"
-            + "You speak Japanese aloud, and your words appear to them in English.\n"
+            + "Speak aloud in the configured vocal synthesis language and show the configured subtitle language.\n"
             + "Reply with JSON only - no markdown, no fences, no text outside it:\n"
-            + "{\"lines\":[{\"ja\":\"<what you say, in Japanese>\",\"en\":\"<the same "
-            + "line in English>\"}]}\n"
-            + "This never changes with the language they write in. Even when they write "
-            + "to you in English, \"ja\" is always Japanese and \"en\" is always English.\n"
+            + "{\"lines\":[{\"spoken\":\"<what you say aloud>\",\"shown\":\"<the same line for subtitles>\"}]}\n"
             + "One object is normal; two is already long. Never more than two. Split into "
             + "two only at a real sentence break, because each is spoken separately.\n"
-            + "Every style rule above applies to the \"ja\" text - that is your actual "
-            + "voice. The \"en\" text is the same line rendered naturally in English, "
-            + "keeping the ellipses and the softness rather than translating word for "
-            + "word. Do not add anything to \"en\" that you did not say in \"ja\".\n"
-            + "Example: {\"lines\":[{\"ja\":\"うん……リリスはここにいるわ。\","
-            + "\"en\":\"Mm... Lilith is right here.\"}]}";
+            + "The shown text must mean exactly the same thing as the spoken text. "
+            + "Keep its pauses and softness rather than translating word for word. "
+            + "Do not add anything to shown that was not said in spoken.";
 
         public override void Load()
         {
@@ -249,6 +244,9 @@ namespace LilithMod
             // Notes require substance, elapsed time, and chance.
             CfgNoteMinConversations = Config.Bind("Letters", "MinConversationsPerNote", 10,
                 "Messages from the player, substantial enough to count, required before a note becomes possible.");
+            CfgNoteMinPersonal = Config.Bind("Letters", "MinPersonalPerNote", 1,
+                "Personal exchanges (a feeling, life event, or the bond named) required in the window before a note can fire, "
+                + "so a note never comes out of a stretch of purely mundane talk. Zero disables the check.");
             CfgNoteMinMessageLength = Config.Bind("Letters", "MinMessageLength", 18,
                 "Characters a player message needs before it counts toward a note.");
             CfgNoteWindowHours = Config.Bind("Letters", "WindowHours", 4.0,

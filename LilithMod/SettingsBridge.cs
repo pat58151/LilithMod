@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
 using TMPro;
 using UI.Common;
 using UI.TraySetting;
@@ -39,16 +42,33 @@ namespace LilithMod
         private float _nextSync;
         private float _nextOpacityRefresh;
         private float _lastAppliedOpacity = -1f;
+        private int _pendingOpacityDialogueDirection;
+        private float _opacityDialogueAt;
+        private const float OpacityDialogueDelay = 0.45f;
         private bool _settingsInteractive;
         private bool _settingsVisible;
         private bool _deepSeekRevealed;
         private bool? _lastSynthesisAvailability;
+        private static TMP_Text _synthesisStatusText;
         private static Sprite _eyeSprite;
         private static Sprite _hintSprite;
         private RectTransform _wakeWordHintRect;
         private Image _wakeWordHintImage;
+        private TMP_Text _wakeWordHintText;
         private RectTransform _wakeWordTipRect;
         private TMP_Text _wakeWordTipText;
+        private TMP_Text _chatStatusText;
+        private TMP_Text _pushToTalkStatusText;
+        private TMP_Text _wakeWordStatusText;
+        private TMP_Text _deepSeekStatusText;
+        private enum ApiKeyValidationState { Missing, Checking, Valid, Invalid, Unavailable }
+        private ApiKeyValidationState _apiKeyValidation = ApiKeyValidationState.Missing;
+        private string _apiKeyValidationInput;
+        private int _apiKeyValidationGeneration;
+        private static readonly HttpClient ApiKeyValidationClient = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(8)
+        };
 
         internal static void QueueBuild(TraySettingView view)
         {
@@ -78,6 +98,7 @@ namespace LilithMod
 
             // Tooltips follow the cursor every frame.
             RefreshWakeWordTooltip();
+            TryShowOpacityDialogue();
 
             bool settingsVisible = _view != null && _view.IsVisible;
             if (_settingsVisible != settingsVisible)
@@ -175,6 +196,13 @@ namespace LilithMod
             _deepSeekLabel = deepSeekLabel;
             _hotkeyLabel = hotkeyLabel;
             _pushToTalkLabel = pushToTalkKeyLabel;
+            _deepSeekStatusText = BuildInlineStatus(
+                _deepSeekLabel, _deepSeekKey.transform, "LilithDeepSeekStatus", 0.6f);
+            _chatStatusText = BuildInlineStatus(
+                _hotkeyLabel, _hotkeyField.transform, "LilithChatStatus", 0.6f);
+            _pushToTalkStatusText = BuildInlineStatus(
+                _pushToTalkLabel, _pushToTalkKeyField.transform,
+                "LilithPushToTalkStatus", 0.6f);
             // Underline action rows to distinguish them from settings.
             if (_helpLabel != null)
             {
@@ -204,13 +232,10 @@ namespace LilithMod
             }
 
             view.MapRow(_deepSeekKey, TraySettingView.TabMe);
-            // Order is decided by who claims last place LAST, so these two blocks
-            // read bottom-up: Me ends up API key, Open Speech Input Folder, Help.
+            // Speech setup belongs beside its push-to-talk control.
             if (_speechFolderLabel != null)
             {
-                view.MapRow(_speechFolderLabel, TraySettingView.TabMe);
-                Transform row = view.GetRowOf(_speechFolderLabel.transform);
-                if (row != null) row.SetAsLastSibling();
+                view.MapRow(_speechFolderLabel, TraySettingView.TabControls);
             }
             if (_helpLabel != null)
             {
@@ -231,6 +256,8 @@ namespace LilithMod
             if (_opacity != null) view.MapRow(_opacity, TraySettingView.TabLilith);
 
             ConfigureNativeVoiceSelector(view);
+            OrderMeRows(view);
+            OrderControlsRows(view);
 
             // New rows are added after the native tab pass. Re-select the active tab
             // to hide foreign rows, then rebuild so the new rows do not stack.
@@ -240,6 +267,69 @@ namespace LilithMod
 
             ApplyLilithOpacity(_opacity != null ? _opacity.value : LilithModPlugin.CfgLilithOpacity.Value);
             LilithModPlugin.Logger.LogInfo("[Settings] API, voice, memory, and display rows ready.");
+        }
+
+        /// <summary>Places native and added Me rows in one stable reading order.</summary>
+        private void OrderMeRows(TraySettingView view)
+        {
+            Transform nameRow = view._yourNameInputField == null
+                ? null : view.GetRowOf(view._yourNameInputField.transform);
+            Transform birthdayRow = view._calendarView == null
+                ? null : view.GetRowOf(view._calendarView.transform);
+            Transform apiRow = _deepSeekKey == null
+                ? null : view.GetRowOf(_deepSeekKey.transform);
+            Transform notificationRow = view._noteNotificationToggle == null
+                ? null : view.GetRowOf(view._noteNotificationToggle.transform);
+            Transform notesRow = FindRowByText(view,
+                "view notes", "ノートを見る", "查看便签", "查看笔记");
+            Transform helpRow = _helpLabel == null
+                ? null : view.GetRowOf(_helpLabel.transform);
+
+            Transform previous = null;
+            foreach (Transform row in new[]
+            {
+                nameRow, birthdayRow, apiRow, notificationRow,
+                notesRow, helpRow
+            })
+            {
+                if (row == null) continue;
+                if (previous != null && row.parent == previous.parent)
+                    row.SetSiblingIndex(previous.GetSiblingIndex() + 1);
+                previous = row;
+            }
+        }
+
+        private void OrderControlsRows(TraySettingView view)
+        {
+            Transform chatRow = _hotkeyField == null
+                ? null : view.GetRowOf(_hotkeyField.transform);
+            Transform pushToTalkRow = _pushToTalkKeyField == null
+                ? null : view.GetRowOf(_pushToTalkKeyField.transform);
+            Transform speechFolderRow = _speechFolderLabel == null
+                ? null : view.GetRowOf(_speechFolderLabel.transform);
+
+            if (chatRow != null && pushToTalkRow != null &&
+                chatRow.parent == pushToTalkRow.parent)
+                pushToTalkRow.SetSiblingIndex(chatRow.GetSiblingIndex() + 1);
+            if (pushToTalkRow != null && speechFolderRow != null &&
+                pushToTalkRow.parent == speechFolderRow.parent)
+                speechFolderRow.SetSiblingIndex(pushToTalkRow.GetSiblingIndex() + 1);
+        }
+
+        private static Transform FindRowByText(TraySettingView view, params string[] labels)
+        {
+            foreach (TMP_Text text in view.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (text == null || string.IsNullOrWhiteSpace(text.text)) continue;
+                string value = text.text.Replace("\n", " ").Trim().ToLowerInvariant();
+                for (int i = 0; i < labels.Length; i++)
+                {
+                    if (value != labels[i]) continue;
+                    Transform row = view.GetRowOf(text.transform);
+                    if (row != null) return row;
+                }
+            }
+            return null;
         }
 
         /// <summary>Builds the app-launch and wake-word settings rows.</summary>
@@ -322,6 +412,9 @@ namespace LilithMod
                 SetWrappedLabel(_wakeWordLabel, "Wake word");
                 if (_wakeWordToggle != null)
                     BuildWakeWordHint(_wakeWordToggle, _wakeWordLabel);
+                _wakeWordStatusText = BuildInlineStatus(
+                    _wakeWordLabel, _wakeWordToggle.transform,
+                    "LilithWakeWordStatus", 0.5f, 30f);
             }
             wakeRowObj.SetActive(true);
             if (_wakeWordToggle != null)
@@ -366,7 +459,7 @@ namespace LilithMod
 
             // Fresh clones arrive default-coloured; style for current availability
             // now instead of waiting for an availability flip that may never come.
-            StyleToggleRow(_allowOpenAppsToggle, _allowOpenAppsLabel, HasApiKey);
+            StyleToggleRow(_allowOpenAppsToggle, _allowOpenAppsLabel, HasValidApiKey);
             StyleToggleRow(_wakeWordToggle, _wakeWordLabel, WakeWordAvailable);
         }
 
@@ -391,6 +484,8 @@ namespace LilithMod
         {
             string deepSeek = _deepSeekKey.text?.Trim() ?? string.Empty;
             if (deepSeek != LilithModPlugin.CfgApiKey.Value) LilithModPlugin.CfgApiKey.Value = deepSeek;
+            if (!string.Equals(deepSeek, _apiKeyValidationInput, StringComparison.Ordinal))
+                ScheduleApiKeyValidation(deepSeek);
             string hotkey = _hotkeyField?.text?.Trim() ?? string.Empty;
             if (WindowFocus.VirtualKeyFromName(hotkey) > 0 &&
                 !string.Equals(hotkey, LilithModPlugin.CfgHotkey.Value, StringComparison.OrdinalIgnoreCase))
@@ -421,8 +516,13 @@ namespace LilithMod
             if (_opacity != null)
             {
                 float opacity = Mathf.Clamp(_opacity.value, 0.2f, 1f);
-                if (Math.Abs(opacity - LilithModPlugin.CfgLilithOpacity.Value) > 0.001f)
+                float previous = LilithModPlugin.CfgLilithOpacity.Value;
+                if (Math.Abs(opacity - previous) > 0.001f)
+                {
                     LilithModPlugin.CfgLilithOpacity.Value = opacity;
+                    _pendingOpacityDialogueDirection = opacity < previous ? -1 : 1;
+                    _opacityDialogueAt = Time.unscaledTime + OpacityDialogueDelay;
+                }
                 ApplyLilithOpacity(opacity);
             }
 
@@ -441,8 +541,64 @@ namespace LilithMod
             {
                 LilithModPlugin.CfgWakeWord.Value = _wakeWordToggle.IsOn;
                 LilithModPlugin.SaveConfig();
+                SpeechInputService.SyncWakeWordFlag();
                 LilithModPlugin.Logger.LogInfo(
                     "[Settings] Wake word set to " + _wakeWordToggle.IsOn + ".");
+            }
+        }
+
+        private async void ScheduleApiKeyValidation(string key)
+        {
+            _apiKeyValidationInput = key ?? string.Empty;
+            int generation = ++_apiKeyValidationGeneration;
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                _apiKeyValidation = ApiKeyValidationState.Missing;
+                return;
+            }
+
+            // Custom OpenAI-compatible services may not expose DeepSeek's models
+            // endpoint. Keep their existing non-empty-key behaviour unchanged.
+            string baseUrl = LilithModPlugin.CfgBaseUrl.Value ?? string.Empty;
+            if (baseUrl.IndexOf("api.deepseek.com", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                _apiKeyValidation = ApiKeyValidationState.Valid;
+                return;
+            }
+
+            _apiKeyValidation = ApiKeyValidationState.Checking;
+            await Task.Delay(700);
+            if (generation != _apiKeyValidationGeneration) return;
+
+            ApiKeyValidationState result = await ValidateDeepSeekApiKeyAsync(key, baseUrl);
+            if (generation == _apiKeyValidationGeneration &&
+                string.Equals(key, _apiKeyValidationInput, StringComparison.Ordinal))
+                _apiKeyValidation = result;
+        }
+
+        private static async Task<ApiKeyValidationState> ValidateDeepSeekApiKeyAsync(
+            string key, string baseUrl)
+        {
+            try
+            {
+                var configured = new Uri(baseUrl);
+                var endpoint = new UriBuilder(configured.Scheme, configured.Host, configured.Port, "models").Uri;
+                using (var request = new HttpRequestMessage(HttpMethod.Get, endpoint))
+                {
+                    request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + key);
+                    using (HttpResponseMessage response = await ApiKeyValidationClient.SendAsync(request))
+                    {
+                        if (response.IsSuccessStatusCode) return ApiKeyValidationState.Valid;
+                        if (response.StatusCode == HttpStatusCode.Unauthorized ||
+                            response.StatusCode == HttpStatusCode.Forbidden)
+                            return ApiKeyValidationState.Invalid;
+                        return ApiKeyValidationState.Unavailable;
+                    }
+                }
+            }
+            catch
+            {
+                return ApiKeyValidationState.Unavailable;
             }
         }
 
@@ -599,6 +755,24 @@ namespace LilithMod
             _wakeWordHintImage.sprite = GetHintSprite();
             _wakeWordHintImage.preserveAspect = true;
             _wakeWordHintImage.raycastTarget = false;
+
+            var markObject = UnityEngine.Object.Instantiate(label.gameObject, hint.transform);
+            markObject.name = "QuestionMark";
+            _wakeWordHintText = markObject.GetComponent<TMP_Text>();
+            TraySettingView.StripLabelLocalizer(_wakeWordHintText);
+            RectTransform markRect = _wakeWordHintText.rectTransform;
+            markRect.anchorMin = Vector2.zero;
+            markRect.anchorMax = Vector2.one;
+            markRect.pivot = new Vector2(0.5f, 0.5f);
+            markRect.offsetMin = Vector2.zero;
+            markRect.offsetMax = Vector2.zero;
+            _wakeWordHintText.text = "?";
+            _wakeWordHintText.alignment = TextAlignmentOptions.Center;
+            _wakeWordHintText.enableAutoSizing = false;
+            _wakeWordHintText.enableWordWrapping = false;
+            _wakeWordHintText.fontSize = 17f;
+            _wakeWordHintText.color = Color.white;
+            _wakeWordHintText.raycastTarget = false;
         }
 
         private void BuildWakeWordTooltip(TMP_Text sourceLabel)
@@ -699,24 +873,10 @@ namespace LilithMod
                 }
             }
 
-            // The glyph, as three strokes in texture space: hook, stem, dot.
-            MarkRect(pixels, size, 24, 42, 40, 48, white);   // hook, top bar
-            MarkRect(pixels, size, 36, 34, 40, 44, white);   // hook, descending side
-            MarkRect(pixels, size, 24, 34, 28, 40, white);   // hook, ascending side
-            MarkRect(pixels, size, 28, 24, 36, 36, white);   // stem
-            MarkRect(pixels, size, 28, 14, 36, 20, white);   // dot
-
             texture.SetPixels32(pixels);
             texture.Apply();
             _hintSprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
             return _hintSprite;
-        }
-
-        private static void MarkRect(Color32[] pixels, int size, int x0, int y0, int x1, int y1, Color32 colour)
-        {
-            for (int y = Mathf.Max(0, y0); y < Mathf.Min(size, y1); y++)
-                for (int x = Mathf.Max(0, x0); x < Mathf.Min(size, x1); x++)
-                    pixels[y * size + x] = colour;
         }
 
         private static Sprite GetEyeSprite()
@@ -769,6 +929,34 @@ namespace LilithMod
             label.overflowMode = TextOverflowModes.Overflow;
         }
 
+        /// <summary>Adds a small centred reason beneath an unavailable setting.</summary>
+        private static TMP_Text BuildInlineStatus(
+            TMP_Text source, Transform control, string objectName,
+            float fontScale = 0.5f, float height = 16f)
+        {
+            if (source == null || control == null) return null;
+
+            var statusObject = UnityEngine.Object.Instantiate(source.gameObject, control);
+            statusObject.name = objectName;
+            TMP_Text status = statusObject.GetComponent<TMP_Text>();
+            TraySettingView.StripLabelLocalizer(status);
+            RectTransform rect = status.rectTransform;
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(0f, -2f);
+            rect.sizeDelta = new Vector2(0f, height);
+            status.alignment = TextAlignmentOptions.Center;
+            status.enableAutoSizing = false;
+            status.enableWordWrapping = false;
+            status.overflowMode = TextOverflowModes.Overflow;
+            status.fontSize = Mathf.Max(8f, source.fontSize * fontScale);
+            status.color = DisabledColor;
+            status.raycastTarget = false;
+            status.gameObject.SetActive(false);
+            return status;
+        }
+
         private static TMP_Text FindRowLabel(Transform row)
         {
             if (row == null) return null;
@@ -816,7 +1004,7 @@ namespace LilithMod
         private static void SetVoiceSelectionWithoutNotify(TraySettingGameVoiceToggleButtons buttons)
         {
             RenameSynthesisButton(buttons._jp);
-            buttons.SetVoiceWithoutNotify(LilithModPlugin.CfgReplaceGameVoice.Value
+            buttons.SetVoiceWithoutNotify(LilithModPlugin.CfgVoiceSynthesisPreferred.Value
                 ? TraySettingChanged.GameLocalizationVoiceType.Japanese
                 : TraySettingChanged.GameLocalizationVoiceType.ChineseSimplified);
         }
@@ -824,9 +1012,9 @@ namespace LilithMod
         internal static void SetVoiceLanguageFromNative(TraySettingChanged.GameLocalizationVoiceType voiceType)
         {
             bool synthesis = voiceType == TraySettingChanged.GameLocalizationVoiceType.Japanese;
-            if (synthesis && !VoiceServiceMonitor.IsAvailable) return;
             if (LilithModPlugin.CfgVoiceSynthesisPreferred.Value == synthesis &&
-                LilithModPlugin.CfgReplaceGameVoice.Value == synthesis) return;
+                LilithModPlugin.CfgReplaceGameVoice.Value ==
+                    (synthesis && VoiceServiceMonitor.IsAvailable)) return;
             LilithModPlugin.CfgVoiceSynthesisPreferred.Value = synthesis;
             LilithModPlugin.CfgReplaceGameVoice.Value = synthesis && VoiceServiceMonitor.IsAvailable;
             if (!synthesis) LlmChatController.StopSynthPlaybackForNativeVoice();
@@ -839,17 +1027,41 @@ namespace LilithMod
         private static bool HasApiKey =>
             !string.IsNullOrWhiteSpace(LilithModPlugin.CfgApiKey.Value);
 
+        private bool HasValidApiKey =>
+            HasApiKey && _apiKeyValidation == ApiKeyValidationState.Valid;
+
+        private string ApiKeyRequirementText =>
+            _apiKeyValidation == ApiKeyValidationState.Invalid
+                ? "Valid API key required"
+                : _apiKeyValidation == ApiKeyValidationState.Checking
+                    ? "Checking API key"
+                    : _apiKeyValidation == ApiKeyValidationState.Unavailable
+                        ? "API key validation unavailable"
+                        : "DeepSeek API key required";
+
         /// <summary>
         /// All three are load-bearing: the listener carries the audio, the model
         /// recognises her name in it, and the key turns what follows into a reply.
         /// </summary>
-        private static bool WakeWordAvailable =>
-            SpeechInputService.IsAvailable && SpeechInputService.WakeWordModelAvailable && HasApiKey;
+        private bool WakeWordAvailable =>
+            SpeechInputService.IsAvailable && SpeechInputService.WakeWordModelAvailable &&
+            HasValidApiKey;
 
         private void RefreshChatAvailability()
         {
             if (_hotkeyField == null) return;
-            bool available = HasApiKey;
+            if (_deepSeekStatusText != null)
+            {
+                _deepSeekStatusText.text = "DeepSeek API key invalid";
+                _deepSeekStatusText.gameObject.SetActive(
+                    _apiKeyValidation == ApiKeyValidationState.Invalid);
+            }
+            bool available = HasValidApiKey;
+            if (_chatStatusText != null)
+            {
+                _chatStatusText.text = ApiKeyRequirementText;
+                _chatStatusText.gameObject.SetActive(!available);
+            }
             if (_lastChatAvailability == available) return;
             _lastChatAvailability = available;
 
@@ -871,7 +1083,18 @@ namespace LilithMod
             if (_pushToTalkKeyField == null) return;
             // Both are required: the listener turns speech into text, and the key
             // turns that text into a reply. Either missing makes the binding a lie.
-            bool available = SpeechInputService.IsAvailable && HasApiKey;
+            bool available = SpeechInputService.IsAvailable && HasValidApiKey;
+            if (_pushToTalkStatusText != null)
+            {
+                _pushToTalkStatusText.text = !HasValidApiKey && !SpeechInputService.IsAvailable
+                    ? _apiKeyValidation == ApiKeyValidationState.Invalid
+                        ? "Valid API Key and speech service required"
+                        : "API key and speech service required"
+                    : !HasValidApiKey
+                        ? ApiKeyRequirementText
+                        : "Speech service unavailable";
+                _pushToTalkStatusText.gameObject.SetActive(!available);
+            }
             if (_lastSpeechAvailability == available) return;
             _lastSpeechAvailability = available;
 
@@ -892,6 +1115,15 @@ namespace LilithMod
         {
             if (_wakeWordToggle == null) return;
             bool available = WakeWordAvailable;
+            if (_wakeWordStatusText != null)
+            {
+                _wakeWordStatusText.text = !HasValidApiKey
+                    ? ApiKeyRequirementText
+                    : !SpeechInputService.IsAvailable
+                        ? "Speech service\nunavailable"
+                        : "Wake-word model unavailable";
+                _wakeWordStatusText.gameObject.SetActive(!available);
+            }
             if (_lastWakeWordAvailability == available) return;
             _lastWakeWordAvailability = available;
             StyleToggleRow(_wakeWordToggle, _wakeWordLabel, available);
@@ -899,23 +1131,33 @@ namespace LilithMod
             // the setting does is most useful while it is out of reach.
             if (_wakeWordHintImage != null)
                 _wakeWordHintImage.color = available ? Color.white : DisabledColor;
+            if (_wakeWordHintText != null)
+                _wakeWordHintText.color = available ? Color.white : DisabledColor;
         }
 
         private void RefreshSynthesisAvailability()
         {
             var buttons = _view?._gameVoiceToggleButtons;
             if (buttons?._jp == null) return;
+            RenameSynthesisButton(buttons._jp);
+            EnsureSynthesisStatus(buttons._jp);
             bool available = VoiceServiceMonitor.IsAvailable;
+            if (_synthesisStatusText != null)
+            {
+                _synthesisStatusText.text = SynthesisStatusText(UiLanguage());
+                _synthesisStatusText.gameObject.SetActive(!available);
+            }
             if (_lastSynthesisAvailability == available) return;
             _lastSynthesisAvailability = available;
 
-            buttons._jp.enabled = available;
-            buttons._jp._allowClickWhenDisabled = false;
+            // Keep the choice clickable while offline. The grey style and inline
+            // status explain that speech will resume when the service returns.
+            buttons._jp.enabled = true;
+            buttons._jp._allowClickWhenDisabled = true;
             Color color = available ? Color.white : DisabledColor;
             if (buttons._jp._targetImage != null) buttons._jp._targetImage.color = color;
             foreach (TMP_Text label in buttons._jp.GetComponentsInChildren<TMP_Text>(true))
                 if (label != null) label.color = color;
-            RenameSynthesisButton(buttons._jp);
             SetVoiceSelectionWithoutNotify(buttons);
         }
 
@@ -931,7 +1173,8 @@ namespace LilithMod
             _synthesisLabels = button.GetComponentsInChildren<TMP_Text>(true);
             for (int i = 0; i < _synthesisLabels.Length; i++)
             {
-                if (_synthesisLabels[i] == null) continue;
+                if (_synthesisLabels[i] == null ||
+                    _synthesisLabels[i].gameObject.name == "LilithSynthesisStatus") continue;
                 TraySettingView.StripLabelLocalizer(_synthesisLabels[i]);
                 _synthesisLabels[i].enableWordWrapping = false;
                 _synthesisLabels[i].enableAutoSizing = false;
@@ -949,8 +1192,54 @@ namespace LilithMod
                 "Vocal Synthesis";
             for (int i = 0; i < _synthesisLabels.Length; i++)
             {
-                if (_synthesisLabels[i] != null) _synthesisLabels[i].text = text;
+                if (_synthesisLabels[i] != null &&
+                    _synthesisLabels[i].gameObject.name != "LilithSynthesisStatus")
+                    _synthesisLabels[i].text = text;
             }
+        }
+
+        /// <summary>Adds an inline status beneath the synthesis choice.</summary>
+        private static void EnsureSynthesisStatus(Component button)
+        {
+            if (_synthesisStatusText != null || button == null ||
+                _synthesisLabels == null) return;
+
+            TMP_Text source = null;
+            for (int i = 0; i < _synthesisLabels.Length; i++)
+            {
+                if (_synthesisLabels[i] != null &&
+                    _synthesisLabels[i].gameObject.name != "LilithSynthesisStatus")
+                {
+                    source = _synthesisLabels[i];
+                    break;
+                }
+            }
+            if (source == null) return;
+
+            var statusObject = UnityEngine.Object.Instantiate(source.gameObject, source.transform);
+            statusObject.name = "LilithSynthesisStatus";
+            _synthesisStatusText = statusObject.GetComponent<TMP_Text>();
+            TraySettingView.StripLabelLocalizer(_synthesisStatusText);
+            RectTransform rect = _synthesisStatusText.rectTransform;
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(18f, -2f);
+            rect.sizeDelta = new Vector2(0f, 16f);
+            _synthesisStatusText.alignment = TextAlignmentOptions.Top;
+            _synthesisStatusText.enableAutoSizing = false;
+            _synthesisStatusText.enableWordWrapping = false;
+            _synthesisStatusText.overflowMode = TextOverflowModes.Overflow;
+            _synthesisStatusText.fontSize = Mathf.Max(8f, source.fontSize * 0.5f);
+            _synthesisStatusText.color = new Color(0.75f, 0.55f, 0.55f, 1f);
+            _synthesisStatusText.raycastTarget = false;
+        }
+
+        private static string SynthesisStatusText(string language)
+        {
+            return language == "ja" ? "合成サービスはオフラインです" :
+                language == "zh" ? "合成服务未运行" :
+                "Service unavailable";
         }
 
         /// <summary>
@@ -1005,7 +1294,7 @@ namespace LilithMod
             SetWrappedLabel(_speechFolderLabel,
                 ja ? "音声入力\nフォルダを開く" : zh ? "打开语音\n输入文件夹" : "Open Speech\nInput Folder");
             SetWrappedLabel(_voiceFolderLabel,
-                ja ? "音声合成\nフォルダを開く" : zh ? "打开合成\n语音文件夹" : "Open Synth\nVoice Folder");
+                ja ? "音声合成\nフォルダを開く" : zh ? "打开合成\n语音文件夹" : "Open Vocal\nSynth Folder");
             SetWrappedLabel(_opacityLabel,
                 ja ? "不透明度" : zh ? "不透明度" : "Opacity");
             SetWrappedLabel(_allowOpenAppsLabel,
@@ -1125,6 +1414,33 @@ namespace LilithMod
             {
                 LilithModPlugin.Logger.LogWarning($"[Settings] Lilith opacity failed: {ex.Message}");
             }
+        }
+
+        private void TryShowOpacityDialogue()
+        {
+            if (_pendingOpacityDialogueDirection == 0 ||
+                Time.unscaledTime < _opacityDialogueAt) return;
+
+            bool lower = _pendingOpacityDialogueDirection < 0;
+            _pendingOpacityDialogueDirection = 0;
+            LlmChatController.ShowFixedDialogue(
+                OpacityDialogueText(lower, PersonaPrompt.CurrentVoiceLanguage()),
+                OpacityDialogueText(lower, PersonaPrompt.CurrentDisplayLanguage()));
+        }
+
+        private static string OpacityDialogueText(bool lower, string language)
+        {
+            if (language == "ja")
+                return lower
+                    ? "おお…リリスが透明になっていくよ。"
+                    : "あっ…リリスがまたはっきり見えてきたね。";
+            if (language == "zh")
+                return lower
+                    ? "哦……莉莉丝正在变透明。"
+                    : "啊……莉莉丝又渐渐清晰了。";
+            return lower
+                ? "Ooh... Lilith is turning invisible."
+                : "Ah... Lilith is coming back into view.";
         }
 
         private void OnDestroy()

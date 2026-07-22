@@ -43,13 +43,13 @@ transcript is discarded rather than overwriting your words.
 
 2. VOICE - optional. She works silently without it.
 
-   Settings / Sound / Open Synth Voice Folder, then follow README.txt. It
+   Settings / Sound / Open Vocal Synth Folder, then follow README.txt. It
    explains how to install the local speech synthesiser and point the mod at a
    voice model.
 
-   While the voice service is unavailable the option greys out and she falls
-   back to the game's original voice. It recovers on its own when the service
-   returns.
+   While the voice service is unavailable the option stays selectable but
+   greys out and shows its offline status. Speech resumes when the service
+   returns; Chinese voice is used only when you select Chinese.
 
 3. SPEECH INPUT - optional. F8 only.
 

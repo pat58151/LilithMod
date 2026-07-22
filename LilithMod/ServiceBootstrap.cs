@@ -19,21 +19,22 @@ namespace LilithMod
             {
                 if (!LilithModPlugin.CfgAutoStartServices.Value) return;
 
-                if (StartupShortcutInstalled())
+                bool voiceRequired = VoiceConfig.Enabled;
+                bool speechRequired = LilithModPlugin.CfgPushToTalkEnabled != null &&
+                                      LilithModPlugin.CfgPushToTalkEnabled.Value;
+                bool voiceReady = !voiceRequired || VoiceServiceReachable();
+                bool speechReady = !speechRequired || SpeechListenerReachable();
+                if (voiceReady && speechReady)
                 {
-                    // Login already owns them. Starting a second copy here would
-                    // fight the first over the microphone and the TTS port.
                     LilithModPlugin.Logger.LogInfo(
-                        "[Services] Startup shortcut is installed; leaving the services to it.");
+                        "[Services] Required voice and speech services are healthy.");
                     return;
                 }
 
-                if (VoiceServiceReachable())
-                {
+                if (StartupShortcutInstalled())
                     LilithModPlugin.Logger.LogInfo(
-                        "[Services] Voice service is already answering; nothing to start.");
-                    return;
-                }
+                        "[Services] Startup shortcut exists, but a required service is " +
+                        "not healthy; restarting services from the game.");
 
                 string launcher = LauncherPath();
                 if (string.IsNullOrEmpty(launcher) || !File.Exists(launcher))
@@ -53,7 +54,8 @@ namespace LilithMod
                     CreateNoWindow = true
                 });
                 StartedServices = true;
-                LilithModPlugin.Logger.LogInfo("[Services] Starting voice services: " + launcher);
+                LilithModPlugin.Logger.LogInfo(
+                    "[Services] Starting missing voice or speech services: " + launcher);
             }
             catch (Exception ex)
             {
@@ -95,6 +97,22 @@ namespace LilithMod
                     client.EndConnect(connecting);
                     return client.Connected;
                 }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool SpeechListenerReachable()
+        {
+            try
+            {
+                string plugin = Path.GetDirectoryName(typeof(ServiceBootstrap).Assembly.Location);
+                if (string.IsNullOrEmpty(plugin)) return false;
+                var heartbeat = new FileInfo(Path.Combine(plugin, "push-to-talk.alive"));
+                return heartbeat.Exists &&
+                       DateTime.UtcNow - heartbeat.LastWriteTimeUtc < TimeSpan.FromSeconds(12);
             }
             catch
             {

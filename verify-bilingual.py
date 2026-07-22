@@ -1,6 +1,6 @@
 """
-verify-bilingual.py - checks the bilingual voice feature: Japanese audio with
-English subtitles, advanced per sentence, with synthesis of the next sentence
+verify-bilingual.py - checks the configurable synthesized voice and subtitle feature,
+advanced per sentence, with synthesis of the next sentence
 overlapping playback of the current one.
 
 Read-only. Builds the mod, then asserts the load-bearing pieces are present.
@@ -9,12 +9,15 @@ Follows the pattern of verify-voice.py.
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 MOD_DIR = os.path.join(ROOT, "LilithMod")
-DOTNET = r"C:\Program Files\dotnet\dotnet.exe"
+DOTNET = shutil.which("dotnet") or r"C:\Program Files\dotnet\dotnet.exe"
+GAME_DIR = os.environ.get("LILITH_GAME_DIR", "")
+BUILD_DIR = os.path.join(ROOT, "build-test")
 
 failures = []
 
@@ -26,10 +29,15 @@ def check(condition, message):
 
 # -- 1. Build -----------------------------------------------------------------
 proj = os.path.join(MOD_DIR, "LilithMod.csproj")
+if not GAME_DIR:
+    sys.exit("VERIFY FAIL - set LILITH_GAME_DIR to the game folder")
+if not os.path.isfile(DOTNET):
+    sys.exit("VERIFY FAIL - install the .NET SDK or put dotnet on PATH")
 # Build outside the live plugin folder.
 r = subprocess.run(
     [DOTNET, "build", proj, "-c", "Release",
-     "-p:OutputPath=" + os.path.join(ROOT, "build-test") + os.sep],
+     "-p:GameDir=" + GAME_DIR,
+     "-p:OutputPath=" + BUILD_DIR + os.sep],
     capture_output=True, text=True, cwd=MOD_DIR,
 )
 if r.returncode != 0:
@@ -74,11 +82,13 @@ memory_vectorizer = read(MOD_DIR, "MemoryVectorizer.cs")
 live_info = read(MOD_DIR, "LiveInformationService.cs")
 integrations = read(MOD_DIR, "ModIntegrations.cs")
 game_voice = read(MOD_DIR, "GameVoiceCoordinator.cs")
+dialogue_catalog = read(MOD_DIR, "DialogueTextCatalog.cs")
 settings = read(MOD_DIR, "SettingsBridge.cs")
 voice_setup = read(MOD_DIR, "VoiceSetup.cs")
 note_journal = read(MOD_DIR, "NoteJournal.cs")
 speech_input = read(MOD_DIR, "SpeechInputService.cs")
 voice_monitor = read(MOD_DIR, "VoiceServiceMonitor.cs")
+service_bootstrap = read(MOD_DIR, "ServiceBootstrap.cs")
 tts = read(MOD_DIR, "TtsClient.cs")
 switcher = read(MOD_DIR, "VoiceModelSwitcher.cs")
 ptt = read(ROOT, "runtime", "push_to_talk.py")
@@ -91,8 +101,9 @@ installer = read(ROOT, "installer", "LilithMod.iss")
 
 # -- 2. The sentence pair type ------------------------------------------------
 check(utterance, "LilithMod/Utterance.cs is missing")
-check("JaText" in utterance and "EnText" in utterance,
-      "Utterance must carry both JaText and EnText")
+check("SpokenText" in utterance and "ShownText" in utterance and
+      "JaText" not in utterance and "EnText" not in utterance,
+      "Utterance fields must describe generic synthesis, not one language pair")
 
 # -- 3. Per-sentence queue and cross-thread hand-off ---------------------------
 check("ConcurrentQueue<Utterance>" in speech,
@@ -139,7 +150,7 @@ check("AudioManager.IsTimerAlarmRinging" in game_voice and "2051005" in game_voi
       "AlarmEnglish[alarmIndex]" in game_voice,
       "Dynamic line-0 timer/alarm dialogue must use Japanese catalog speech")
 check("2951001" in game_voice and "2951002" in game_voice and "_alarmDialogueUntil" in game_voice,
-      "Alarm acknowledgement and snooze dialogue must stay in Japanese synthesis")
+      "Alarm acknowledgement and snooze dialogue must stay in configured synthesis")
 check("nameof(AudioManager.PlayVoice)" in integrations and
       "new[] { typeof(string), typeof(bool) }" in integrations,
       "Both native PlayVoice overloads must be suppressed during replacement")
@@ -150,8 +161,8 @@ check("HoldingForSynthesis" in game_voice and "EverAvailable" in game_voice,
 check("NoteServiceAnswered" in voice_monitor and "NoteServiceAnswered" in speech,
       "A successful warm-up must mark the service available, not wait for the probe")
 check(len(re.findall(r"return AllowNativeVoice\(\);", integrations)) >= 3 and
-      "GameVoiceCoordinator.HoldingForSynthesis" in integrations,
-      "Every native-audio prefix must honour the grace window, not just the bubble")
+      "if (SynthesisSelected) return false;" in integrations,
+      "Every native-audio prefix must follow the explicit language selection")
 
 # -- 6. Reply parsing and its fallbacks ---------------------------------------
 check("ParseUtterances" in chat, "A tolerant reply parser is required")
@@ -303,13 +314,19 @@ check("ApplyConfiguredHotkey" in chat and '"Open chat"' in settings and
       "The F7 chat key must be press-to-rebind in the Controls settings")
 check(ptt and not os.path.exists(os.path.join(ROOT, "runtime", "wake_listener.py")),
       "runtime/push_to_talk.py must replace runtime/wake_listener.py")
-check("openwakeword" not in ptt.lower() and "openwakeword" not in requirements.lower() and
-      "wake_listener.py" not in requirements,
-      "openWakeWord must be gone from the listener and its dependency list")
-check("ARM_SECONDS" not in ptt and "WAKE_RE" not in ptt and
-      "playback_lock" not in ptt and "--playback-lock" not in launcher,
-      "The wake regex, arm window, and playback lock existed only for an always-open "
-      "microphone and must not survive push-to-talk")
+check("openwakeword" in ptt.lower() and "openwakeword" in requirements.lower() and
+      "inference_framework=\"onnx\"" in ptt,
+      "The listener must load the trained wake-word model through openWakeWord ONNX")
+check("ARM_SECONDS" in ptt and "WAKE_RE" not in ptt and
+      "playback_lock" in ptt and "--playback-lock" in launcher,
+      "Wake detection must use a bounded arm window and suppress itself during playback")
+check("WAKE_PREROLL_SECONDS" not in ptt and "starts_with_wake_word" not in ptt and
+      'parser.add_argument("--vocabulary", default=""' in ptt,
+      "Wake capture must send only the post-trigger command to STT, without a "
+      "Lilith prompt or wake-audio pre-roll")
+check("--wake-model" in ptt and "--wake-flag" in ptt and
+      "--wake-model" in launcher and "wake-word.on" in launcher,
+      "The launcher and listener must share the model and live enable flag")
 check("trigger.exists()" in ptt and "--trigger" in ptt and "--trigger" in launcher,
       "The mod must define the recording window through a trigger file")
 check("WindowFocus.IsKeyDown(_vkPushToTalk)" in chat and "StartListening" in chat and
@@ -355,9 +372,16 @@ check("ClearPushToTalkTrigger();" in chat.split("private void Update()")[0],
 check("PARTIAL_MARKER" in ptt and "next_partial_at" in ptt and
       "SpeechPartialMarker" in chat and "_inputField.text = partial" in chat,
       "Speech must stream partial recognition into the chat field")
+check("_speechWakeWordCapture = wakeWord" in chat and
+      "partial = PrefixWakeWord(partial)" in chat and
+      "new SpeechCommandInput" in chat and
+      "PrefixWakeWord(command.Text)" in chat and
+      "string message = string.Equals(shown, expectedDisplay" in chat and
+      'return "Lilith, " + value' in chat,
+      "Wake-started speech must add Lilith independently to the UI and LLM message")
 check("if (!_speechListening) return;" in chat,
       "A partial arriving after listening ends must not overwrite the final transcript")
-check("CloneActionRow" in settings and "Open Synth" in settings and
+check("CloneActionRow" in settings and "Open Vocal" in settings and
       "Vocal Synthesis" in settings and voice_setup,
       "Settings must expose the file-based vocal synthesis setup")
 check("voiceFolderRow.gameObject.SetActive(true)" in settings and
@@ -367,6 +391,14 @@ check("voiceFolderRow.gameObject.SetActive(true)" in settings and
       "row must be activated explicitly or it renders as nothing")
 check("SetSettingsInteractive(settingsTyping)" in settings,
       "Settings must only capture the desktop while a text field is focused")
+check("OrderMeRows(view);" in settings and "view._yourNameInputField" in settings and
+      "view._calendarView" in settings and "view._noteNotificationToggle" in settings and
+      '"view notes"' in settings and "notesRow, helpRow" in settings,
+      "The Me tab must keep name, birthday, API key, note controls, and Help in order")
+check("MapRow(_speechFolderLabel, TraySettingView.TabControls)" in settings and
+      "OrderControlsRows(view);" in settings and
+      "speechFolderRow.SetSiblingIndex(pushToTalkRow.GetSiblingIndex() + 1)" in settings,
+      "Speech setup must sit directly after push-to-talk in Controls")
 check("EnterKeyboardMode" in window_focus and
       "BeginKeyboardInput" not in window_focus.split("EnterKeyboardMode")[1].split(
           "private static void EnterInteractiveMode")[0],
@@ -378,6 +410,10 @@ check("s_beganKeyboardInput" in window_focus,
 check("WindowStyle Hidden" in launcher and "/set_gpt_weights" in launcher and
       "/set_sovits_weights" in launcher and "service-startup.log" in launcher,
       "The hidden launcher must select, warm, and log all voice services")
+check("SpeechListenerReachable" in service_bootstrap and
+      "voiceReady && speechReady" in service_bootstrap and
+      "Startup shortcut exists, but a required service" in service_bootstrap,
+      "Game startup must check actual service health instead of trusting a shortcut")
 check("parallel_infer = false" in tts.lower() and
       "parallel_infer = false" in switcher.lower() and
       "parallel_infer = $false" in launcher.lower() and
@@ -438,25 +474,65 @@ check("SpeechInputService" in speech_input and "push-to-talk.alive" in speech_in
       "HEARTBEAT_INTERVAL" in ptt and "RefreshSpeechAvailability" in settings,
       "Push-to-talk must grey out when its listener is not running, or the key opens "
       "a bar that waits forever for a transcript nobody is writing")
+check("PollWakeWordListening" in chat and "wake-listening.active" in chat and
+      'wake_ui = output.parent / "wake-listening.active"' in ptt and
+      "StartListening(true)" in chat and "WAKE_THRESHOLD = 0.70" in ptt and
+      "_lastWakeListeningToken" in chat and "File.ReadAllText(_wakeListeningPath)" in chat,
+      "Wake-word capture must expose the same visible transcript UI as push-to-talk")
+check("SpeechInputPrompt" in chat and
+      "SendUserMessage(message, false, nativeActionHandled, true)" in chat and
+      "messagesSnapshot.Insert(messagesSnapshot.Count - 1" in chat,
+      "Speech-to-text requests must carry a separate uncertainty instruction")
+check("TryShowOpacityDialogue" in settings and "OpacityDialogueDelay" in settings and
+      "Ooh... Lilith is turning invisible." in settings and
+      "Ah... Lilith is coming back into view." in settings and
+      "ShowFixedDialogue" in chat,
+      "Opacity changes must produce one debounced fixed dialogue for each direction")
+check("PlaybackStartedQueue" in speech and
+      "QueueAppActionForPlayback" in chat and
+      "RunPendingAppAction" in chat and
+      "queued for speech" in chat,
+      "Allowed app launches must wait for generated speech playback to begin")
 check("!SpeechInputService.IsAvailable" in chat,
       "The key must not start listening while the listener is down")
-check("SpeechInputService.IsAvailable && HasApiKey" in settings and
+check("SpeechInputService.IsAvailable && HasValidApiKey" in settings and
       "RefreshChatAvailability" in settings,
       "Push-to-talk needs both the listener and an API key; the chat binding needs "
       "the key, since neither does anything without it")
-check("OpenSpeechFolder" in settings and 'MapRow(_speechFolderLabel, TraySettingView.TabMe)' in settings,
-      "The speech setup folder must be reachable from the Me tab")
+check("BuildInlineStatus" in settings and
+      "LilithChatStatus" in settings and
+      "LilithPushToTalkStatus" in settings and
+      "LilithWakeWordStatus" in settings and
+      "API key and speech service required" in settings and
+      "Wake-word model unavailable" in settings,
+      "Unavailable chat, push-to-talk, and wake-word controls need inline reasons")
+check("ValidateDeepSeekApiKeyAsync" in settings and
+      'new UriBuilder(configured.Scheme, configured.Host, configured.Port, "models")' in settings and
+      "Valid API key required" in settings and
+      "Valid API Key and speech service required" in settings and
+      "DeepSeek API key invalid" in settings and
+      "LilithDeepSeekStatus" in settings,
+      "Changed DeepSeek keys must be validated before dependent controls are enabled")
+check("OpenSpeechFolder" in settings and
+      'MapRow(_speechFolderLabel, TraySettingView.TabControls)' in settings,
+      "The speech setup folder must be reachable from Controls")
 check("QualifyingUtc" in note_journal and "WindowHours" in plugin and
       "Prune(windowHours)" in note_journal,
       "Qualifying conversations must fall inside one window, not accumulate forever")
 check("VocalSynthesisPreferred" in plugin and "Task.WhenAny" in voice_monitor and
       "CfgReplaceGameVoice.Value = effective" in voice_monitor and
-      "VoiceServiceMonitor.IsAvailable" in settings and "_jp.enabled = available" in settings,
-      "Vocal synthesis must grey out while unavailable and restore its saved preference")
+      "VoiceServiceMonitor.IsAvailable" in settings and "_jp.enabled = true" in settings and
+      "_allowClickWhenDisabled = true" in settings,
+      "Vocal synthesis must stay selectable while offline, grey out, and restore its preference")
+check("SetVoiceWithoutNotify(LilithModPlugin.CfgVoiceSynthesisPreferred.Value" in settings,
+      "The settings row must show the saved synthesis choice during an outage")
+check("EnsureSynthesisStatus" in settings and "LilithSynthesisStatus" in settings and
+      "SynthesisStatusText" in settings and "SetActive(!available)" in settings and
+      "source.gameObject, source.transform" in settings,
+      "The synthesis button must show service-unavailable directly under its label")
 
 # -- 8. Output artifacts ------------------------------------------------------
-out_dir = (r"D:\SteamLibrary\steamapps\common\The NOexistenceN of Lilith"
-           r"\BepInEx\plugins\LilithMod")
+out_dir = BUILD_DIR
 check(os.path.exists(os.path.join(out_dir, "LilithMod.dll")),
       "LilithMod.dll not found after build")
 check(any("NAudio" in n for n in (os.listdir(out_dir) if os.path.isdir(out_dir) else [])),
@@ -518,46 +594,44 @@ check("DialogueTextCatalog.Available" in integrations,
       "the bubble gate and the audio prefixes turn off together")
 check("DialogueTextCatalog.Available" in game_voice,
       "A line must not be held for synthesis that cannot be translated")
-# Never send untranslated node text to Japanese synthesis.
+# Never send untranslated node text to synthesis.
 check("text = node.text;" not in game_voice,
       "Native dialogue must never fall back to node.text for synthesis; without a "
       "catalogue entry the original voice has to be kept instead")
-# Declined replacement must preserve native audio.
-check("NativeAudioAllowed" in game_voice and "NativeAudioAllowed" in integrations,
-      "A line handed back unreplaced must keep its own audio, or it plays silently")
-# A cache is an implementation detail, not an offline voice mode. When the
-# synthesis service is unavailable the effective setting is native Chinese.
+# A cache is an implementation detail, not an offline voice mode.
 check("CacheReplacementPossible" not in game_voice and "cachedOnly" not in game_voice,
-      "Cached synthesized voice must not play while synthesis is unavailable; fallback is "
-      "native Chinese only")
+      "Cached synthesized voice must not play while synthesis is unavailable")
 check("VoiceServiceMonitor.IsAvailable" in integrations,
       "Game-voice replacement must require a currently available synthesis service")
-check(integrations.count(
-          "if (!VoiceReplacementEnabled() && !GameVoiceCoordinator.HoldingForSynthesis)") >= 2,
-      "Effective native mode must override stale suppression in both dialogue and "
-      "animation audio paths")
 check(re.search(
           r"!_allowOriginalShow\s*&&\s*!replacing(?:(?!if \(_allowOriginalShow).)*"
-          r"AllowNativeAudioForThisLine\(\);",
+          r"SynthesisSelected\) SuppressNativeAudioForThisLine\(\);\s*"
+          r"else AllowNativeAudioForThisLine\(\);",
           game_voice, re.S),
-      "A native fallback line must clear stale replacement suppression, or its "
-      "Chinese subtitle appears without voice")
+      "An unavailable synth line must keep its subtitle silent; Chinese audio is "
+      "allowed only when Chinese was explicitly selected")
 check("AvailabilityKnown" in voice_monitor and "AvailabilityKnown" in game_voice,
-      "A failed startup probe must end the grace window and release native Chinese")
+      "A failed startup probe must end the grace window and release the subtitle")
 check("StopSynthPlaybackForNativeVoice" in voice_monitor,
       "Losing the synthesis service must cancel synthesized audio already queued")
-check("PublishGameVoice" in voice_monitor and "ChineseSimplified" in voice_monitor,
-      "Offline fallback must route the game's runtime voice database to Chinese, or "
-      "idle and interaction lines with localized lookups are silent")
+check("PublishGameVoice" not in voice_monitor and
+      "keeping synthesis selected and speech silent" in voice_monitor,
+      "A synthesis outage must not silently change the selected language to Chinese")
 check("LanguageIsCurrent" in switcher and "LanguageIsCurrent" in tts,
       "A cache hit must confirm the running weights match the language, or she "
       "speaks cached audio in the wrong voice")
-# Bubble and native audio callbacks share the cached-replacement decision.
-check("NativeAudioSuppressed" in game_voice and "NativeAudioSuppressed" in integrations,
-      "A cached replacement must suppress the game's own audio, or both play at once")
+# Bubble and native audio callbacks share the explicit setting.
+check("internal static bool SynthesisSelected" in integrations and
+      integrations.count("SynthesisSelected") >= 5,
+      "Every native voice route must use the explicit synthesis selection")
 check("PlayActionSEOrVoice" in integrations and "ReplaceActionVoice" in integrations,
       "The dialogue action-voice fallback must share replacement suppression, or "
       "farewell lines play their original Chinese voice under cached synthesized voice")
+check(integrations.count("if (SynthesisSelected)") >= 3,
+      "Action and animation voice must be blocked for the full synthesis mode, or "
+      "Chinese interaction audio leaks before the dialogue-node decision")
+check("AudioManager.PlayActionSE(actionType);" in integrations,
+      "Suppressing an interaction voice must retain its non-vocal action sound")
 check("PlayAnimationAudio" in integrations and "ReplaceAnimationAudio" in integrations,
       "Sleep and farewell animation audio must be suppressed during replacement, or "
       "their bundled Chinese voice bypasses every dialogue-audio gate")
@@ -585,12 +659,20 @@ check("_nativeQueue" in speech and "ProcessNativeLoop" in speech and
       "and Goodbye until after exit")
 check("_playbackGate" in voice_player and "PlaySyncExclusive" in voice_player,
       "Priority and chat workers must serialize the shared audio output")
+native_loop = speech[speech.find("private void ProcessNativeLoop"):
+                     speech.find("private void SetPlaybackActive")]
+check("_voicePlayer.Stop();" not in native_loop,
+      "A native cue must wait behind active generated playback, not stop a one-line "
+      "Japanese ambient remark and leave it silent")
 # Runtime dialogue translation is cached asynchronously.
 dynamic_cache = read(MOD_DIR, "DynamicLineCache.cs")
 check(dynamic_cache and "TranslateLineToJapaneseAsync" in chat,
       "Runtime-built dialogue needs a Japanese translation path, or it is silent")
 check("DynamicLineCache.TryGet" in game_voice and "RequestTranslation" in game_voice,
       "The dialogue path must use the cache and request a fill on a miss")
+check('language.StartsWith("ja"' in game_voice and "!japanese && !chinese" in dialogue_catalog,
+      "Language-specific game catalogs must not feed Japanese or Chinese text to a "
+      "different configured synthesis language")
 check("InFlight" in dynamic_cache,
       "A repeating line must not queue one translation request per occurrence")
 # Cancelled native cues must return to the coordinator.

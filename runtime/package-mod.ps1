@@ -80,10 +80,22 @@ try {
     Copy-Item (Join-Path $scriptDir "speech-input-requirements.txt") $speechSetupOut -Force
     Copy-Item (Join-Path $scriptDir "install-speech-input.ps1") $speechSetupOut -Force
     Copy-Item (Join-Path $scriptDir "install-voice-synth.ps1") $voiceSetupOut -Force
-    Copy-Item (Join-Path $ProjectFolder "voice-runtime\requirements-inference.txt") $voiceSetupOut -Force
+    Copy-Item (Join-Path $scriptDir "voice-synth-requirements.txt") `
+        (Join-Path $voiceSetupOut "requirements-inference.txt") -Force
     Copy-Item (Join-Path $scriptDir "start-lilith.ps1") $launcherOut -Force
     Copy-Item (Join-Path $scriptDir "push_to_talk.py") $launcherOut -Force
     Copy-Item (Join-Path $ProjectFolder "start-tts.ps1") $launcherOut -Force
+
+    # The generic model goes to speech-setup\lilith.onnx, where SpeechInputService
+    # looks and the installer's tick box places it. Only the generic one ships;
+    # the personal model stays local.
+    $wakeModel = Join-Path $ProjectFolder "training\wakeword\lilith_generic\lilith.onnx"
+    if (Test-Path $wakeModel) {
+        Copy-Item $wakeModel (Join-Path $speechSetupOut "lilith.onnx") -Force
+        Write-Host "Bundled the generic wake-word model."
+    } else {
+        Write-Host "No trained wake-word model found; the installer will omit that option."
+    }
 
     # Guard rather than trust: if a dumped script, cached audio, or a config
     # holding a key ever reaches the staging folder, fail instead of shipping it.

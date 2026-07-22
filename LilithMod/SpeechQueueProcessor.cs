@@ -43,6 +43,7 @@ namespace LilithMod
         /// <summary>Signals that the full reply should be shown after voice failure.</summary>
         public ConcurrentQueue<bool> VoiceFailureQueue { get; } = new ConcurrentQueue<bool>();
         public ConcurrentQueue<bool> ReplyFinishedQueue { get; } = new ConcurrentQueue<bool>();
+        public ConcurrentQueue<bool> PlaybackStartedQueue { get; } = new ConcurrentQueue<bool>();
 
         /// <summary>Checks whether a line is cached.</summary>
         internal bool IsCached(string text, string language) => _ttsClient.IsCached(text, language);
@@ -50,7 +51,7 @@ namespace LilithMod
         /// <summary>Thread-safe enqueue for the Unity main thread.</summary>
         public void Enqueue(Utterance utterance)
         {
-            if (utterance == null || (!utterance.CompletionOnly && string.IsNullOrEmpty(utterance.JaText)))
+            if (utterance == null || (!utterance.CompletionOnly && string.IsNullOrEmpty(utterance.SpokenText)))
                 return;
             // Game dialogue must never sit behind an uncached ambient response. The
             // local service can take tens of seconds for those, which made normal
@@ -78,8 +79,8 @@ namespace LilithMod
                 return;
             _queue.Enqueue(new Utterance
             {
-                JaText = text,
-                EnText = text,
+                SpokenText = text,
+                ShownText = text,
                 Language = PersonaPrompt.CurrentVoiceLanguage(),
                 EndOfReply = true
             });
@@ -102,6 +103,7 @@ namespace LilithMod
             }
             while (VoiceFailureQueue.TryDequeue(out _)) { }
             while (ReplyFinishedQueue.TryDequeue(out _)) { }
+            while (PlaybackStartedQueue.TryDequeue(out _)) { }
             _abandonRun = true;
         }
 
@@ -266,7 +268,7 @@ namespace LilithMod
                         // First sentence of a reply: nothing was pre-synthesised, so
                         // this one is paid for up front.
                         _abandonRun = false;
-                        currentWav = _ttsClient.SynthesizeAsync(current.JaText, current.Language, _cts.Token)
+                        currentWav = _ttsClient.SynthesizeAsync(current.SpokenText, current.Language, _cts.Token)
                             .GetAwaiter().GetResult();
                     }
                 }
@@ -314,7 +316,7 @@ namespace LilithMod
                     {
                         var pending = next;
                         nextSynth = Task.Run(
-                            () => _ttsClient.SynthesizeAsync(pending.JaText, pending.Language, _cts.Token)
+                            () => _ttsClient.SynthesizeAsync(pending.SpokenText, pending.Language, _cts.Token)
                                 .GetAwaiter().GetResult());
                         LilithModPlugin.Logger.LogInfo(
                             "[Voice] synth started for next sentence while current one plays.");
@@ -336,9 +338,9 @@ namespace LilithMod
                     if (current.NativeDialogue.Cancelled)
                         continue;
                 }
-                if (!current.SuppressSubtitle && !string.IsNullOrEmpty(current.EnText))
+                if (!current.SuppressSubtitle && !string.IsNullOrEmpty(current.ShownText))
                 {
-                    subtitleCue = new SubtitleCue(current.EnText);
+                    subtitleCue = new SubtitleCue(current.ShownText);
                     SubtitleQueue.Enqueue(subtitleCue);
                     try
                     {
@@ -363,6 +365,7 @@ namespace LilithMod
                 try
                 {
                     SetPlaybackActive(true);
+                    PlaybackStartedQueue.Enqueue(true);
                     try
                     {
                         _voicePlayer.PlaySync(currentWav);
@@ -398,7 +401,7 @@ namespace LilithMod
                 int generation = Volatile.Read(ref _nativeCancelGeneration);
                 try
                 {
-                    wav = _ttsClient.SynthesizeAsync(current.JaText, current.Language, _cts.Token)
+                    wav = _ttsClient.SynthesizeAsync(current.SpokenText, current.Language, _cts.Token)
                         .GetAwaiter().GetResult();
                 }
                 catch (OperationCanceledException)
@@ -434,9 +437,10 @@ namespace LilithMod
 
                 try
                 {
-                    // Native dialogue has priority over a generated reply already
-                    // playing through the shared output device.
-                    _voicePlayer.Stop();
+                    // VoicePlayer serializes both workers. Do not stop a generated
+                    // remark here: doing so made a one-sentence ambient reply go
+                    // silent whenever a native cue became ready at the same time.
+                    // The native line waits for the current clip, then plays next.
                     SetPlaybackActive(true);
                     try
                     {

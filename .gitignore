@@ -3,6 +3,16 @@ decomp/
 bin/
 obj/
 *.zip
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+TestResults/
+coverage/
+.coverage
+.DS_Store
+Thumbs.db
 
 # Holds a copy of LilithMod.cfg, which carries the API key.
 backup/

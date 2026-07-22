@@ -25,13 +25,13 @@ namespace LilithMod
             var single = new List<Utterance> { source };
             if (source == null || source.NativeDialogue != null) return single;
 
-            string spokenText = source.JaText ?? string.Empty;
+            string spokenText = source.SpokenText ?? string.Empty;
             if (Weight(spokenText) < MinWeightToSplit) return single;
 
             List<string> spoken = Split(spokenText);
             if (spoken.Count < 2) return single;
 
-            List<string> shown = Split(source.EnText ?? string.Empty);
+            List<string> shown = Split(source.ShownText ?? string.Empty);
 
             // Split subtitles only when both languages have matching sentence counts.
             bool paired = shown.Count == spoken.Count;
@@ -48,8 +48,8 @@ namespace LilithMod
             {
                 result.Add(new Utterance
                 {
-                    JaText = spokenParts[i],
-                    EnText = shownParts != null ? shownParts[i] : (i == 0 ? source.EnText : string.Empty),
+                    SpokenText = spokenParts[i],
+                    ShownText = shownParts != null ? shownParts[i] : (i == 0 ? source.ShownText : string.Empty),
                     Language = source.Language,
                     SuppressSubtitle = source.SuppressSubtitle ||
                                        (shownParts == null && i > 0),
@@ -141,7 +141,7 @@ namespace LilithMod
             return result;
         }
 
-        // Japanese runs its sentences together; English does not.
+        // CJK scripts run their sentences together; Latin scripts do not.
         private static string Join(string left, string right)
         {
             if (string.IsNullOrEmpty(left)) return right;

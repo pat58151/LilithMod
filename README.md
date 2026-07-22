@@ -13,13 +13,13 @@ line: present without demanding attention.
 
 | she can | what that looks like |
 |---|---|
-| **Hold a conversation** | Type to her with F7 or speak with F8. She answers in character with subtitles in the game display language. |
-| **Speak aloud** | Choose the game's native Chinese voice or a local GPT-SoVITS voice. The selected mode applies to generated and scripted dialogue. |
+| **Hold a conversation** | Type to her with F7, speak with F8, or call her by name. She answers in character with subtitles in the game display language. |
+| **Speak aloud** | Choose the game's native Chinese voice or a local GPT-SoVITS voice. The voice you choose carries all she says — her own words and the game's lines alike. |
 | **Remember you** | She carries recent talks with her and lets meaningful moments settle into longer memory. |
-| **Notice things** | She senses the time, her posture, sleep, and your touch, then responds in a way that fits her current state. |
-| **Speak first** | Now and then she begins on her own, with newly generated dialogue shaped by the moment. |
+| **Notice things** | She senses the time, her posture, sleep, and your touch, and it colours how she answers. |
+| **Speak first** | Now and then she begins on her own, finding her own words for the moment. |
 | **Write to you** | Rarely, after several real conversations, she might leave a note in the in-game inbox. |
-| **Look things up** | Weather and web search, when you ask her to. |
+| **Look things up** | Ask, and she can reach past the game for the weather, or search the web for what you need. |
 
 Chat needs an API key you supply. Voice and speech input are optional; without
 them she still works, silently and typed-only, and the settings rows that need
@@ -65,6 +65,8 @@ again to cancel.
 
 ![listening](image/f8.png)
 
+**Say her name** and she wakes, on her own, to listen to what you have to say.
+
 Typing while F8 listens wins — what you type is used and the transcript
 discarded. Escape closes the bar. Both keys rebind under Settings / Controls,
 and cannot be bound to the same key.
@@ -96,8 +98,8 @@ the contents of another application.
 
 ## Voice selection
 
-The Sound settings offer the game's native Chinese voice or Lilith's local
-vocal synthesis.
+The Sound settings offer the game's native Chinese voice or a voice of your
+own, running on your machine.
 
 ---
 
@@ -116,7 +118,7 @@ Her voice, memory, and notes remain on this machine. When Lilith answers, the
 relevant parts of your shared history accompany your message.
 
 Voice setup is optional and documented separately: **Settings / Sound / Open
-Synth Voice Folder**. No synthesiser and no voice model are bundled — that
+Vocal Synth Folder**. No synthesiser and no voice model are bundled — that
 folder explains how to install one and point the mod at it. Speech input
 likewise, under **Settings / Me**. Neither folder button ever greys out — they
 are how you find out why something is unavailable.
@@ -128,4 +130,4 @@ behind her memory, voice, awareness, and behavior.
 
 ## Development
 
-Build and packaging notes live in **[document/BUILDING.md](document/BUILDING.md)**.
+Build, validation, and repository setup notes live in **[DEVELOPMENT.md](DEVELOPMENT.md)**.

@@ -187,13 +187,36 @@ try {
     $requirements = Join-Path $scriptDir "speech-input-requirements.txt"
     if (-not (Test-Path $requirements)) { throw "speech-input-requirements.txt not found beside this script." }
     $depsInstalled = $false
-    try { & $venvPython -c "import faster_whisper" 2>$null; $depsInstalled = ($LASTEXITCODE -eq 0) } catch { }
+    try { & $venvPython -c "import faster_whisper, openwakeword" 2>$null; $depsInstalled = ($LASTEXITCODE -eq 0) } catch { }
     if (-not $depsInstalled) {
         Write-Host "Installing speech recognition packages..."
         & $uv pip install --python $venvPython -r $requirements
         if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
     }
     else { Write-Host "Speech packages already installed." }
+
+    # The launcher prefers voice-runtime when it exists because its Transformers
+    # Whisper can use the GPU. Speech input has its own CPU environment, so install
+    # only the listener-specific packages into that preferred runtime as well. Do
+    # not apply the full requirements file there: its NumPy pin conflicts with
+    # GPT-SoVITS.
+    $wakeRuntimes = @($venvPython)
+    $voicePython = Join-Path $LocalDataRoot "voice-runtime\python\Scripts\python.exe"
+    if ((Test-Path $voicePython) -and $voicePython -ne $venvPython) {
+        Write-Host "Adding speech listener packages to the voice runtime..."
+        & $uv pip install --python $voicePython `
+            sounddevice==0.5.2 silero-vad==6.2.1 openwakeword==0.6.0
+        if ($LASTEXITCODE -ne 0) { throw "Voice-runtime speech dependencies failed." }
+        $wakeRuntimes += $voicePython
+    }
+
+    # openWakeWord's wheel contains code only. Its shared ONNX mel-spectrogram
+    # and embedding networks are downloaded once per environment.
+    foreach ($wakePython in $wakeRuntimes) {
+        Write-Host "Preparing wake-word feature models in $wakePython..."
+        & $wakePython -c "from openwakeword.utils import download_models; download_models(model_names=['__features_only__'])"
+        if ($LASTEXITCODE -ne 0) { throw "Wake-word feature model download failed." }
+    }
 
     Set-VoiceConfigRuntimePath $PluginFolder
 

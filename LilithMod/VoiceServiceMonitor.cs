@@ -1,7 +1,6 @@
 using System;
 using System.Net.Sockets;
 using System.Threading.Tasks;
-using UI.TraySetting;
 using UnityEngine;
 
 namespace LilithMod
@@ -102,7 +101,6 @@ namespace LilithMod
 
         private void ApplyAvailability(bool available)
         {
-            bool firstResolution = !AvailabilityKnown;
             bool wasAvailable = IsAvailable;
             bool changed = IsAvailable != available;
             IsAvailable = available;
@@ -115,16 +113,6 @@ namespace LilithMod
                 LilithModPlugin.CfgReplaceGameVoice.Value = effective;
             if (wasAvailable && !available)
                 LlmChatController.StopSynthPlaybackForNativeVoice();
-            if (!available && (firstResolution || changed))
-            {
-                // Keep the saved synthesis preference in the mod, but route the
-                // game's effective voice database to Chinese. Lines with explicit
-                // sound IDs worked without this; idle and interaction voices use the
-                // synthesis selector's localization database and were silent.
-                TraySettingChanged.PublishGameVoice(
-                    TraySettingChanged.GameLocalizationVoiceType.ChineseSimplified);
-            }
-
             if (!_reported || changed)
             {
                 _reported = true;
@@ -134,7 +122,9 @@ namespace LilithMod
                         : "[Voice] Synthesis service available; native voice remains selected.");
                 else
                     LilithModPlugin.Logger.LogWarning(
-                        "[Voice] Synthesis service unavailable; using native voice without changing preference.");
+                        preferred
+                            ? "[Voice] Synthesis service unavailable; keeping synthesis selected and speech silent until it returns."
+                            : "[Voice] Synthesis service unavailable; native Chinese remains selected.");
             }
         }
     }

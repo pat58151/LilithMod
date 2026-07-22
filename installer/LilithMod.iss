@@ -46,6 +46,15 @@ WizardStyle=modern
 ; would buy them nothing.
 Name: "voicesynth"; Description: "Download the voice synthesis base (GPT-SoVITS runtime, several GB). No voice is included - you add one later."; Flags: unchecked
 Name: "speechinput"; Description: "Download speech input - talk to her with F8 (local speech recognition, about 2 GB)."
+; Wake word: shown only when package-mod.ps1 bundled a trained model, and rides
+; on the speech-input download (SpeechTasks below folds it in).
+#define WakeWordModel AddBackslash(PayloadDir) + "BepInEx\plugins\LilithMod\speech-setup\lilith.onnx"
+#if FileExists(WakeWordModel)
+  #define SpeechTasks "speechinput or wakeword"
+Name: "wakeword"; Description: "Install the wake word - she answers when you call her name (needs speech input)."
+#else
+  #define SpeechTasks "speechinput"
+#endif
 
 [Messages]
 SelectDirDesc=Where is {#GameFolderName} installed?
@@ -54,7 +63,12 @@ FinishedLabelNoIcons=LilithMod is installed.%n%nIMPORTANT — the first launch t
 FinishedLabel=LilithMod is installed.%n%nIMPORTANT — the first launch takes several minutes while BepInEx generates files from the game. This is normal. Do not close the game while it appears frozen; force-quitting can break the next launch too.%n%nChat needs an API key pasted in-game; F7/F8 stay greyed out until one is set. Voice is optional and not included — see BepInEx\plugins\LilithMod\voice-setup\README.txt.%n%nIf the game ever looks unmodded, fully exit the game AND Steam, then start Steam again.
 
 [Files]
-Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; The model is excluded here and installed by the task-gated entry below, so the
+; tick box governs it instead of the blanket copy.
+Source: "{#PayloadDir}\*"; DestDir: "{app}"; Excludes: "*\speech-setup\lilith.onnx"; Flags: ignoreversion recursesubdirs createallsubdirs
+#if FileExists(WakeWordModel)
+Source: "{#PayloadDir}\BepInEx\plugins\LilithMod\speech-setup\lilith.onnx"; DestDir: "{app}\BepInEx\plugins\LilithMod\speech-setup"; Tasks: wakeword; Flags: ignoreversion
+#endif
 
 [Run]
 ; The component installers run as the original user (the runtimes land in that
@@ -62,7 +76,8 @@ Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ; uv.exe and running both at once would race on it. Each is idempotent and
 ; re-runnable by hand from the plugin folder if the download fails mid-way.
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\BepInEx\plugins\LilithMod\voice-setup\install-voice-synth.ps1"" -PluginFolder ""{app}\BepInEx\plugins\LilithMod"""; StatusMsg: "Downloading the voice synthesis base (several GB)..."; Tasks: voicesynth; Flags: runasoriginaluser waituntilterminated
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\BepInEx\plugins\LilithMod\speech-setup\install-speech-input.ps1"" -PluginFolder ""{app}\BepInEx\plugins\LilithMod"""; StatusMsg: "Downloading speech input (about 2 GB)..."; Tasks: speechinput; Flags: runasoriginaluser waituntilterminated
+; SpeechTasks folds in wakeword when present: the wake word runs on this listener.
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\BepInEx\plugins\LilithMod\speech-setup\install-speech-input.ps1"" -PluginFolder ""{app}\BepInEx\plugins\LilithMod"""; StatusMsg: "Downloading speech input (about 2 GB)..."; Tasks: {#SpeechTasks}; Flags: runasoriginaluser waituntilterminated
 ; Never launch Lilith.exe directly: with Steam closed that can leave Steam
 ; holding DOORSTOP_DISABLE=TRUE, which silently disables the mod on later
 ; launches until Steam is fully restarted.

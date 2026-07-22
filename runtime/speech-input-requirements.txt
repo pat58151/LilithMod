@@ -2,3 +2,4 @@ faster-whisper==1.2.1
 sounddevice==0.5.2
 numpy==2.2.6
 silero-vad==6.2.1
+openwakeword==0.6.0

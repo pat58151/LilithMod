@@ -52,7 +52,7 @@ you provide. Instructions are in
 
     BepInEx\plugins\LilithMod\voice-setup\README.txt
 
-or through Settings -> Sound -> Open Synth Voice Folder.
+or through Settings -> Sound -> Open Vocal Synth Folder.
 
 
 OPTIONAL - TALKING TO HER

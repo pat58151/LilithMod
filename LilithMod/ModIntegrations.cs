@@ -8,9 +8,6 @@ namespace LilithMod
 {
     internal static class ModIntegrations
     {
-        private static DialogueLineDatabase _voiceDatabase;
-        private static string _voiceLanguage;
-
         public static void Install(Harmony harmony)
         {
             harmony.Patch(
@@ -91,27 +88,16 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Whether the game's own audio should play. Normally that is simply "the mod
-        /// is not replacing it", but during the synthesis grace window neither side
-        /// should be heard: the mod cannot synthesise yet, and letting the native clip
-        /// through means Chinese audio under a subtitle the bubble gate already
-        /// dropped. Both halves of a line live or die together.
+        /// Whether the game's native Chinese voice should play.
         /// </summary>
         private static bool AllowNativeVoice()
         {
-            // Effective native mode wins over every per-line decision. PlayNodeVoice
-            // often runs before ShowNode, so waiting for the bubble gate to clear a
-            // stale vocal synthesis decision makes ordinary Chinese dialogue silent.
-            if (!VoiceReplacementEnabled() && !GameVoiceCoordinator.HoldingForSynthesis)
-                return true;
-            // A line the coordinator declined keeps its own voice, so its audio has to
-            // be let through even though replacement is otherwise on. Checked first:
-            // suppressing it here is what turned wrong-language speech into silence.
-            if (GameVoiceCoordinator.NativeAudioAllowed) return true;
-            // The mirror: replaced from cache, where the flag below is false, so
-            // the game's audio has to be suppressed from here instead.
-            if (GameVoiceCoordinator.NativeAudioSuppressed) return false;
-            return !VoiceReplacementEnabled() && !GameVoiceCoordinator.HoldingForSynthesis;
+            // Chinese is an explicit setting, not an outage fallback. When synthesis
+            // is selected but temporarily unavailable, keep subtitles and stay
+            // silent until the monitor restores synthesis.
+            if (SynthesisSelected) return false;
+            // Selecting Chinese cancels synthetic playback before this path runs.
+            return true;
         }
 
         public static bool GateDialogueNode(DialogueBubbleUI __instance, DialogueNode node)
@@ -138,33 +124,43 @@ namespace LilithMod
 
         public static bool ReplaceActionVoice(LilithActionType actionType, string animName)
         {
-            // DialogueManager can fall back to an action voice when a node is shown.
-            // That route bypasses every PlayVoice overload above. Only block it for
-            // a line the coordinator is actively replacing, since this method also
-            // carries non-dialogue action sounds.
+            // This route chooses an animation's bundled voice before ShowNode has
+            // established a per-line decision. In synthesis mode that timing gap
+            // leaked the Chinese touch voice. PlayActionSE is a separate method, so
+            // use it directly to retain the interaction effect without native speech.
+            if (SynthesisSelected)
+            {
+                AudioManager.PlayActionSE(actionType);
+                return LogSuppressedNativeAudio("action voice", animName);
+            }
             return AllowReplacementSensitiveAudio("action voice", animName);
         }
 
         public static bool ReplaceAnimationAudio(string animName)
         {
-            // Farewell and sleep animations can start their bundled voice clip here
-            // without passing through PlayVoice or PlayVoiceBySoundId.
+            // Animation voice can also run before the dialogue-node gate. Suppress
+            // it for the whole selected synthesis mode, not only after a fresh
+            // per-line decision exists.
+            if (SynthesisSelected)
+                return LogSuppressedNativeAudio("animation audio", animName);
             return AllowReplacementSensitiveAudio("animation audio", animName);
         }
 
-        private static bool AllowReplacementSensitiveAudio(string route, string detail)
+        private static bool LogSuppressedNativeAudio(string route, string detail)
         {
-            if (!VoiceReplacementEnabled() && !GameVoiceCoordinator.HoldingForSynthesis)
-                return true;
-            bool allow = !GameVoiceCoordinator.NativeAudioSuppressed;
-            if (!allow && LilithModPlugin.CfgLogDiagnostics != null &&
+            if (LilithModPlugin.CfgLogDiagnostics != null &&
                 LilithModPlugin.CfgLogDiagnostics.Value)
             {
                 LilithModPlugin.Logger.LogInfo(
                     $"[Voice] Suppressed native {route}" +
                     (string.IsNullOrEmpty(detail) ? "." : $" '{detail}'."));
             }
-            return allow;
+            return false;
+        }
+
+        private static bool AllowReplacementSensitiveAudio(string route, string detail)
+        {
+            return SynthesisSelected ? LogSuppressedNativeAudio(route, detail) : true;
         }
 
         public static bool ReplaceResolvedDialogueVoice(AudioClip clip, bool isDialogueLine)
@@ -184,6 +180,10 @@ namespace LilithMod
                 VoiceServiceMonitor.IsAvailable && LilithModPlugin.VoiceProcessor != null &&
                 DialogueTextCatalog.Available;
         }
+
+        internal static bool SynthesisSelected =>
+            LilithModPlugin.CfgVoiceSynthesisPreferred != null &&
+            LilithModPlugin.CfgVoiceSynthesisPreferred.Value;
 
         public static void MakeDialogueBubbleTransparent(DialogueBubbleUI __instance)
         {

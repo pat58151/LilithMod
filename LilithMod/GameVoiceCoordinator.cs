@@ -136,11 +136,13 @@ namespace LilithMod
             if (!_allowOriginalShow && node != null && bubble != null && _instance != null)
                 _instance._latestNodeForBubble[bubble.Pointer.ToInt64()] = node.Pointer.ToInt64();
             bool replacing = ModIntegrations.VoiceReplacementEnabled();
-            // Once synthesis is unavailable, every normal game line is a native
-            // fallback. Clear any short-lived suppression left by a cancelled or
-            // previously replaced line before the game's audio callbacks run.
+            // When synthesis is unavailable, keep the subtitle but choose audio
+            // solely from the explicit setting. An outage must never select Chinese.
             if (!_allowOriginalShow && !replacing && node != null && bubble != null)
-                AllowNativeAudioForThisLine();
+            {
+                if (ModIntegrations.SynthesisSelected) SuppressNativeAudioForThisLine();
+                else AllowNativeAudioForThisLine();
+            }
             if (_allowOriginalShow || !replacing ||
                 _instance == null || bubble == null || node == null)
             {
@@ -152,7 +154,8 @@ namespace LilithMod
                         bubble == null ? "bubble null" :
                         _allowOriginalShow ? "re-show of a line already replaced" :
                         _instance == null ? "coordinator not awake" :
-                        !LilithModPlugin.CfgReplaceGameVoice.Value ? "ReplaceGameVoice off" :
+                        ModIntegrations.SynthesisSelected ? "synthesis unavailable; subtitle only" :
+                        !LilithModPlugin.CfgReplaceGameVoice.Value ? "native Chinese selected" :
                         !VoiceConfig.Enabled ? "voice disabled" :
                         !DialogueTextCatalog.Available ? "no dialogue catalogue in this build" :
                         LilithModPlugin.VoiceProcessor == null ? "voice processor not ready" :
@@ -177,7 +180,7 @@ namespace LilithMod
             if (node.lineId > 0)
                 DialogueTextCatalog.TryGet(node.lineId, language, out text);
             // TimerSystem and AlarmSystem build their ringing dialogue at runtime with
-            // lineId 0 in the UI language. Never feed that English text to Japanese TTS.
+            // lineId 0 in the UI language. Never feed UI text directly to synthesis.
             bool alarmRinging = AudioManager.IsTimerAlarmRinging;
             if (alarmRinging)
                 _alarmDialogueUntil = Time.unscaledTime + 180f;
@@ -202,8 +205,10 @@ namespace LilithMod
                 else if (DialogueTextCatalog.TryGet(alarmLineId, subtitleLanguage, out string localized))
                     node.text = localized;
             }
-            // Runtime lines need a translated cache before Japanese synthesis.
-            if (string.IsNullOrWhiteSpace(text) && !string.IsNullOrWhiteSpace(node.text))
+            // The runtime translation cache is Japanese-specific. Other synthesis
+            // languages keep the subtitle silent rather than feeding TTS wrong text.
+            if (language.StartsWith("ja", StringComparison.OrdinalIgnoreCase) &&
+                string.IsNullOrWhiteSpace(text) && !string.IsNullOrWhiteSpace(node.text))
             {
                 if (DynamicLineCache.TryGet(node.text, out string learned))
                     text = learned;
@@ -227,8 +232,8 @@ namespace LilithMod
             SuppressNativeAudioForThisLine();
             LilithModPlugin.VoiceProcessor.Enqueue(new Utterance
             {
-                JaText = text,
-                EnText = null,
+                SpokenText = text,
+                ShownText = null,
                 Language = language,
                 SuppressSubtitle = true,
                 NativeDialogue = cue

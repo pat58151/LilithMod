@@ -19,6 +19,7 @@ namespace LilithMod
 
         private static string _heartbeatPath;
         private static string _wakeWordModelPath;
+        private static string _wakeWordFlagPath;
         private static float _nextCheck;
         private static bool _available;
         private static bool _wakeWordModel;
@@ -37,6 +38,10 @@ namespace LilithMod
             string root = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".";
             _heartbeatPath = Path.Combine(root, "push-to-talk.alive");
             _wakeWordModelPath = Path.Combine(root, "speech-setup", "lilith.onnx");
+            _wakeWordFlagPath = Path.Combine(root, "speech-setup", "wake-word.on");
+            try { _wakeWordModel = File.Exists(_wakeWordModelPath); }
+            catch (IOException) { _wakeWordModel = false; }
+            SyncWakeWordFlag();
         }
 
         /// <summary>Cheap enough to call every frame; the stat is throttled.</summary>
@@ -79,6 +84,54 @@ namespace LilithMod
                         ? "[Speech] Wake word model found; the setting is live."
                         : "[Speech] No wake word model; the setting stays greyed.");
             }
+
+            SyncWakeWordFlag();
+        }
+
+        /// <summary>
+        /// Publishes the live preference to the external listener. The model check is
+        /// repeated here so a stale enabled preference can never arm a missing model.
+        /// </summary>
+        internal static void SyncWakeWordFlag()
+        {
+            if (string.IsNullOrEmpty(_wakeWordFlagPath)) return;
+            bool enabled = _wakeWordModel && LilithModPlugin.CfgWakeWord != null &&
+                           LilithModPlugin.CfgWakeWord.Value;
+            try
+            {
+                bool exists = File.Exists(_wakeWordFlagPath);
+                if (enabled)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(_wakeWordFlagPath) ?? ".");
+                    // Refresh this heartbeat during the normal availability poll.
+                    // The listener rejects a stale flag after a game crash.
+                    File.WriteAllText(_wakeWordFlagPath, DateTime.UtcNow.Ticks.ToString());
+                }
+                else if (!enabled && exists)
+                {
+                    File.Delete(_wakeWordFlagPath);
+                }
+            }
+            catch (IOException ex)
+            {
+                LilithModPlugin.Logger.LogWarning(
+                    "[Speech] Could not update wake-word flag: " + ex.Message);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                LilithModPlugin.Logger.LogWarning(
+                    "[Speech] Could not update wake-word flag: " + ex.Message);
+            }
+        }
+
+        internal static void Shutdown()
+        {
+            if (string.IsNullOrEmpty(_wakeWordFlagPath)) return;
+            try
+            {
+                if (File.Exists(_wakeWordFlagPath)) File.Delete(_wakeWordFlagPath);
+            }
+            catch { }
         }
     }
 }

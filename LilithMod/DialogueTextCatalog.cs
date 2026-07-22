@@ -40,6 +40,13 @@ namespace LilithMod
         {
             bool japanese = language != null &&
                 language.StartsWith("ja", StringComparison.OrdinalIgnoreCase);
+            bool chinese = language != null &&
+                language.StartsWith("zh", StringComparison.OrdinalIgnoreCase);
+            if (!japanese && !chinese)
+            {
+                text = null;
+                return false;
+            }
             Dictionary<int, string> catalog;
             lock (Sync)
             {

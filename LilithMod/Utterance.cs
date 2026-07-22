@@ -1,13 +1,12 @@
 namespace LilithMod
 {
     /// <summary>
-    /// One sentence of a reply: the Japanese Lilith speaks aloud, and the English
-    /// shown in the bubble while that audio plays.
+    /// One sentence of a reply: synthesized speech and the text shown with it.
     /// </summary>
     public class Utterance
     {
-        public string JaText { get; set; }
-        public string EnText { get; set; }
+        public string SpokenText { get; set; }
+        public string ShownText { get; set; }
         public string Language { get; set; }
         public bool SuppressSubtitle { get; set; }
         public bool EndOfReply { get; set; }

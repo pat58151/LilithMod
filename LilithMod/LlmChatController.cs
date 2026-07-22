@@ -90,20 +90,40 @@ namespace LilithMod
         private bool _memoryInFlight;
         private string _speechCommandPath;
         private string _pushToTalkTriggerPath;
-        private readonly Queue<string> _speechCommandQueue = new Queue<string>();
+        private string _wakeListeningPath;
+        private string _lastWakeListeningToken;
+        private readonly Queue<SpeechCommandInput> _speechCommandQueue =
+            new Queue<SpeechCommandInput>();
         private float _nextSpeechPoll;
         private string _configuredHotkey;
         private string _configuredPushToTalkKey;
         private int _vkPushToTalk = -1;
         private bool _speechListening;
+        private bool _speechWakeWordCapture;
         private string _lastAppliedPartial;
         private bool _userTypedWhileListening;
         private string _pendingSpeechCommand;
+        private bool _pendingSpeechWakeWord;
         private bool _speechAwaitingReply;
         private float _speechSubmitAt;
         private const string SpeechPartialMarker = "__LILITH_PTT_PARTIAL__";
+        private const string SpeechInputPrompt =
+            "The user's latest message was produced by speech-to-text and may be unclear. " +
+            "If it is unintelligible, nonsensical, or unrelated to a plausible request, " +
+            "do not guess what they meant. Ask them naturally to say it again, for example: " +
+            "I couldn't hear you clearly. Can you say that again?";
         private float _replyHideAt;
         private bool _replyPlaybackActive;
+        private Action _queuedImmediateAppAction;
+        private Action _pendingAppAction;
+        private long _pendingAppActionRequestId;
+        private Utterance _pendingFixedDialogue;
+
+        private sealed class SpeechCommandInput
+        {
+            internal string Text;
+            internal bool WakeWord;
+        }
 
         // ========== Fallback lines ==========
         private static readonly string[] FallbackLines = new[]
@@ -135,6 +155,7 @@ namespace LilithMod
             string pluginDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".";
             _speechCommandPath = Path.Combine(pluginDir, "speech-command.txt");
             _pushToTalkTriggerPath = Path.Combine(pluginDir, "push-to-talk.active");
+            _wakeListeningPath = Path.Combine(pluginDir, "wake-listening.active");
             SpeechInputService.Initialize();
             // A trigger left behind by a crash would make the listener record forever.
             ClearPushToTalkTrigger();
@@ -150,6 +171,7 @@ namespace LilithMod
         private void Update()
         {
             ForegroundActivity.Poll();
+            SpeechInputService.Refresh(Time.unscaledTime);
             ApplyConfiguredHotkey(Hotkey, false);
             if (_chatDisabled || !_hotkeyValid)
                 return;
@@ -221,8 +243,10 @@ namespace LilithMod
             TrySendQueuedUserMessage();
             TryInteractionReply();
             PollPushToTalkKey();
+            PollWakeWordListening();
             PollSpeechCommand();
             TrySubmitSpeechCommand();
+            TryShowFixedDialogue();
             TryAmbientRemark();
 
             DrainVoiceQueues();
@@ -256,6 +280,9 @@ namespace LilithMod
             if (processor == null)
                 return;
 
+            while (processor.PlaybackStartedQueue.TryDequeue(out _))
+                RunPendingAppAction(_activeRequestId);
+
             // Without audio pacing, show the full reply once.
             bool failed = false;
             while (processor.VoiceFailureQueue.TryDequeue(out _))
@@ -264,14 +291,15 @@ namespace LilithMod
             if (failed)
             {
                 _replyPlaybackActive = false;
+                RunPendingAppAction(_activeRequestId);
                 while (processor.SubtitleQueue.TryDequeue(out SubtitleCue cue))
                 {
                     cue.MarkDisplayed();
                 }
-                if (_currentReplyEnglish != null && _currentReplyEnglish.Count > 0)
+                if (_currentReplyShown != null && _currentReplyShown.Count > 0)
                 {
-                    DisplayReplyText(string.Join(" ", _currentReplyEnglish));
-                    _currentReplyEnglish = null;
+                    DisplayReplyText(string.Join(" ", _currentReplyShown));
+                    _currentReplyShown = null;
                     _replyHideAt = Time.unscaledTime + 6f;
                 }
                 return;
@@ -331,6 +359,40 @@ namespace LilithMod
         {
             if (_instance != null)
                 _instance._restoreReplyBubble = true;
+        }
+
+        /// <summary>Queues a local line without sending an LLM request.</summary>
+        internal static void ShowFixedDialogue(string spoken, string shown)
+        {
+            if (_instance == null || string.IsNullOrWhiteSpace(spoken)) return;
+            _instance._pendingFixedDialogue = new Utterance
+            {
+                SpokenText = spoken.Trim(),
+                ShownText = string.IsNullOrWhiteSpace(shown) ? spoken.Trim() : shown.Trim(),
+                Language = PersonaPrompt.CurrentVoiceLanguage(),
+                EndOfReply = true
+            };
+        }
+
+        private void TryShowFixedDialogue()
+        {
+            if (_pendingFixedDialogue == null || _replyPlaybackActive ||
+                (_currentRequest != null && !_currentRequest.IsCompleted)) return;
+
+            Utterance line = _pendingFixedDialogue;
+            _pendingFixedDialogue = null;
+            if (SynthVoiceSelected)
+            {
+                _currentReplyShown = new List<string> { line.ShownText };
+                _replyPlaybackActive = true;
+                _lastDisplayedSentence = null;
+                LilithModPlugin.VoiceProcessor.Enqueue(line);
+            }
+            else
+            {
+                DisplayReplyText(line.ShownText);
+                _replyHideAt = Time.unscaledTime + 4f;
+            }
         }
 
         private void TryHideReplyBubble()
@@ -447,6 +509,7 @@ namespace LilithMod
             try { _cts?.Dispose(); } catch (ObjectDisposedException) { }
             _httpClient?.Dispose();
             _liveInformation?.Dispose();
+            SpeechInputService.Shutdown();
         }
 
         // ========== UI construction ==========
@@ -622,7 +685,6 @@ namespace LilithMod
             // the finished field, and it deliberately leaves layout/scrolling settings alone.
             GameStyle.Apply(_panelImage, _inputText, _placeholderText,
                             _canvas != null ? _canvas.transform : null);
-
             // Layout metrics must win over anything the donor styling brought with it.
             ApplyTextMetrics(_placeholderText, true);
             ApplyTextMetrics(_inputText, false);
@@ -729,6 +791,7 @@ namespace LilithMod
                 // the speech bar by itself.
                 if (_speechListening) StopListening(false);
                 _pendingSpeechCommand = null;
+                _pendingSpeechWakeWord = false;
                 _speechCommandQueue.Clear();
                 HidePanel();
             }
@@ -868,9 +931,13 @@ namespace LilithMod
                 if (searchMatch.Success)
                 {
                     string query = searchMatch.Groups["query"].Value.Trim();
-                    if (AppLauncher.GateOpen && AppLauncher.TrySearch(query))
+                    if (AppLauncher.GateOpen && query.Length <= 500 &&
+                        QueueImmediateAppAction(() =>
+                        {
+                            if (AppLauncher.GateOpen) AppLauncher.TrySearch(query);
+                        }))
                     {
-                        LilithModPlugin.Logger.LogInfo("[NativeAction] Browser search opened.");
+                        LilithModPlugin.Logger.LogInfo("[NativeAction] Browser search queued for speech.");
                         return true;
                     }
                 }
@@ -882,9 +949,14 @@ namespace LilithMod
                 if (appMatch.Success)
                 {
                     string appName = appMatch.Groups["app"].Value.Trim().ToLowerInvariant();
-                    if (AppLauncher.GateOpen && AppLauncher.GetAllowedNames().Contains(appName) && AppLauncher.TryOpen(appName))
+                    if (AppLauncher.GateOpen && AppLauncher.GetAllowedNames().Contains(appName) &&
+                        QueueImmediateAppAction(() =>
+                        {
+                            if (AppLauncher.GateOpen) AppLauncher.TryOpen(appName);
+                        }))
                     {
-                        LilithModPlugin.Logger.LogInfo("[NativeAction] Local app launch for '" + appName + "'.");
+                        LilithModPlugin.Logger.LogInfo(
+                            "[NativeAction] Local app launch queued for speech: '" + appName + "'.");
                         return true;
                     }
                 }
@@ -948,6 +1020,37 @@ namespace LilithMod
             return false;
         }
 
+        private static bool QueueImmediateAppAction(Action action)
+        {
+            if (_instance == null || action == null) return false;
+            _instance._queuedImmediateAppAction = action;
+            return true;
+        }
+
+        private void QueueAppActionForPlayback(Action action, long requestId)
+        {
+            if (action == null) return;
+            _pendingAppAction = action;
+            _pendingAppActionRequestId = requestId;
+            if (!SynthVoiceSelected ||
+                (LilithModPlugin.VoiceProcessor?.PlaybackActive ?? false))
+                RunPendingAppAction(requestId);
+        }
+
+        private void RunPendingAppAction(long requestId)
+        {
+            if (_pendingAppAction == null || _pendingAppActionRequestId != requestId) return;
+            Action action = _pendingAppAction;
+            _pendingAppAction = null;
+            _pendingAppActionRequestId = 0;
+            try { action(); }
+            catch (Exception ex)
+            {
+                LilithModPlugin.Logger.LogWarning(
+                    "[NativeAction] Deferred app launch failed: " + ex.Message);
+            }
+        }
+
         private static bool TryParseDuration(string value, out double seconds)
         {
             seconds = 0;
@@ -1008,7 +1111,7 @@ namespace LilithMod
             LilithModPlugin.VoiceProcessor?.CancelAll(true);
             if (_instance == null) return;
             _instance._replyPlaybackActive = false;
-            _instance._currentReplyEnglish = null;
+            _instance._currentReplyShown = null;
             _instance._speechEndedAt = Time.unscaledTime;
             _instance._replyHideAt = Time.unscaledTime + 1f;
         }
@@ -1018,12 +1121,17 @@ namespace LilithMod
             LilithModPlugin.CfgReplaceGameVoice.Value &&
             VoiceConfig.Enabled && LilithModPlugin.VoiceProcessor != null;
 
-        private void SendUserMessage(string userInput, bool ambient, bool nativeActionHandled = false)
+        private void SendUserMessage(string userInput, bool ambient,
+            bool nativeActionHandled = false, bool speechInput = false)
         {
+            Action immediateAppAction = _queuedImmediateAppAction;
+            _queuedImmediateAppAction = null;
             // Cancel previous request.
             CancelCurrentRequest();
             long requestId = Interlocked.Increment(ref _requestSerial);
             _activeRequestId = requestId;
+            _pendingAppAction = immediateAppAction;
+            _pendingAppActionRequestId = immediateAppAction != null ? requestId : 0;
             bool streamToVoice = SynthVoiceSelected;
 
             // Create new CTS with timeout.
@@ -1042,6 +1150,11 @@ namespace LilithMod
             // Clone history for the request (thread-safe copy).
             List<Message> messagesSnapshot;
             lock (_history) messagesSnapshot = new List<Message>(_history);
+            if (speechInput)
+            {
+                messagesSnapshot.Insert(messagesSnapshot.Count - 1,
+                    new Message { Role = "system", Content = SpeechInputPrompt });
+            }
             string requestPersona = messagesSnapshot[0].Content;
 
             // Conversation resets the ambient schedule.
@@ -1152,7 +1265,7 @@ namespace LilithMod
                     {
                         if (!acceptMoreLines || streamedLineCount >= MaxUtterancesPerReply) return;
                         Utterance utterance = ParseUtterance(item, voiceLanguage, sharedText);
-                        if (utterance == null || !ShownUsesRequestedLanguage(utterance.EnText, displayLanguage))
+                        if (utterance == null || !ShownUsesRequestedLanguage(utterance.ShownText, displayLanguage))
                         {
                             acceptMoreLines = false;
                             return;
@@ -1189,7 +1302,7 @@ namespace LilithMod
             correctionMessages.Add(JObject.FromObject(new
             {
                 role = "user",
-                content = "Correct only the language error. Return the same meaning and JSON structure, but every shown field must be English only. Keep spoken Japanese."
+                content = "Correct only the language error. Return the same meaning and JSON structure, but every shown field must be English only. Keep every spoken field unchanged."
             }));
             reply = await SendCompletionAsync(correctionPayload, token);
             if (!ReplyUsesRequestedDisplayLanguage(reply, displayLanguage))
@@ -1420,15 +1533,15 @@ namespace LilithMod
                 LilithModPlugin.VoiceProcessor.CancelCurrent();
                 _streamPlaybackRequestId = streamed.RequestId;
                 _streamedLinesAccepted = 0;
-                _currentReplyEnglish = new List<string>();
+                _currentReplyShown = new List<string>();
                 _replyPlaybackActive = true;
                 _lastDisplayedSentence = null;
                 _restoreReplyBubble = false;
             }
 
             _streamedLinesAccepted++;
-            if (!string.IsNullOrEmpty(streamed.Utterance.EnText))
-                _currentReplyEnglish.Add(streamed.Utterance.EnText);
+            if (!string.IsNullOrEmpty(streamed.Utterance.ShownText))
+                _currentReplyShown.Add(streamed.Utterance.ShownText);
             foreach (Utterance piece in UtteranceChunker.Chunk(streamed.Utterance))
                 LilithModPlugin.VoiceProcessor.Enqueue(piece);
         }
@@ -1449,7 +1562,7 @@ namespace LilithMod
                 if (streamedLines == 0)
                 {
                     LilithModPlugin.VoiceProcessor?.CancelCurrent();
-                    _currentReplyEnglish = null;
+                    _currentReplyShown = null;
                     _replyPlaybackActive = false;
                     _lastDisplayedSentence = null;
                     _restoreReplyBubble = false;
@@ -1476,14 +1589,14 @@ namespace LilithMod
 
                     if (SynthVoiceSelected)
                     {
-                        _currentReplyEnglish = new System.Collections.Generic.List<string> { result.Text };
+                        _currentReplyShown = new System.Collections.Generic.List<string> { result.Text };
                         _replyPlaybackActive = true;
                         // Chunked for the same reason as the bilingual path: without
                         // it a long plain-text reply is one long silence.
                         var plain = UtteranceChunker.Chunk(new Utterance
                         {
-                            JaText = result.Text,
-                            EnText = result.Text,
+                            SpokenText = result.Text,
+                            ShownText = result.Text,
                             Language = PersonaPrompt.CurrentVoiceLanguage(),
                         });
                         for (int i = 0; i < plain.Count; i++)
@@ -1496,6 +1609,7 @@ namespace LilithMod
                     }
                     else
                     {
+                        RunPendingAppAction(result.RequestId);
                         DisplayReplyText(result.Text);
                         LilithModPlugin.Logger.LogInfo("[LlmChat] LLM reply displayed (plain text, voice off).");
                     }
@@ -1507,6 +1621,7 @@ namespace LilithMod
                     if (streamedLines > 0)
                         LilithModPlugin.VoiceProcessor.CompleteStreamedReply();
                     LilithModPlugin.Logger.LogWarning("[LlmChat] Model returned an empty sentence list.");
+                    RunPendingAppAction(result.RequestId);
                     DisplayReplyText(FallbackLines[UnityEngine.Random.Range(0, FallbackLines.Length)]);
                     return;   // deliberately not added to history
                 }
@@ -1514,18 +1629,18 @@ namespace LilithMod
                 // Actions run only after the complete reply parses and validates.
                 string executedAction = result.NativeActionHandled
                     ? null
-                    : ExecuteNativeAction(result.Text);
+                    : ExecuteNativeAction(result.Text, result.RequestId);
                 bool forgetAction = executedAction == "forget_memory" ||
                     executedAction == "forget_fact" || executedAction == "forget_all_memory";
                 if (forgetAction) RemoveCurrentMemoryCommand(result.UserInput);
 
                 // Store spoken text in history, not response markup.
                 var spoken = new System.Collections.Generic.List<string>();
-                var english = new System.Collections.Generic.List<string>();
+                var shownText = new System.Collections.Generic.List<string>();
                 foreach (var u in utterances)
                 {
-                    spoken.Add(u.JaText);
-                    if (!string.IsNullOrEmpty(u.EnText)) english.Add(u.EnText);
+                    spoken.Add(u.SpokenText);
+                    if (!string.IsNullOrEmpty(u.ShownText)) shownText.Add(u.ShownText);
                 }
 
                 lock (_history)
@@ -1542,16 +1657,17 @@ namespace LilithMod
 
                 if (!SynthVoiceSelected)
                 {
+                    RunPendingAppAction(result.RequestId);
                     if (streamedLines > 0) LilithModPlugin.VoiceProcessor?.CancelCurrent(true);
                     // No audio to pace the subtitles, so show the reply in one piece.
-                    DisplayReplyText(string.Join(" ", english));
+                    DisplayReplyText(string.Join(" ", shownText));
                     _replyHideAt = Time.unscaledTime + 6f;
                     LilithModPlugin.Logger.LogInfo("[LlmChat] LLM reply displayed (voice off).");
                     return;
                 }
 
                 // Kept so a mid-reply synthesis failure can fall back to the full text.
-                _currentReplyEnglish = english;
+                _currentReplyShown = shownText;
                 _replyPlaybackActive = true;
 
                 // Split long replies so later pieces synthesize during playback.
@@ -1583,6 +1699,7 @@ namespace LilithMod
                 }
 
                 string fallback = FallbackLines[UnityEngine.Random.Range(0, FallbackLines.Length)];
+                RunPendingAppAction(result.RequestId);
                 if (DialogueManager.s_instance.TryGetNode(9500000, out _replyNode))
                 {
                     _replyNode.text = fallback;
@@ -1601,9 +1718,9 @@ namespace LilithMod
         private const int MaxUtterancesPerReply = 5;
 
         /// <summary>Full subtitle fallback for an in-flight spoken reply.</summary>
-        private System.Collections.Generic.List<string> _currentReplyEnglish;
+        private System.Collections.Generic.List<string> _currentReplyShown;
 
-        private static string ExecuteNativeAction(string text)
+        private static string ExecuteNativeAction(string text, long requestId)
         {
             if (string.IsNullOrWhiteSpace(text)) return null;
             try
@@ -1668,8 +1785,13 @@ namespace LilithMod
                             throw new InvalidOperationException("open_app action missing app name.");
                         if (LilithModPlugin.CfgAllowOpenApps == null || !LilithModPlugin.CfgAllowOpenApps.Value)
                             throw new InvalidOperationException("App opening is disabled.");
-                        if (!AppLauncher.TryOpen(app))
-                            throw new InvalidOperationException($"Could not open app '{app}'.");
+                        string appName = app.Trim().ToLowerInvariant();
+                        if (!AppLauncher.GetAllowedNames().Contains(appName))
+                            throw new InvalidOperationException($"App '{app}' is not allowed.");
+                        _instance?.QueueAppActionForPlayback(() =>
+                        {
+                            if (AppLauncher.GateOpen) AppLauncher.TryOpen(appName);
+                        }, requestId);
                         applied = true;
                         break;
                     }
@@ -1680,8 +1802,13 @@ namespace LilithMod
                             throw new InvalidOperationException("search_web action missing query.");
                         if (LilithModPlugin.CfgAllowOpenApps == null || !LilithModPlugin.CfgAllowOpenApps.Value)
                             throw new InvalidOperationException("Browser search is disabled.");
-                        if (!AppLauncher.TrySearch(query))
-                            throw new InvalidOperationException("Could not open browser search.");
+                        query = query.Trim();
+                        if (query.Length > 500)
+                            throw new InvalidOperationException("Browser search is too long.");
+                        _instance?.QueueAppActionForPlayback(() =>
+                        {
+                            if (AppLauncher.GateOpen) AppLauncher.TrySearch(query);
+                        }, requestId);
                         applied = true;
                         break;
                     }
@@ -1883,8 +2010,8 @@ namespace LilithMod
             if (string.IsNullOrWhiteSpace(shown) && sharedText) shown = spoken;
             return new Utterance
             {
-                JaText = spoken.Trim(),
-                EnText = (shown ?? string.Empty).Trim(),
+                SpokenText = spoken.Trim(),
+                ShownText = (shown ?? string.Empty).Trim(),
                 Language = voiceLanguage
             };
         }
@@ -2018,6 +2145,12 @@ namespace LilithMod
             double windowHours = LilithModPlugin.CfgNoteWindowHours.Value;
             NoteJournal.RecordQualifying(windowHours, IsPersonalExchange(user));
             TryConsolidateMemory();
+            // A note is a keepsake from meaningful talk, not from prose that merely
+            // cleared the length bar. If nothing in the window was personal, there is
+            // nothing to write about - hold, and do not spend a roll, until real talk
+            // happens. Checked before ShouldWrite so a mundane window never burns one.
+            if (NoteJournal.PersonalCount(windowHours) < LilithModPlugin.CfgNoteMinPersonal.Value)
+                return;
             if (!NoteJournal.ShouldWrite(
                     LilithModPlugin.CfgNoteMinConversations.Value,
                     windowHours,
@@ -2375,8 +2508,6 @@ namespace LilithMod
         /// <summary>Toggles the external speech listener.</summary>
         private void PollPushToTalkKey()
         {
-            SpeechInputService.Refresh(Time.unscaledTime);
-
             // Speech input requires both the listener and an API key.
             if (!LilithModPlugin.CfgPushToTalkEnabled.Value ||
                 !SpeechInputService.IsAvailable || !HasApiKey)
@@ -2395,7 +2526,7 @@ namespace LilithMod
                 return;
 
             if (_speechListening) StopListening(true);
-            else StartListening();
+            else StartListening(false);
         }
 
         private static bool HasApiKey =>
@@ -2413,9 +2544,31 @@ namespace LilithMod
                 + "Add one under Settings / Me.");
         }
 
-        private void StartListening()
+        private void PollWakeWordListening()
+        {
+            string token = null;
+            try
+            {
+                if (File.Exists(_wakeListeningPath))
+                    token = File.ReadAllText(_wakeListeningPath).Trim();
+            }
+            catch (IOException) { }
+
+            // Each wake capture carries a new token. Unlike a presence edge, this
+            // cannot miss a fast delete-and-recreate between two game frames.
+            if (!string.IsNullOrEmpty(token) &&
+                !string.Equals(token, _lastWakeListeningToken, StringComparison.Ordinal))
+            {
+                _lastWakeListeningToken = token;
+                if (!_speechListening)
+                    StartListening(true);
+            }
+        }
+
+        private void StartListening(bool wakeWord)
         {
             _speechListening = true;
+            _speechWakeWordCapture = wakeWord;
             _lastAppliedPartial = null;
             _userTypedWhileListening = false;
             ShowPanel();
@@ -2428,6 +2581,8 @@ namespace LilithMod
             // typing, without needing a click first.
             FocusInputField();
             if (_placeholderText != null) _placeholderText.text = "Listening~";
+            if (wakeWord) return;
+
             try
             {
                 // The trigger carries the game's display language, so recognition
@@ -2447,6 +2602,7 @@ namespace LilithMod
         private void StopListening(bool cancelled)
         {
             _speechListening = false;
+            _speechWakeWordCapture = false;
             if (_placeholderText != null) _placeholderText.text = "Say something···";
             ClearPushToTalkTrigger();
             if (cancelled && !_userTypedWhileListening &&
@@ -2532,6 +2688,8 @@ namespace LilithMod
 
                 string partial = command.Substring(SpeechPartialMarker.Length)
                     .TrimStart('\r', '\n', ':', ' ');
+                if (_speechWakeWordCapture)
+                    partial = PrefixWakeWord(partial);
                 if (_uiReady && _inputField != null && !string.IsNullOrWhiteSpace(partial))
                 {
                     _inputField.text = partial;
@@ -2543,6 +2701,7 @@ namespace LilithMod
 
             NoteUserTyping();
             bool wasListening = _speechListening;
+            bool wakeWordCapture = _speechWakeWordCapture;
             if (wasListening) StopListening(false);
 
             if (string.IsNullOrWhiteSpace(command))
@@ -2563,7 +2722,19 @@ namespace LilithMod
                 return;
             }
 
-            _speechCommandQueue.Enqueue(command);
+            _speechCommandQueue.Enqueue(new SpeechCommandInput
+            {
+                Text = command,
+                WakeWord = wakeWordCapture
+            });
+        }
+
+        private static string PrefixWakeWord(string text)
+        {
+            string value = text?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(value)) return value;
+            if (Regex.IsMatch(value, @"^lilith\b", RegexOptions.IgnoreCase)) return value;
+            return "Lilith, " + value;
         }
 
         /// <summary>Latches manual edits so partial transcripts cannot overwrite them.</summary>
@@ -2587,11 +2758,15 @@ namespace LilithMod
                 _replyPlaybackActive ||
                 _speechCommandQueue.Count == 0) return;
 
-            string command = _speechCommandQueue.Dequeue();
+            SpeechCommandInput command = _speechCommandQueue.Dequeue();
+            string displayText = command.WakeWord
+                ? PrefixWakeWord(command.Text)
+                : command.Text;
             ShowPanel();
-            _inputField.text = command;
-            _inputField.caretPosition = command.Length;
-            _pendingSpeechCommand = command;
+            _inputField.text = displayText;
+            _inputField.caretPosition = displayText.Length;
+            _pendingSpeechCommand = command.Text;
+            _pendingSpeechWakeWord = command.WakeWord;
             // Brief pause so the recognised text is readable before it is sent.
             _speechSubmitAt = Time.unscaledTime + 0.6f;
         }
@@ -2600,15 +2775,26 @@ namespace LilithMod
         {
             if (string.IsNullOrEmpty(_pendingSpeechCommand) || Time.unscaledTime < _speechSubmitAt)
                 return;
+            string rawCommand = _pendingSpeechCommand;
+            bool wakeWord = _pendingSpeechWakeWord;
             string shown = _inputField?.text?.Trim();
             _pendingSpeechCommand = null;
+            _pendingSpeechWakeWord = false;
+            _pendingSpeechWakeWord = false;
             if (string.IsNullOrEmpty(shown)) return;
+
+            // The recognizer returns only the command. Add the wake name
+            // independently for the UI and for DeepSeek, never to Whisper input.
+            string expectedDisplay = wakeWord ? PrefixWakeWord(rawCommand) : rawCommand;
+            string message = string.Equals(shown, expectedDisplay, StringComparison.Ordinal)
+                ? expectedDisplay
+                : shown;
 
             // Keep the recognised speech visible while DeepSeek is working. The result
             // handler closes this panel just before Lilith's reply is handed to voice.
             _speechAwaitingReply = true;
-            bool nativeActionHandled = TryApplyImmediateNativeAction(shown);
-            SendUserMessage(shown, false, nativeActionHandled);
+            bool nativeActionHandled = TryApplyImmediateNativeAction(message);
+            SendUserMessage(message, false, nativeActionHandled, true);
         }
     }
 }

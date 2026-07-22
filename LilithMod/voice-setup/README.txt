@@ -67,8 +67,8 @@ STEP 5. Configure the mod
     SpokenLanguage     what she speaks      ja, en, or zh
     SubtitleLanguage   what you read        ja, en, or zh
 
-  These are independent. Japanese speech with English subtitles is a valid and
-  intended combination.
+  These are independent. Any configured speech language can use any configured
+  subtitle language.
 
 STEP 6. Turn it on in game
   Settings -> Sound -> select "Vocal Synthesis" as the voice.

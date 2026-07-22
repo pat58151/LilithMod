@@ -202,6 +202,14 @@ try {
         # Clear a trigger left behind by a crash, or the listener records immediately.
         $trigger = Join-Path $pluginFolder "push-to-talk.active"
         if (Test-Path $trigger) { Remove-Item $trigger -Force -ErrorAction SilentlyContinue }
+        $wakeModel = Join-Path $pluginFolder "speech-setup\lilith.onnx"
+        $wakeFlag = Join-Path $pluginFolder "speech-setup\wake-word.on"
+        $playbackLock = Join-Path $pluginFolder "voice-output.active"
+        # Both are process-state signals. A crash must not leave wake detection on
+        # while the game is closed, or leave it muted forever by a stale voice lock.
+        foreach ($stale in @($wakeFlag, $playbackLock)) {
+            if (Test-Path $stale) { Remove-Item $stale -Force -ErrorAction SilentlyContinue }
+        }
         # The listener prints the bias vocabulary, which contains Japanese and
         # Chinese. On a cp874 console that raises UnicodeEncodeError and kills it
         # at startup - the same trap as start-tts.ps1.
@@ -209,7 +217,7 @@ try {
         $alreadyRunning = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -like "*push_to_talk.py*" -or $_.CommandLine -like "*wake_listener.py*" }
         $alreadyRunning | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-        $speechArgs = "`"$ProjectFolder\runtime\push_to_talk.py`" --output `"$pluginFolder\speech-command.txt`" --trigger `"$trigger`" $backendArgs --save-last `"$pluginFolder\last-utterance.wav`""
+        $speechArgs = "`"$ProjectFolder\runtime\push_to_talk.py`" --output `"$pluginFolder\speech-command.txt`" --trigger `"$trigger`" --wake-model `"$wakeModel`" --wake-flag `"$wakeFlag`" --playback-lock `"$playbackLock`" $backendArgs --save-last `"$pluginFolder\last-utterance.wav`""
         Start-Process $speechPython -ArgumentList $speechArgs -WindowStyle Hidden -RedirectStandardOutput (Join-Path $pluginFolder "push-to-talk.log") -RedirectStandardError (Join-Path $pluginFolder "push-to-talk-error.log")
         Write-StartupLog "Push-to-talk listener started."
     }

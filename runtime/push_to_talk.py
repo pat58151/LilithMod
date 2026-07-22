@@ -36,6 +36,11 @@ CALIBRATION_SECONDS = 1.5
 PARTIAL_MARKER = "__LILITH_PTT_PARTIAL__"
 HEARTBEAT_INTERVAL = 2.0         # seconds between liveness touches
 SUPPORTED_LANGUAGES = {"en", "ja", "zh"}
+ARM_SECONDS = 6.0                # wake detection opens one bounded command window
+WAKE_THRESHOLD = 0.70
+WAKE_LOG_THRESHOLD = 0.3        # log near misses so the threshold can be tuned
+PLAYBACK_TAIL_SECONDS = 0.5      # ignore the room echo after Lilith stops speaking
+WAKE_FLAG_STALE_SECONDS = 12.0   # fail closed if the game crashes
 
 # Common Whisper hallucinations from silence and noise.
 HALLUCINATIONS = {
@@ -300,7 +305,7 @@ def main() -> None:
                         help="Seconds of trailing silence that end an utterance.")
     parser.add_argument("--no-speech", type=float, default=NO_SPEECH_SECONDS,
                         help="Give up and close if nothing is said after listening starts.")
-    parser.add_argument("--vocabulary", default="Lilith, リリス, 莉莉丝, 莉莉絲",
+    parser.add_argument("--vocabulary", default="",
                         help="Words to bias recognition toward - names and terms the "
                              "model would otherwise mangle. Keep it short: the model "
                              "can also emit these spontaneously on unclear audio.")
@@ -315,6 +320,17 @@ def main() -> None:
     parser.add_argument("--save-last", default="",
                         help="Optional WAV path; the last utterance is written there "
                              "for offline comparison.")
+    parser.add_argument("--wake-model", default="",
+                        help="Optional openWakeWord ONNX model. Push-to-talk still "
+                             "works when it is absent.")
+    parser.add_argument("--wake-flag", default="",
+                        help="Wake detection is enabled while this file exists.")
+    parser.add_argument("--wake-threshold", type=float, default=WAKE_THRESHOLD,
+                        help="openWakeWord score required to arm recording.")
+    parser.add_argument("--wake-arm-seconds", type=float, default=ARM_SECONDS,
+                        help="Maximum pause after the wake word before recording closes.")
+    parser.add_argument("--playback-lock", default="",
+                        help="File held while Lilith is speaking, to prevent self-triggering.")
     args = parser.parse_args()
 
     output = Path(args.output)
@@ -326,6 +342,37 @@ def main() -> None:
     no_speech_limit = max(silence_limit, args.no_speech)
     language = args.language.strip()
     save_last = Path(args.save_last) if args.save_last else None
+    wake_model_path = Path(args.wake_model) if args.wake_model else None
+    wake_flag = (Path(args.wake_flag) if args.wake_flag
+                 else output.parent / "speech-setup" / "wake-word.on")
+    wake_ui = output.parent / "wake-listening.active"
+    playback_lock = (Path(args.playback_lock) if args.playback_lock
+                     else output.parent / "voice-output.active")
+    wake_threshold = min(1.0, max(0.0, args.wake_threshold))
+    wake_arm_seconds = max(no_speech_limit, args.wake_arm_seconds)
+    try:
+        wake_ui.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    wake_model = None
+    wake_name = ""
+    if wake_model_path is not None and wake_model_path.is_file():
+        try:
+            from openwakeword.model import Model as WakeWordModel
+            wake_model = WakeWordModel(
+                wakeword_models=[str(wake_model_path)],
+                inference_framework="onnx")
+            wake_name = next(iter(wake_model.models))
+            print(f"Wake word ready. model={wake_model_path} name={wake_name} "
+                  f"threshold={wake_threshold:.2f} flag={wake_flag} "
+                  f"playback_lock={playback_lock}", flush=True)
+        except Exception as error:
+            print(f"Wake word unavailable ({error}); push-to-talk only.", flush=True)
+            wake_model = None
+    elif wake_model_path is not None:
+        print(f"Wake word model not found at {wake_model_path}; push-to-talk only.",
+              flush=True)
 
     if args.backend == "transformers":
         asr = TransformersBackend(args.whisper_model, language, args.device)
@@ -356,6 +403,12 @@ def main() -> None:
     current_language = language
     # Wait for the mod to clear the trigger after finalization.
     awaiting_reset = False
+    armed_until = 0.0
+    wake_session = False
+    wake_enabled_last = False
+    playback_locked_last = False
+    playback_tail_until = 0.0
+    next_wake_score_log = 0.0
 
     def read_trigger_language() -> str:
         """Read recognition language for the next utterance."""
@@ -456,6 +509,7 @@ def main() -> None:
         with model_lock:
             text = asr.transcribe(samples, beam_size=args.beam_size)
         decode_seconds = time.monotonic() - decode_started
+
         text = correct_leading_name(text, canonical_name)
 
         if normalise(text) in HALLUCINATIONS:
@@ -513,7 +567,55 @@ def main() -> None:
                 except OSError:
                     pass
 
-            on = trigger.exists()
+            manual_on = trigger.exists()
+            if manual_on and not listening:
+                # An explicit F8 press wins over a simultaneous wake score and keeps
+                # its original release-to-cancel behavior.
+                armed_until = 0.0
+
+            # The C# voice queue holds this file around every playback. Extend the
+            # lock briefly after deletion so room echo cannot wake Lilith herself.
+            lock_file_present = playback_lock.exists()
+            if lock_file_present:
+                playback_tail_until = now + PLAYBACK_TAIL_SECONDS
+            playback_locked = lock_file_present or now < playback_tail_until
+
+            try:
+                wake_flag_fresh = (
+                    wake_flag.exists()
+                    and time.time() - wake_flag.stat().st_mtime < WAKE_FLAG_STALE_SECONDS
+                )
+            except OSError:
+                wake_flag_fresh = False
+            wake_enabled = wake_model is not None and wake_flag_fresh
+            if (wake_model is not None and not manual_on and not listening
+                    and not awaiting_reset):
+                if playback_locked:
+                    if not playback_locked_last:
+                        wake_model.reset()
+                elif wake_enabled:
+                    prediction = wake_model.predict(frame)
+                    score = float(prediction.get(wake_name, 0.0))
+                    if score >= WAKE_LOG_THRESHOLD and now >= next_wake_score_log:
+                        print(f"Wake score {score:.3f} ({wake_name}).", flush=True)
+                        next_wake_score_log = now + 0.5
+                    if score >= wake_threshold:
+                        armed_until = now + wake_arm_seconds
+                        wake_model.reset()
+                        try:
+                            wake_ui.write_text(str(time.time()), encoding="utf-8")
+                        except OSError:
+                            pass
+                        print(f"Wake detected at {score:.3f}; listening armed for "
+                              f"{wake_arm_seconds:.1f}s.", flush=True)
+                elif wake_enabled_last:
+                    wake_model.reset()
+            playback_locked_last = playback_locked
+            wake_enabled_last = wake_enabled
+
+            # A wake-started session remains open until VAD ends it. ARM_SECONDS
+            # bounds only the pause before speech begins, not the command length.
+            on = manual_on or now < armed_until or wake_session
 
             if awaiting_reset:
                 if not on:
@@ -522,6 +624,7 @@ def main() -> None:
 
             if on and not listening:
                 listening = True
+                wake_session = not manual_on
                 had_speech = False
                 speech_frames = 0
                 silent_for = 0.0
@@ -548,6 +651,10 @@ def main() -> None:
                 active = []
                 voiced = []
                 energies = []
+                wake_session = False
+                armed_until = 0.0
+                if wake_model is not None:
+                    wake_model.reset()
                 continue
 
             active.append(frame)
@@ -565,7 +672,8 @@ def main() -> None:
             ended = had_speech and silent_for >= silence_limit
             over_cap = now - started_at >= MAX_SECONDS
             # Close an unused recording automatically.
-            gave_up = not had_speech and now - started_at >= no_speech_limit
+            unused_limit = wake_arm_seconds if wake_session else no_speech_limit
+            gave_up = not had_speech and now - started_at >= unused_limit
 
             if not ended and not over_cap and not gave_up:
                 # Send partial text only after sustained speech.
@@ -582,12 +690,22 @@ def main() -> None:
 
             frames, flags, levels = active, voiced, energies
             listening = False
+            wake_session = False
+            armed_until = 0.0
             active = []
             voiced = []
             energies = []
+            if wake_model is not None:
+                wake_model.reset()
             awaiting_reset = True
-            finalise(frames, flags, levels,
-                     "cap" if over_cap else "no speech" if gave_up else "silence")
+            try:
+                finalise(frames, flags, levels,
+                         "cap" if over_cap else "no speech" if gave_up else "silence")
+            finally:
+                try:
+                    wake_ui.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
 
 if __name__ == "__main__":

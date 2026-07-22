@@ -14,5 +14,4 @@ values that belong to a particular build.
 | **Voice synthesis** | Local GPT-SoVITS synthesis, sentence chunking, reusable audio caching, background queueing, and subtitle-to-audio synchronization. A shared coordinator keeps native and synthetic voices exclusive. |
 | **Awareness and initiative** | Time, posture, sleep state, recent interactions, and memory are composed into dynamic context. Context gates and shared speech arbitration keep spontaneous remarks from interrupting other moments. |
 | **Foreground awareness** | Foreground process detection, local Steam manifest resolution, executable-name fallback, and stability filtering. Window titles and application contents are never read. |
-| **Handwritten notes** | Conversation qualification, persisted cadence, cooldown and chance gating, and LLM composition from conversation-only context before delivery through the game inbox. |
 | **Live information** | Intent-gated weather and web retrieval, metasearch, readable-page extraction, caching, and isolated untrusted context passed to the reply model. |

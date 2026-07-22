@@ -190,7 +190,10 @@ function Invoke-Restore {
     }
 
     Write-Step "Building the mod"
-    & $Dotnet build $Csproj -c Release
+    $pluginOut = Join-Path $GameDir "BepInEx\plugins\LilithMod"
+    & $Dotnet build $Csproj -c Release `
+        -p:GameDir="$GameDir" `
+        -p:OutputPath="$pluginOut\"
     if ($LASTEXITCODE -ne 0) {
         Write-Host ""
         Write-Warn "Build failed. If the game updated, its API may have changed -"
