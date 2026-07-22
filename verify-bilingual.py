@@ -525,25 +525,66 @@ check("text = node.text;" not in game_voice,
 # Declined replacement must preserve native audio.
 check("NativeAudioAllowed" in game_voice and "NativeAudioAllowed" in integrations,
       "A line handed back unreplaced must keep its own audio, or it plays silently")
-# Cached audio remains available while the synthesis service starts.
-check("CacheReplacementPossible" in game_voice and "IsCached" in tts and
-      "IsCached" in speech and "cachedOnly" in game_voice,
-      "A line whose audio is already cached must be replaceable while synthesis "
-      "is still starting, not held hostage to the service handshake")
+# A cache is an implementation detail, not an offline voice mode. When the
+# synthesis service is unavailable the effective setting is native Chinese.
+check("CacheReplacementPossible" not in game_voice and "cachedOnly" not in game_voice,
+      "Cached synthesized voice must not play while synthesis is unavailable; fallback is "
+      "native Chinese only")
+check("VoiceServiceMonitor.IsAvailable" in integrations,
+      "Game-voice replacement must require a currently available synthesis service")
+check(integrations.count(
+          "if (!VoiceReplacementEnabled() && !GameVoiceCoordinator.HoldingForSynthesis)") >= 2,
+      "Effective native mode must override stale suppression in both dialogue and "
+      "animation audio paths")
+check(re.search(
+          r"!_allowOriginalShow\s*&&\s*!replacing(?:(?!if \(_allowOriginalShow).)*"
+          r"AllowNativeAudioForThisLine\(\);",
+          game_voice, re.S),
+      "A native fallback line must clear stale replacement suppression, or its "
+      "Chinese subtitle appears without voice")
+check("AvailabilityKnown" in voice_monitor and "AvailabilityKnown" in game_voice,
+      "A failed startup probe must end the grace window and release native Chinese")
+check("StopSynthPlaybackForNativeVoice" in voice_monitor,
+      "Losing the synthesis service must cancel synthesized audio already queued")
+check("PublishGameVoice" in voice_monitor and "ChineseSimplified" in voice_monitor,
+      "Offline fallback must route the game's runtime voice database to Chinese, or "
+      "idle and interaction lines with localized lookups are silent")
 check("LanguageIsCurrent" in switcher and "LanguageIsCurrent" in tts,
       "A cache hit must confirm the running weights match the language, or she "
       "speaks cached audio in the wrong voice")
 # Bubble and native audio callbacks share the cached-replacement decision.
 check("NativeAudioSuppressed" in game_voice and "NativeAudioSuppressed" in integrations,
       "A cached replacement must suppress the game's own audio, or both play at once")
+check("PlayActionSEOrVoice" in integrations and "ReplaceActionVoice" in integrations,
+      "The dialogue action-voice fallback must share replacement suppression, or "
+      "farewell lines play their original Chinese voice under cached synthesized voice")
+check("PlayAnimationAudio" in integrations and "ReplaceAnimationAudio" in integrations,
+      "Sleep and farewell animation audio must be suppressed during replacement, or "
+      "their bundled Chinese voice bypasses every dialogue-audio gate")
+check(game_voice.count("AudioManager.StopVoice();") >= 2,
+      "A held line must stop native voice immediately around its re-show before the "
+      "external vocal synthesis player starts")
+check(re.search(
+          r"_allowOriginalShow = true;(?:(?!cue\.Bubble\.ShowNode).)*"
+          r"SuppressNativeAudioForThisLine\(\);(?:(?!cue\.Bubble\.ShowNode).)*"
+          r"cue\.Bubble\.ShowNode",
+          game_voice, re.S),
+      "Native-audio suppression must be refreshed immediately before a held line is "
+      "re-shown, or a stale decision lets Chinese overlap the cached replacement")
 check("SynthVoiceSelected" in chat and chat.count("SynthVoiceSelected") >= 3,
       "Generated replies must follow the selected voice mode, not merely an installed synthesizer")
-check("StopSynthPlaybackForNativeVoice" in settings and "CancelCurrent(true)" in chat and
+check("StopSynthPlaybackForNativeVoice" in settings and "CancelAll(true)" in chat and
       "public void Stop()" in voice_player,
-      "Selecting native Chinese must stop synth audio that was already queued or playing")
+      "Selecting native Chinese must stop chat and game synth audio already queued or playing")
 check("PlaybackActive" in speech and "PlaybackActive" in game_voice and
       "SuppressNativeAudioForThisLine();" in game_voice,
       "Native Chinese audio must remain suppressed for the full active synth clip")
+check("_nativeQueue" in speech and "ProcessNativeLoop" in speech and
+      "LilithVoice.NativeProcessor" in speech,
+      "Game dialogue needs a priority worker, or slow ambient synthesis blocks normal lines "
+      "and Goodbye until after exit")
+check("_playbackGate" in voice_player and "PlaySyncExclusive" in voice_player,
+      "Priority and chat workers must serialize the shared audio output")
 # Runtime dialogue translation is cached asynchronously.
 dynamic_cache = read(MOD_DIR, "DynamicLineCache.cs")
 check(dynamic_cache and "TranslateLineToJapaneseAsync" in chat,

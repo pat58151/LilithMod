@@ -11,12 +11,15 @@ namespace LilithMod
     public class SpeechQueueProcessor : IDisposable
     {
         private readonly ConcurrentQueue<Utterance> _queue = new ConcurrentQueue<Utterance>();
+        private readonly ConcurrentQueue<Utterance> _nativeQueue = new ConcurrentQueue<Utterance>();
         private readonly TtsClient _ttsClient;
         private readonly VoicePlayer _voicePlayer;
         private readonly ManualResetEventSlim _warmUpComplete = new ManualResetEventSlim(false);
         private readonly AutoResetEvent _queueAvailable = new AutoResetEvent(false);
+        private readonly AutoResetEvent _nativeQueueAvailable = new AutoResetEvent(false);
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private Thread _workerThread;
+        private Thread _nativeWorkerThread;
         private Thread _warmUpThread;
         private readonly string _playbackLockPath;
 
@@ -49,6 +52,15 @@ namespace LilithMod
         {
             if (utterance == null || (!utterance.CompletionOnly && string.IsNullOrEmpty(utterance.JaText)))
                 return;
+            // Game dialogue must never sit behind an uncached ambient response. The
+            // local service can take tens of seconds for those, which made normal
+            // dialogue and the farewell line remain held until after the game closed.
+            if (utterance.NativeDialogue != null)
+            {
+                _nativeQueue.Enqueue(utterance);
+                _nativeQueueAvailable.Set();
+                return;
+            }
             _queue.Enqueue(utterance);
             _queueAvailable.Set();
         }
@@ -78,13 +90,6 @@ namespace LilithMod
         public void CancelCurrent(bool stopPlayback = false)
         {
             if (stopPlayback) _voicePlayer.Stop();
-            // Route cancelled native cues so the coordinator can release them.
-            int held = NativeDialogueQueue.Count;
-            for (int i = 0; i < held && NativeDialogueQueue.TryDequeue(out NativeDialogueCue heldCue); i++)
-            {
-                heldCue.Cancel();
-                NativeDialogueQueue.Enqueue(heldCue);
-            }
             while (_queue.TryDequeue(out Utterance dropped))
             {
                 if (dropped.NativeDialogue == null) continue;
@@ -101,7 +106,28 @@ namespace LilithMod
         }
 
         private volatile bool _abandonRun;
-        internal bool PlaybackActive { get; private set; }
+        private int _nativeCancelGeneration;
+        private int _activePlaybackCount;
+        internal bool PlaybackActive => Volatile.Read(ref _activePlaybackCount) > 0;
+
+        /// <summary>Cancels chat and held game dialogue when synthesis becomes unavailable.</summary>
+        internal void CancelAll(bool stopPlayback = false)
+        {
+            CancelCurrent(stopPlayback);
+            int held = NativeDialogueQueue.Count;
+            for (int i = 0; i < held && NativeDialogueQueue.TryDequeue(out NativeDialogueCue cue); i++)
+            {
+                cue.Cancel();
+                NativeDialogueQueue.Enqueue(cue);
+            }
+            while (_nativeQueue.TryDequeue(out Utterance dropped))
+            {
+                dropped.NativeDialogue?.Cancel();
+                if (dropped.NativeDialogue != null)
+                    NativeDialogueQueue.Enqueue(dropped.NativeDialogue);
+            }
+            Interlocked.Increment(ref _nativeCancelGeneration);
+        }
 
         /// <summary>Returns a cancelled native cue to the coordinator.</summary>
         private void AbandonNativeCue(Utterance utterance)
@@ -135,6 +161,15 @@ namespace LilithMod
                 Name = "LilithVoice.Processor"
             };
             _workerThread.Start();
+
+            // Native game lines use a separate priority lane. Most are cache hits, so
+            // they can display and play immediately even while chat synthesis is slow.
+            _nativeWorkerThread = new Thread(ProcessNativeLoop)
+            {
+                IsBackground = true,
+                Name = "LilithVoice.NativeProcessor"
+            };
+            _nativeWorkerThread.Start();
         }
 
         // ---- Warm-up -------------------------------------------------------
@@ -347,12 +382,93 @@ namespace LilithMod
             }
         }
 
+        /// <summary>Processes game dialogue independently from generated chat.</summary>
+        private void ProcessNativeLoop()
+        {
+            _warmUpComplete.Wait();
+            while (!_cts.IsCancellationRequested)
+            {
+                if (!_nativeQueue.TryDequeue(out Utterance current))
+                {
+                    WaitHandle.WaitAny(new[] { _nativeQueueAvailable, _cts.Token.WaitHandle });
+                    continue;
+                }
+
+                byte[] wav;
+                int generation = Volatile.Read(ref _nativeCancelGeneration);
+                try
+                {
+                    wav = _ttsClient.SynthesizeAsync(current.JaText, current.Language, _cts.Token)
+                        .GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    NativeDialogueQueue.Enqueue(current.NativeDialogue);
+                    LilithModPlugin.Logger.LogWarning(
+                        $"[Voice] Game-line synthesis failed; showing text without voice: {ex.Message}");
+                    continue;
+                }
+
+                if (generation != Volatile.Read(ref _nativeCancelGeneration))
+                {
+                    current.NativeDialogue.Cancel();
+                    NativeDialogueQueue.Enqueue(current.NativeDialogue);
+                    continue;
+                }
+
+                NativeDialogueQueue.Enqueue(current.NativeDialogue);
+                try
+                {
+                    current.NativeDialogue.WaitUntilDisplayed(_cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                if (current.NativeDialogue.Cancelled)
+                    continue;
+
+                try
+                {
+                    // Native dialogue has priority over a generated reply already
+                    // playing through the shared output device.
+                    _voicePlayer.Stop();
+                    SetPlaybackActive(true);
+                    try
+                    {
+                        LilithModPlugin.Logger.LogInfo(
+                            $"[Voice] Playing synthesized game line " +
+                            $"{current.NativeDialogue.Node?.lineId ?? -1} " +
+                            $"({wav.Length / 1024} KB).");
+                        _voicePlayer.PlaySync(wav);
+                    }
+                    finally
+                    {
+                        SetPlaybackActive(false);
+                    }
+                }
+                catch (Exception playEx)
+                {
+                    LilithModPlugin.Logger.LogWarning(
+                        $"[Voice] Game-line playback error: {playEx.Message}");
+                }
+            }
+        }
+
         private void SetPlaybackActive(bool active)
         {
-            PlaybackActive = active;
+            int count = active
+                ? Interlocked.Increment(ref _activePlaybackCount)
+                : Math.Max(0, Interlocked.Decrement(ref _activePlaybackCount));
+            if (!active && count == 0)
+                Interlocked.Exchange(ref _activePlaybackCount, 0);
             try
             {
-                if (active)
+                if (count > 0)
                     File.WriteAllText(_playbackLockPath, "active");
                 else if (File.Exists(_playbackLockPath))
                     File.Delete(_playbackLockPath);
@@ -392,10 +508,12 @@ namespace LilithMod
             SetPlaybackActive(false);
             _cts.Cancel();
             _queueAvailable.Set();
+            _nativeQueueAvailable.Set();
             _warmUpComplete.Set(); // unblock the processor if it's still waiting
             try
             {
                 _workerThread?.Join(3000);
+                _nativeWorkerThread?.Join(3000);
                 // Join the warm-up thread too: it calls _warmUpComplete.Set() when it
                 // finishes, and disposing the event out from under it would throw
                 // ObjectDisposedException on a background thread - the same shape of
@@ -408,6 +526,7 @@ namespace LilithMod
             }
             _cts.Dispose();
             _queueAvailable.Dispose();
+            _nativeQueueAvailable.Dispose();
             _warmUpComplete.Dispose();
             _ttsClient.Dispose();
             _voicePlayer.Dispose();

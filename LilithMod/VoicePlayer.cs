@@ -9,6 +9,7 @@ namespace LilithMod
     public class VoicePlayer : IDisposable
     {
         private readonly object _gate = new object();
+        private readonly object _playbackGate = new object();
         private WaveOutEvent _currentOutput;
 
         /// <summary>Blocks until playback finishes or fails.</summary>
@@ -17,6 +18,14 @@ namespace LilithMod
             if (wavBytes == null || wavBytes.Length == 0)
                 return;
 
+            lock (_playbackGate)
+            {
+                PlaySyncExclusive(wavBytes);
+            }
+        }
+
+        private void PlaySyncExclusive(byte[] wavBytes)
+        {
             using (var ms = new MemoryStream(wavBytes))
             using (var reader = new WaveFileReader(ms))
             using (var output = new WaveOutEvent())

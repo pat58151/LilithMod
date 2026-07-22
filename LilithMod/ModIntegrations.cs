@@ -45,6 +45,14 @@ namespace LilithMod
                     new[] { typeof(string), typeof(bool) }),
                 prefix: new HarmonyMethod(typeof(ModIntegrations), nameof(ReplaceVoiceByName)));
             harmony.Patch(
+                AccessTools.Method(typeof(AudioManager), nameof(AudioManager.PlayActionSEOrVoice),
+                    new[] { typeof(LilithActionType), typeof(string) }),
+                prefix: new HarmonyMethod(typeof(ModIntegrations), nameof(ReplaceActionVoice)));
+            harmony.Patch(
+                AccessTools.Method(typeof(AudioManager), nameof(AudioManager.PlayAnimationAudio),
+                    new[] { typeof(string) }),
+                prefix: new HarmonyMethod(typeof(ModIntegrations), nameof(ReplaceAnimationAudio)));
+            harmony.Patch(
                 AccessTools.Method(typeof(DialogueBubbleUI), nameof(DialogueBubbleUI.Start)),
                 postfix: new HarmonyMethod(typeof(ModIntegrations), nameof(MakeDialogueBubbleTransparent)));
             harmony.Patch(
@@ -91,6 +99,11 @@ namespace LilithMod
         /// </summary>
         private static bool AllowNativeVoice()
         {
+            // Effective native mode wins over every per-line decision. PlayNodeVoice
+            // often runs before ShowNode, so waiting for the bubble gate to clear a
+            // stale vocal synthesis decision makes ordinary Chinese dialogue silent.
+            if (!VoiceReplacementEnabled() && !GameVoiceCoordinator.HoldingForSynthesis)
+                return true;
             // A line the coordinator declined keeps its own voice, so its audio has to
             // be let through even though replacement is otherwise on. Checked first:
             // suppressing it here is what turned wrong-language speech into silence.
@@ -123,6 +136,37 @@ namespace LilithMod
             return AllowNativeVoice();
         }
 
+        public static bool ReplaceActionVoice(LilithActionType actionType, string animName)
+        {
+            // DialogueManager can fall back to an action voice when a node is shown.
+            // That route bypasses every PlayVoice overload above. Only block it for
+            // a line the coordinator is actively replacing, since this method also
+            // carries non-dialogue action sounds.
+            return AllowReplacementSensitiveAudio("action voice", animName);
+        }
+
+        public static bool ReplaceAnimationAudio(string animName)
+        {
+            // Farewell and sleep animations can start their bundled voice clip here
+            // without passing through PlayVoice or PlayVoiceBySoundId.
+            return AllowReplacementSensitiveAudio("animation audio", animName);
+        }
+
+        private static bool AllowReplacementSensitiveAudio(string route, string detail)
+        {
+            if (!VoiceReplacementEnabled() && !GameVoiceCoordinator.HoldingForSynthesis)
+                return true;
+            bool allow = !GameVoiceCoordinator.NativeAudioSuppressed;
+            if (!allow && LilithModPlugin.CfgLogDiagnostics != null &&
+                LilithModPlugin.CfgLogDiagnostics.Value)
+            {
+                LilithModPlugin.Logger.LogInfo(
+                    $"[Voice] Suppressed native {route}" +
+                    (string.IsNullOrEmpty(detail) ? "." : $" '{detail}'."));
+            }
+            return allow;
+        }
+
         public static bool ReplaceResolvedDialogueVoice(AudioClip clip, bool isDialogueLine)
         {
             // Only dialogue is ours to suppress; other audio through this path is
@@ -137,7 +181,8 @@ namespace LilithMod
             // together. Gating only one leaves the other half of a line suppressed -
             // silent dialogue instead of wrong-language dialogue.
             return LilithModPlugin.CfgReplaceGameVoice.Value && VoiceConfig.Enabled &&
-                LilithModPlugin.VoiceProcessor != null && DialogueTextCatalog.Available;
+                VoiceServiceMonitor.IsAvailable && LilithModPlugin.VoiceProcessor != null &&
+                DialogueTextCatalog.Available;
         }
 
         public static void MakeDialogueBubbleTransparent(DialogueBubbleUI __instance)

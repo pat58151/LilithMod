@@ -1,6 +1,7 @@
 using System;
 using System.Net.Sockets;
 using System.Threading.Tasks;
+using UI.TraySetting;
 using UnityEngine;
 
 namespace LilithMod
@@ -10,6 +11,9 @@ namespace LilithMod
         public VoiceServiceMonitor(IntPtr ptr) : base(ptr) { }
 
         internal static bool IsAvailable { get; private set; }
+
+        /// <summary>Whether the background probe has resolved the startup state.</summary>
+        internal static bool AvailabilityKnown { get; private set; }
 
         /// <summary>
         /// Whether the service has answered even once this session. "Not up yet" and
@@ -98,14 +102,28 @@ namespace LilithMod
 
         private void ApplyAvailability(bool available)
         {
+            bool firstResolution = !AvailabilityKnown;
+            bool wasAvailable = IsAvailable;
             bool changed = IsAvailable != available;
             IsAvailable = available;
+            AvailabilityKnown = true;
             if (available) EverAvailable = true;
             bool preferred = LilithModPlugin.CfgVoiceSynthesisPreferred != null &&
                              LilithModPlugin.CfgVoiceSynthesisPreferred.Value;
             bool effective = preferred && available;
             if (LilithModPlugin.CfgReplaceGameVoice.Value != effective)
                 LilithModPlugin.CfgReplaceGameVoice.Value = effective;
+            if (wasAvailable && !available)
+                LlmChatController.StopSynthPlaybackForNativeVoice();
+            if (!available && (firstResolution || changed))
+            {
+                // Keep the saved synthesis preference in the mod, but route the
+                // game's effective voice database to Chinese. Lines with explicit
+                // sound IDs worked without this; idle and interaction voices use the
+                // synthesis selector's localization database and were silent.
+                TraySettingChanged.PublishGameVoice(
+                    TraySettingChanged.GameLocalizationVoiceType.ChineseSimplified);
+            }
 
             if (!_reported || changed)
             {

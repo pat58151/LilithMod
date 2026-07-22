@@ -1005,7 +1005,7 @@ namespace LilithMod
 
         internal static void StopSynthPlaybackForNativeVoice()
         {
-            LilithModPlugin.VoiceProcessor?.CancelCurrent(true);
+            LilithModPlugin.VoiceProcessor?.CancelAll(true);
             if (_instance == null) return;
             _instance._replyPlaybackActive = false;
             _instance._currentReplyEnglish = null;

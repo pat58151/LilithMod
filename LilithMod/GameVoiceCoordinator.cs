@@ -26,7 +26,10 @@ namespace LilithMod
         internal static bool NativeAudioAllowed => DecisionFresh && _nativeAudioAllow;
 
         /// <summary>Whether the current native line is being replaced.</summary>
-        internal static bool NativeAudioSuppressed => DecisionFresh && !_nativeAudioAllow;
+        internal static bool NativeAudioSuppressed =>
+            (DecisionFresh && !_nativeAudioAllow) ||
+            (LilithModPlugin.VoiceProcessor != null &&
+             LilithModPlugin.VoiceProcessor.PlaybackActive);
 
         private static void AllowNativeAudioForThisLine()
         {
@@ -51,7 +54,8 @@ namespace LilithMod
 
         /// <summary>Holds both native text and audio while synthesis starts.</summary>
         internal static bool HoldingForSynthesis =>
-            !_allowOriginalShow && !VoiceServiceMonitor.EverAvailable &&
+            !_allowOriginalShow && !VoiceServiceMonitor.AvailabilityKnown &&
+            !VoiceServiceMonitor.EverAvailable &&
             SynthesisPreferred() && DialogueTextCatalog.Available &&
             Time.unscaledTime < VoiceGraceSeconds;
 
@@ -62,12 +66,6 @@ namespace LilithMod
                    VoiceConfig.Enabled;
         }
 
-        /// <summary>Whether cached replacement is configured.</summary>
-        private static bool CacheReplacementPossible()
-        {
-            return SynthesisPreferred() && DialogueTextCatalog.Available &&
-                   LilithModPlugin.VoiceProcessor != null;
-        }
         private readonly HashSet<long> _pendingNodes = new HashSet<long>();
 
         /// <summary>Newest dialogue node for each bubble.</summary>
@@ -106,15 +104,11 @@ namespace LilithMod
             // Wait only while a configured service is still starting.
             if (node != null && bubble != null && HoldingForSynthesis)
             {
-                // Cached audio needs no service, so try that before dropping.
-                if (_instance != null && !_instance.QueueNode(bubble, node, cachedOnly: true))
-                    return false;
-
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                 {
                     LilithModPlugin.Logger.LogInfo(
                         $"[Voice] Dropped native line {node.lineId} (id {node.id}); " +
-                        "synthesis is preferred but has not come up yet, and this line is not cached.");
+                        "synthesis startup state is not known yet.");
                 }
                 return false;
             }
@@ -141,14 +135,12 @@ namespace LilithMod
             // A new node supersedes older held nodes on the same bubble.
             if (!_allowOriginalShow && node != null && bubble != null && _instance != null)
                 _instance._latestNodeForBubble[bubble.Pointer.ToInt64()] = node.Pointer.ToInt64();
-            // Service unreachable, but a cached line still plays.
             bool replacing = ModIntegrations.VoiceReplacementEnabled();
-            if (!replacing && !_allowOriginalShow && node != null && bubble != null &&
-                _instance != null && CacheReplacementPossible() &&
-                !_instance.QueueNode(bubble, node, cachedOnly: true))
-            {
-                return false;
-            }
+            // Once synthesis is unavailable, every normal game line is a native
+            // fallback. Clear any short-lived suppression left by a cancelled or
+            // previously replaced line before the game's audio callbacks run.
+            if (!_allowOriginalShow && !replacing && node != null && bubble != null)
+                AllowNativeAudioForThisLine();
             if (_allowOriginalShow || !replacing ||
                 _instance == null || bubble == null || node == null)
             {
@@ -175,8 +167,7 @@ namespace LilithMod
         }
 
         /// <summary>Queues replacement audio or allows the native line.</summary>
-        /// <param name="cachedOnly">Use only existing cached audio.</param>
-        private bool QueueNode(DialogueBubbleUI bubble, DialogueNode node, bool cachedOnly = false)
+        private bool QueueNode(DialogueBubbleUI bubble, DialogueNode node)
         {
             long key = node.Pointer.ToInt64();
             if (_pendingNodes.Contains(key)) return false;
@@ -230,17 +221,6 @@ namespace LilithMod
                 return true;
             }
 
-            // Keep native voice when neither cache nor synthesis is available.
-            if (cachedOnly && !LilithModPlugin.VoiceProcessor.IsCached(text, language))
-            {
-                AllowNativeAudioForThisLine();
-                if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
-                    LilithModPlugin.Logger.LogInfo(
-                        $"[Voice] Original voice kept for line {node.lineId} (id {node.id}): " +
-                        "synthesis unreachable and no cached audio for this line.");
-                return true;
-            }
-
             var cue = new NativeDialogueCue(bubble, node, key);
             _pendingNodes.Add(key);
             // Record the decision for the audio prefixes, which cannot see it.
@@ -255,8 +235,7 @@ namespace LilithMod
             });
             if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                 LilithModPlugin.Logger.LogInfo(
-                    $"[Voice] Holding line {node.lineId} until {language} audio is ready" +
-                    (cachedOnly ? " (from cache; synthesis not reachable)." : "."));
+                    $"[Voice] Holding line {node.lineId} until {language} audio is ready.");
             // Restore the previous reply while this line waits for audio.
             LlmChatController.RequestReplyBubbleRestore();
             return false;
@@ -292,8 +271,18 @@ namespace LilithMod
                 try
                 {
                     _allowOriginalShow = true;
+                    // Queueing may have taken longer than the short-lived audio
+                    // decision. Refresh it before ShowNode invokes the game's voice
+                    // callbacks, otherwise the cached replacement and original
+                    // Chinese clip can start together.
+                    SuppressNativeAudioForThisLine();
+                    // Some farewell animations start voice audio outside the patched
+                    // dialogue methods. Stop anything that escaped before handing the
+                    // subtitle to the external vocal synthesis player.
+                    AudioManager.StopVoice();
                     if (cue.Bubble != null && cue.Node != null)
                         cue.Bubble.ShowNode(cue.Node);
+                    AudioManager.StopVoice();
                 }
                 catch (Exception ex)
                 {

@@ -20,7 +20,7 @@ namespace LilithMod
         /// <summary>
         /// A cancelled cue is neither re-shown nor voiced: the coordinator still
         /// clears its pending entry, and the voice thread skips its audio. Set when
-        /// a newer line superseded this one, or a chat reply abandoned it.
+        /// a newer line superseded this one, or synthesis became unavailable.
         /// </summary>
         internal bool Cancelled => _cancelled;
         private volatile bool _cancelled;
