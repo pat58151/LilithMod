@@ -14,6 +14,12 @@ namespace LilithMod
 
         private static float _modSpokeAt = -600f;
 
+        /// <summary>Whether the bubble still carries the mod's latest reply.</summary>
+        private static bool _modReplyCurrent;
+
+        /// <summary>Line ids of the game's periodic music-listening notes.</summary>
+        private static HashSet<int> _musicNoteLineIds;
+
         /// <summary>How the next native audio callbacks should handle this line.</summary>
         private const float NativeAudioDecisionSeconds = 2f;
 
@@ -94,6 +100,7 @@ namespace LilithMod
             if (node != null && node.id == 9500000)
             {
                 _modSpokeAt = Time.unscaledTime;
+                _modReplyCurrent = true;
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                     LilithModPlugin.Logger.LogInfo(
                         "[Voice] Mod reply bubble seen; native dialogue held off for " +
@@ -132,6 +139,23 @@ namespace LilithMod
                 SuppressNativeAudioForThisLine();
                 return false;
             }
+
+            // Music notes are periodic filler while a track plays. They must not
+            // take the bubble from a reply the player is still reading; drop the
+            // note and keep the reply. Once the bubble carries anything else,
+            // notes flow again.
+            if (node != null && bubble != null && !_allowOriginalShow && _modReplyCurrent &&
+                bubble.gameObject.activeInHierarchy && IsMusicNoteFiller(node))
+            {
+                if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                    LilithModPlugin.Logger.LogInfo(
+                        $"[Voice] Dropped music note {node.lineId}; the reply bubble is still current.");
+                LlmChatController.RequestReplyBubbleRestore();
+                SuppressNativeAudioForThisLine();
+                return false;
+            }
+            if (node != null && node.id != 9500000) _modReplyCurrent = false;
+
             // A new node supersedes older held nodes on the same bubble.
             if (!_allowOriginalShow && node != null && bubble != null && _instance != null)
                 _instance._latestNodeForBubble[bubble.Pointer.ToInt64()] = node.Pointer.ToInt64();
@@ -171,11 +195,50 @@ namespace LilithMod
             return _instance.QueueNode(bubble, node);
         }
 
+        /// <summary>
+        /// Whether a node is the game's music-note filler. Notes are observed with
+        /// lineId 0 in the wild, so the declared note ids are backed by "an id-less
+        /// line while the player's music is on".
+        /// </summary>
+        private static bool IsMusicNoteFiller(DialogueNode node)
+        {
+            if (node == null) return false;
+            try
+            {
+                if (_musicNoteLineIds == null)
+                {
+                    // Read once; retried while empty in case the class has not
+                    // initialised yet.
+                    var ids = new HashSet<int>();
+                    var lines = MusicListeningBehavior.NoteLines;
+                    if (lines != null)
+                        foreach (var line in lines) ids.Add(line.Item1);
+                    if (ids.Count > 0) _musicNoteLineIds = ids;
+                }
+                if (_musicNoteLineIds != null && _musicNoteLineIds.Contains(node.lineId))
+                    return true;
+                return node.lineId == 0 && AudioManager.IsUserMusicPlaying;
+            }
+            catch { return false; }
+        }
+
         /// <summary>Queues replacement audio or allows the native line.</summary>
         private bool QueueNode(DialogueBubbleUI bubble, DialogueNode node)
         {
             long key = node.Pointer.ToInt64();
             if (_pendingNodes.Contains(key)) return false;
+
+            // Music-note filler is shown, never voiced: she should not talk over
+            // the track for a hummed note, and the translation round trip is
+            // wasted on it.
+            if (IsMusicNoteFiller(node))
+            {
+                AllowNativeAudioForThisLine();
+                if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
+                    LilithModPlugin.Logger.LogInfo(
+                        $"[Voice] Music note (id {node.id}) left as text only.");
+                return true;
+            }
 
             string language = PersonaPrompt.CurrentVoiceLanguage();
             string text = null;
