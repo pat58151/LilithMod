@@ -7,7 +7,7 @@ using System.Reflection;
 
 namespace LilithMod
 {
-    [BepInPlugin("LilithMod", "LilithMod", "1.1.0")]
+    [BepInPlugin("LilithMod", "LilithMod", "1.0.0")]
     public class LilithModPlugin : BasePlugin
     {
         private static LilithModPlugin _instance;
