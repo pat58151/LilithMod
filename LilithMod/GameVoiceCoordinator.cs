@@ -154,10 +154,12 @@ namespace LilithMod
                         bubble == null ? "bubble null" :
                         _allowOriginalShow ? "re-show of a line already replaced" :
                         _instance == null ? "coordinator not awake" :
+                        // Catalogue first: a release build without it would otherwise
+                        // report every line as a synthesis outage.
+                        !DialogueTextCatalog.Available ? "no dialogue catalogue in this build" :
                         ModIntegrations.SynthesisSelected ? "synthesis unavailable; subtitle only" :
                         !LilithModPlugin.CfgReplaceGameVoice.Value ? "native Chinese selected" :
                         !VoiceConfig.Enabled ? "voice disabled" :
-                        !DialogueTextCatalog.Available ? "no dialogue catalogue in this build" :
                         LilithModPlugin.VoiceProcessor == null ? "voice processor not ready" :
                         "unknown";
                     LilithModPlugin.Logger.LogInfo(
