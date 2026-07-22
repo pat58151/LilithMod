@@ -30,8 +30,27 @@ namespace LilithMod
             }
             catch { }
 
+            // Music is the game's own user-music player; she should know she is
+            // sharing it rather than talking over it obliviously.
+            string music = "";
+            try
+            {
+                if (AudioManager.IsUserMusicPlaying)
+                {
+                    string track = "";
+                    var audio = AudioManager.instance;
+                    string path = audio != null ? audio._userMusicFilePath : null;
+                    if (!string.IsNullOrEmpty(path))
+                        track = $" ('{System.IO.Path.GetFileNameWithoutExtension(path)}')";
+                    music = " She and the player are listening to the player's music together" +
+                        track + "; she may mention or react to it when it fits, without " +
+                        "narrating it constantly.";
+                }
+            }
+            catch { }
+
             return $"Current context: local time {now:dddd, yyyy-MM-dd HH:mm zzz}; " +
-                $"Lilith is {posture}. {tone}" + ForegroundActivity.Context();
+                $"Lilith is {posture}. {tone}{music}" + ForegroundActivity.Context();
         }
 
         private static bool IsNearBedtime(DateTime now)
