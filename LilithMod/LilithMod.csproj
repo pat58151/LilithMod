@@ -9,6 +9,7 @@
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Version>1.1.0</Version>
     <GameDir Condition="'$(GameDir)' == ''">$(LILITH_GAME_DIR)</GameDir>
   </PropertyGroup>
 

@@ -77,6 +77,11 @@ namespace LilithMod
             _probe = Task.Run(ProbeAsync);
         }
 
+        private void OnApplicationQuit()
+        {
+            ServiceBootstrap.Stop();
+        }
+
         private static async Task<bool> ProbeAsync()
         {
             if (LilithModPlugin.CfgForceSynthesisUnavailable != null &&

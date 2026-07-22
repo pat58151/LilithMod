@@ -27,6 +27,30 @@ them grey out rather than failing.
 
 ---
 
+## Requirements
+
+Windows, 64-bit. Chat asks for almost nothing beyond the game — it thinks over
+the network. The local voice and speech features are what want hardware, and
+both fall back to the CPU when there is no GPU.
+
+| | needs |
+|---|---|
+| **Chat** | The game, an internet connection, and a DeepSeek key. No GPU. |
+| **Her voice** | About 2 GB of disk. Runs on the CPU, or on a GPU for much faster lines (NVIDIA is fastest). |
+| **Speaking to her** | About 2 GB of disk and a microphone. Runs on the CPU, or on an NVIDIA GPU for faster transcription. |
+
+The models stay resident for the whole session, not only while she speaks or
+listens. On the machine she was built on — an i5-14400F, 32 GB of RAM, and a
+Radeon RX 9060 XT 16 GB — the full stack (game, voice server, and speech
+listener running whisper-large-v3-turbo) holds roughly 7–8 GB of VRAM and about
+8 GB of RAM the whole time she is up. Budget an 8 GB card and 16 GB of system
+RAM for everything on the GPU; smaller setups run one feature on the GPU and
+the rest on the CPU. NVIDIA works through CUDA, AMD through a ROCm build of
+PyTorch — she was developed on the latter — and with neither, everything falls
+back to the CPU.
+
+---
+
 ## Install
 
 Download the latest release and run `LilithMod-Setup-<version>.exe`. It finds

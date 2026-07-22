@@ -7,7 +7,7 @@ using System.Reflection;
 
 namespace LilithMod
 {
-    [BepInPlugin("LilithMod", "LilithMod", "1.0.0")]
+    [BepInPlugin("LilithMod", "LilithMod", "1.1.0")]
     public class LilithModPlugin : BasePlugin
     {
         private static LilithModPlugin _instance;
@@ -37,6 +37,7 @@ namespace LilithMod
         internal static ConfigEntry<bool> CfgIgnoreStartupShortcut;
         internal static ConfigEntry<bool> CfgAutoStartServices;
         internal static ConfigEntry<string> CfgServiceLauncher;
+        internal static ConfigEntry<bool> CfgStopServicesOnQuit;
         internal static ConfigEntry<bool> CfgAmbientEnabled;
         internal static ConfigEntry<int> CfgAmbientMinMinutes;
         internal static ConfigEntry<int> CfgAmbientMaxMinutes;
@@ -182,6 +183,10 @@ namespace LilithMod
             CfgServiceLauncher = Config.Bind("Services", "LauncherScript", "",
                 "Full path to start-lilith.ps1. Empty means derive it from the voice "
                 + "runtime location in voice-config.ini.");
+
+            CfgStopServicesOnQuit = Config.Bind("Services", "StopOnQuit", true,
+                "Stop the voice and speech services when the game closes. They hold "
+                + "several GB of VRAM while loaded, and start again with the game.");
 
             // Explicit coordinates avoid IP-based location lookup.
             CfgWeatherLatitude = Config.Bind("Weather", "Latitude", 0.0,

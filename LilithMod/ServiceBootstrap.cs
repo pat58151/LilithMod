@@ -65,6 +65,49 @@ namespace LilithMod
             }
         }
 
+        /// <summary>Stops the services with the game, so they do not hold VRAM idle.</summary>
+        internal static void Stop()
+        {
+            try
+            {
+                if (LilithModPlugin.CfgStopServicesOnQuit == null ||
+                    !LilithModPlugin.CfgStopServicesOnQuit.Value) return;
+
+                string plugin = Path.GetDirectoryName(typeof(ServiceBootstrap).Assembly.Location) ?? "";
+                // python.exe is far too generic to stop by name; match the service
+                // scripts on each command line instead, the same way the launcher
+                // replaces a stale listener. The flag files are process-state
+                // signals and must not outlive the processes they describe.
+                string script =
+                    "Get-CimInstance Win32_Process -Filter \"Name like 'python%'\" | " +
+                    "Where-Object { $_.CommandLine -match 'api_v2\\.py|push_to_talk\\.py' } | " +
+                    "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\n" +
+                    "foreach ($f in @('push-to-talk.active','push-to-talk.alive','voice-output.active'," +
+                    "'speech-setup\\wake-word.on')) { Remove-Item -LiteralPath (Join-Path '" +
+                    plugin.Replace("'", "''") + "' $f) -Force -ErrorAction SilentlyContinue }";
+
+                // -EncodedCommand sidesteps nested-quote escaping entirely. The
+                // spawned shell is detached, so it finishes the kills after the
+                // game process itself has exited.
+                string encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = "-NoProfile -EncodedCommand " + encoded,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+                LilithModPlugin.Logger.LogInfo(
+                    "[Services] Stopping voice and speech services with the game.");
+            }
+            catch (Exception ex)
+            {
+                // Never fatal: worst case the services stay up, exactly as before
+                // this feature existed.
+                LilithModPlugin.Logger.LogWarning("[Services] Could not stop services: " + ex.Message);
+            }
+        }
+
         private static bool StartupShortcutInstalled()
         {
             try
