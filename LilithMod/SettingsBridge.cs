@@ -101,7 +101,7 @@ namespace LilithMod
             // Tooltips follow the cursor every frame.
             RefreshWakeWordTooltip();
             TryShowOpacityDialogue();
-            ApplyMusicVolumeCeiling();
+            ApplyMusicVolumeScale();
 
             bool settingsVisible = _view != null && _view.IsVisible;
             if (_settingsVisible != settingsVisible)
@@ -194,7 +194,7 @@ namespace LilithMod
                 }
             }
 
-            // Music volume: a ceiling on the game's BGM source, which also carries
+            // Music volume: scales the game's BGM source, which also carries
             // tracks played from the music folder. Sits directly under the native
             // voice volume slider it was cloned from.
             _musicVolume = TraySettingView.CloneVolumeRow(
@@ -576,23 +576,45 @@ namespace LilithMod
         }
 
         /// <summary>
-        /// Caps the game's BGM source at the configured music volume. A ceiling
-        /// rather than an override, checked every frame: the game's own fade-outs
-        /// still work underneath it, and at 1.0 the source is never touched.
+        /// Scales the game's BGM source by the configured music volume. A value the
+        /// mod did not write is a fresh intent from the game (track start, fade
+        /// step) and becomes the new base; the source is then held at base x knob,
+        /// so the slider works in both directions and survives track changes. At
+        /// 1.0 the base is restored once and the source is left alone.
         /// </summary>
-        private void ApplyMusicVolumeCeiling()
+        private void ApplyMusicVolumeScale()
         {
             try
             {
-                float volume = Mathf.Clamp01(LilithModPlugin.CfgMusicVolume.Value);
-                if (volume >= 0.999f) return;
+                float knob = Mathf.Clamp01(LilithModPlugin.CfgMusicVolume.Value);
                 var audio = AudioManager.instance;
-                if (audio == null) return;
-                var bgm = audio.source_BGM;
-                if (bgm != null && bgm.volume > volume) bgm.volume = volume;
+                var bgm = audio != null ? audio.source_BGM : null;
+                if (bgm == null) return;
+
+                float current = bgm.volume;
+                if (knob >= 0.999f)
+                {
+                    // Hand the source back to the game at its own level.
+                    if (_musicVolumeWritten >= 0f &&
+                        Math.Abs(current - _musicVolumeWritten) <= 0.0001f)
+                        bgm.volume = _musicVolumeBase;
+                    _musicVolumeWritten = -1f;
+                    return;
+                }
+
+                if (_musicVolumeWritten < 0f ||
+                    Math.Abs(current - _musicVolumeWritten) > 0.0001f)
+                    _musicVolumeBase = current;
+
+                float target = _musicVolumeBase * knob;
+                if (Math.Abs(current - target) > 0.0001f) bgm.volume = target;
+                _musicVolumeWritten = bgm.volume;
             }
             catch { }
         }
+
+        private float _musicVolumeWritten = -1f;
+        private float _musicVolumeBase = 1f;
 
         private async void ScheduleApiKeyValidation(string key)
         {

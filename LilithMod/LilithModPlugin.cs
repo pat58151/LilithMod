@@ -237,7 +237,7 @@ namespace LilithMod
             CfgLilithOpacity = Config.Bind("Display", "LilithOpacity", 0.6f,
                 "Lilith character opacity from 0.2 to 1.0. Click-through uses the game's built-in setting.");
             CfgMusicVolume = Config.Bind("Sound", "MusicVolume", 1.0f,
-                "Ceiling for the game's music from 0 to 1, including tracks from the "
+                "Scales the game's music from 0 to 1, including tracks from the "
                 + "music folder. At 1 the game's own volume control is left alone.");
             // New key names avoid inheriting obsolete voice-input settings.
             CfgPushToTalkEnabled = Config.Bind("VoiceInput", "PushToTalkEnabled", true,
