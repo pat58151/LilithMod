@@ -35,6 +35,8 @@ namespace LilithMod
         private TMP_InputField _pushToTalkKeyField;
         private Slider _opacity;
         private TMP_Text _opacityLabel;
+        private Slider _musicVolume;
+        private TMP_Text _musicVolumeLabel;
         private ButtonToggle _allowOpenAppsToggle;
         private TMP_Text _allowOpenAppsLabel;
         private ButtonToggle _wakeWordToggle;
@@ -99,6 +101,7 @@ namespace LilithMod
             // Tooltips follow the cursor every frame.
             RefreshWakeWordTooltip();
             TryShowOpacityDialogue();
+            ApplyMusicVolumeCeiling();
 
             bool settingsVisible = _view != null && _view.IsVisible;
             if (_settingsVisible != settingsVisible)
@@ -191,6 +194,23 @@ namespace LilithMod
                 }
             }
 
+            // Music volume: a ceiling on the game's BGM source, which also carries
+            // tracks played from the music folder. Sits directly under the native
+            // voice volume slider it was cloned from.
+            _musicVolume = TraySettingView.CloneVolumeRow(
+                sliderRow, "LilithMusicVolume", "LilithMusicVolume", "Music volume", 1);
+            if (_musicVolume != null)
+            {
+                _musicVolume.minValue = 0f;
+                _musicVolume.maxValue = 1f;
+                _musicVolume.wholeNumbers = false;
+                _musicVolume.value = Mathf.Clamp01(LilithModPlugin.CfgMusicVolume.Value);
+                Transform musicVolumeRow = view.GetRowOf(_musicVolume.transform);
+                _musicVolumeLabel = FindRowLabel(musicVolumeRow);
+                TraySettingView.StripLabelLocalizer(_musicVolumeLabel);
+                if (musicVolumeRow != null) musicVolumeRow.gameObject.SetActive(true);
+            }
+
             BuildAppRows(view);
 
             _deepSeekLabel = deepSeekLabel;
@@ -254,6 +274,7 @@ namespace LilithMod
             }
             view.MapRow(_pushToTalkKeyField, TraySettingView.TabControls);
             if (_opacity != null) view.MapRow(_opacity, TraySettingView.TabLilith);
+            if (_musicVolume != null) view.MapRow(_musicVolume, TraySettingView.TabSound);
 
             ConfigureNativeVoiceSelector(view);
             OrderMeRows(view);
@@ -526,6 +547,13 @@ namespace LilithMod
                 ApplyLilithOpacity(opacity);
             }
 
+            if (_musicVolume != null)
+            {
+                float musicVolume = Mathf.Clamp01(_musicVolume.value);
+                if (Math.Abs(musicVolume - LilithModPlugin.CfgMusicVolume.Value) > 0.001f)
+                    LilithModPlugin.CfgMusicVolume.Value = musicVolume;
+            }
+
             // Polled rather than listener-driven: the native UnityEvent was severed on
             // the clone, so this is what carries a click through to the config.
             if (_allowOpenAppsToggle != null &&
@@ -545,6 +573,25 @@ namespace LilithMod
                 LilithModPlugin.Logger.LogInfo(
                     "[Settings] Wake word set to " + _wakeWordToggle.IsOn + ".");
             }
+        }
+
+        /// <summary>
+        /// Caps the game's BGM source at the configured music volume. A ceiling
+        /// rather than an override, checked every frame: the game's own fade-outs
+        /// still work underneath it, and at 1.0 the source is never touched.
+        /// </summary>
+        private void ApplyMusicVolumeCeiling()
+        {
+            try
+            {
+                float volume = Mathf.Clamp01(LilithModPlugin.CfgMusicVolume.Value);
+                if (volume >= 0.999f) return;
+                var audio = AudioManager.instance;
+                if (audio == null) return;
+                var bgm = audio.source_BGM;
+                if (bgm != null && bgm.volume > volume) bgm.volume = volume;
+            }
+            catch { }
         }
 
         private async void ScheduleApiKeyValidation(string key)
@@ -1297,6 +1344,8 @@ namespace LilithMod
                 ja ? "音声合成\nフォルダを開く" : zh ? "打开合成\n语音文件夹" : "Open Vocal\nSynth Folder");
             SetWrappedLabel(_opacityLabel,
                 ja ? "不透明度" : zh ? "不透明度" : "Opacity");
+            SetWrappedLabel(_musicVolumeLabel,
+                ja ? "音楽の音量" : zh ? "音乐音量" : "Music volume");
             SetWrappedLabel(_allowOpenAppsLabel,
                 ja ? "アプリ起動を\n許可" : zh ? "允许莉莉丝\n打开应用" : "Allow Lilith\nto open Apps");
             // No parenthetical: the hint mark beside the toggle carries that now.
