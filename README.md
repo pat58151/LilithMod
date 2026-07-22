@@ -1,164 +1,113 @@
-# LilithMod
+# LilithMod source
 
-A companion mod for *The NOexistenceN of Lilith*. It gives Lilith free-form
-conversation, the voice you imagine for her, a memory of what you told her,
-and the occasional handwritten note.
+Private development repository for
+[LilithMod](https://github.com/pat58151/LilithMod), a companion mod for
+*The NOexistenceN of Lilith*.
 
-She is a companion, not an assistant. Everything in the tuning is aimed at one
-line: present without demanding attention.
+The public repository contains releases and user documentation. This repository
+contains the C# source, installer, local service setup, tests, and packaging
+tools.
 
----
+## Current target
 
-## What she can do
-
-| she can | what that looks like |
+| Component | Version |
 |---|---|
-| **Hold a conversation** | Type to her with F7, speak with F8, or call her by name. She answers in character with subtitles in the game display language. |
-| **Speak aloud** | Choose the game's native Chinese voice or a local GPT-SoVITS voice. The voice you choose carries all she says, her own words and the game's lines alike. |
-| **Remember you** | She carries recent talks with her and lets meaningful moments settle into longer memory. She recognises a familiar subject across English, Japanese, and Chinese. |
-| **Notice things** | She senses the time, her posture, sleep, and your touch, and it colours how she answers. |
-| **Listen with you** | Play a track from the music folder and she knows you chose it. A slider sets the music volume. |
-| **Speak first** | Now and then she begins on her own, finding her own words for the moment. |
-| **Write to you** | Rarely, after several real conversations, she might leave a note in the in-game inbox. |
-| **Look things up** | Ask, and she can reach past the game for the weather, or search the web for what you need. |
+| LilithMod | 1.0.0 |
+| Game | 1.0.1 |
+| Runtime | BepInEx 6 IL2CPP |
+| Target framework | .NET Standard 2.1 |
 
-Chat needs an API key you supply. Voice and speech input are optional; without
-them she still works, silently and typed-only, and the settings rows that need
-them grey out rather than failing.
+## Repository layout
 
----
+| Path | Contents |
+|---|---|
+| `LilithMod/` | Mod source and project file |
+| `installer/` | Windows installer source |
+| `runtime/` | Runtime and release packaging scripts |
+| `tests/` | Streaming reply test harness |
+| `image/` | Public documentation images |
+| `SETUP.md` | End-user setup instructions |
+| `TECHNIQUES.md` | Design and implementation notes |
+| `verify-bilingual.py` | Localization and source validation |
+| `verify-package.py` | Release package build and validation |
 
 ## Requirements
 
-- *The NOexistenceN of Lilith* v1.0.1
-- Windows, 64-bit
-- A DeepSeek API key you supply. DeepSeek is prepaid and generally inexpensive
-  for normal use.
+- Windows with PowerShell 5.1 or newer
+- .NET 8 SDK
+- Python 3.10 or newer
+- An installed copy of the game
+- BepInEx 6 IL2CPP installed in the game directory
 
-Chat asks for almost nothing beyond the game. The local voice and speech
-features are what want hardware, and both fall back to the CPU when there is
-no GPU.
+Launch the modded game once before building. Confirm that
+`BepInEx\interop\Assembly-CSharp.dll` exists.
 
-The models stay resident for the whole session, not only while she speaks or
-listens. On the machine she was built on, an i5-14400F with 32 GB of RAM and a
-Radeon RX 9060 XT 16 GB, the full stack (game, voice server, and speech
-listener running whisper-large-v3-turbo) holds roughly 7 to 8 GB of VRAM and
-about 8 GB of RAM the whole time she is up. Budget an 8 GB card and 16 GB of
-system RAM for everything on the GPU; smaller setups run one feature on the
-GPU and the rest on the CPU. NVIDIA works through CUDA, AMD through a ROCm
-build of PyTorch, and with neither, everything falls back to the CPU.
+## Local configuration
 
----
+Set the game directory for the current PowerShell session:
 
-## Install
+```powershell
+$env:LILITH_GAME_DIR = "D:\path\to\The NOexistenceN of Lilith"
+```
 
-Download the latest release and run `LilithMod-Setup-<version>.exe`. It finds
-the game through Steam, installs BepInEx, and sets the one Doorstop flag that
-Steam otherwise silently breaks.
+Keep API keys in the game's `BepInEx\config\LilithMod.cfg` file.
 
-Each release names the game version it was built against, currently
-*The NOexistenceN of Lilith* v1.0.1. A game update may break the mod until a
-release catches up.
+Do not commit game files, dialogue extracts, voice data, models, caches, logs,
+local runtimes, or API keys.
 
-Then, in game: **Settings / Me / DeepSeek API Key**. Paste a key. Without one,
-F7 and F8 do nothing by design.
+## Build and test
 
-![Settings / Me](image/ui1.png)
+Run the standard validation sequence from the repository root:
 
-The key lives in `BepInEx\config\LilithMod.cfg` on your machine and goes
-nowhere except the API you configured. It is never logged and never committed.
+```powershell
+dotnet restore LilithMod\LilithMod.csproj
+dotnet build LilithMod\LilithMod.csproj -c Release -p:IncludeDialogueCatalog=false
+python verify-bilingual.py
+dotnet run --project tests\StreamingReplyHarness -c Release
+```
 
-**First launch is slow.** BepInEx generates its interop assemblies from the
-game. Do not force-quit it; that can break the next launch too.
+Normal builds write to `LilithMod\bin`.
 
-**If the game looks unmodded**, fully exit both the game and Steam, restart
-Steam, and launch again. Starting `Lilith.exe` directly while Steam is closed
-poisons the environment for every later launch.
+To deploy a local build, close the game and run:
 
-That is chat working. Her voice and speaking to her are separate installs, and
-neither is bundled. **[SETUP.md](SETUP.md)** covers those, where to get an API
-key, and how to start everything by itself.
+```powershell
+dotnet build LilithMod\LilithMod.csproj -c Release
+Copy-Item LilithMod\bin\Release\*.dll `
+  "$env:LILITH_GAME_DIR\BepInEx\plugins\LilithMod" -Force
+```
 
----
+The local deploy build includes the dialogue catalogue. Public builds must not
+include it.
 
-## Controls
+## Package a release
 
-**F7** opens the chat bar. Type, press Enter, she answers.
+Download the BepInEx 6 x64 IL2CPP archive to `tools\bepinex785.zip`. The
+`tools` directory is ignored by Git.
 
-![the chat bar](image/f7.png)
+Then run:
 
-**F8** listens instead, and submits on its own after a brief silence. Press it
-again to cancel.
+```powershell
+python verify-package.py
+```
 
-![listening](image/f8.png)
+This builds the package and checks that it excludes dialogue catalogues,
+symbols, configuration files, logs, models, and extracted assets.
 
-**Say her name** and she wakes, on her own, to listen to what you have to say.
+Before publishing:
 
-Typing while F8 listens wins: what you type is used and the transcript
-discarded. Escape closes the bar. Both keys rebind under Settings / Controls,
-and cannot be bound to the same key.
+1. Confirm the mod and supported game versions.
+2. Run the build and test sequence.
+3. Run `python verify-package.py`.
+4. Review `git status` and `git diff --check`.
+5. Inspect the generated archive.
+6. Update the public repository documentation and release notes.
 
----
+Never publish content from `backup`, `dialogue`, `training`, `voice-data`,
+`voice-runtime`, or a game installation.
 
-## Memory
+## Documentation
 
-Lilith remembers the shape of your recent conversations and lets meaningful
-parts settle into longer memories. She can recognize a familiar subject even
-when you describe it differently or move between English, Japanese, and
-Chinese.
-
-What you share leaves traces. Sometimes a familiar subject brings an old moment
-quietly back into the way she speaks.
-
----
-
-## Foreground awareness
-
-Lilith can notice the game or application you are spending time with. She knows
-some apps, such as Discord and Visual Studio Code, by name, and can recognize
-others without looking inside them.
-
-She never reads Discord channels or messages, browser tabs, document names, or
-the contents of another application.
-
----
-
-## Voice selection
-
-The Sound settings offer the game's native Chinese voice or a voice of your
-own, running on your machine.
-
----
-
-## What leaves your machine
-
-Information leaves only while the related feature is being used.
-
-| what | where | why |
-|---|---|---|
-| what you type or say | the DeepSeek API | so she can answer |
-| asking about weather | `ip-api.com`, then `open-meteo.com` | rough location, then forecast |
-| asking her to search | a public SearXNG instance | the query, then she reads the results |
-| foreground awareness | the DeepSeek API | the active game or program name; never a window, channel, message, tab, or document title |
-
-Her voice, memory, and notes remain on your machine. When Lilith answers, the
-relevant parts of your shared history accompany your message.
-
-Voice setup is optional and documented separately: **Settings / Sound / Open
-Vocal Synth Folder**. No synthesiser and no voice model are bundled; that
-folder explains how to install one and point the mod at it. Speech input
-likewise, under **Settings / Me**. Neither folder button ever greys out:
-they are how you find out why something is unavailable.
-
----
-
-Interested in how Lilith works? Read the [design techniques](TECHNIQUES.md)
-behind her memory, voice, awareness, and behavior.
-
-*LilithMod is an unofficial fan-made project and is not affiliated with the
-original developer or publisher of The NOexistenceN of Lilith. See
-[DISCLAIMER.md](DISCLAIMER.md).*
-
-## Development
-
-Build, validation, and repository setup notes live in **[DEVELOPMENT.md](DEVELOPMENT.md)**.
+- [Detailed development notes](DEVELOPMENT.md)
+- [User setup](SETUP.md)
+- [Design techniques](TECHNIQUES.md)
+- [Disclaimer](DISCLAIMER.md)
