@@ -476,7 +476,7 @@ check("SpeechInputService" in speech_input and "push-to-talk.alive" in speech_in
       "a bar that waits forever for a transcript nobody is writing")
 check("PollWakeWordListening" in chat and "wake-listening.active" in chat and
       'wake_ui = output.parent / "wake-listening.active"' in ptt and
-      "StartListening(true)" in chat and "WAKE_THRESHOLD = 0.70" in ptt and
+      "StartListening(true)" in chat and "WAKE_THRESHOLD = 0.80" in ptt and
       "_lastWakeListeningToken" in chat and "File.ReadAllText(_wakeListeningPath)" in chat,
       "Wake-word capture must expose the same visible transcript UI as push-to-talk")
 check("SpeechInputPrompt" in chat and
