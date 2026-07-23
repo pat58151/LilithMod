@@ -1,10 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace LilithMod
 {
@@ -12,33 +14,66 @@ namespace LilithMod
     internal static class ForegroundActivity
     {
         private const double StableSeconds = 10;
+        // Only ever read and written by Poll() on the Unity main thread, so no
+        // cross-thread synchronization is needed (and volatile is invalid on DateTime).
         private static DateTime _nextPollUtc;
         private static DateTime _candidateSinceUtc;
         private static string _candidateKey;
-        private static string _stableContext;
+        private static volatile string _stableContext;
         private static DateTime _steamIndexExpiresUtc;
         private static readonly List<GameInstall> SteamGames = new List<GameInstall>();
+
+        // Inโ€‘flight guard: 0 = idle, 1 = worker running.  Never hands CPUโ€‘time to the
+        // foreground work on the Unity main thread.
+        private static int _inFlight;
 
         public static void Poll()
         {
             if (LilithModPlugin.CfgForegroundAwareness == null ||
                 !LilithModPlugin.CfgForegroundAwareness.Value) return;
+
             DateTime now = DateTime.UtcNow;
             if (now < _nextPollUtc) return;
+
+            // Advance the throttle *before* launching the worker so the next mainโ€‘thread
+            // Poll always sees an upโ€‘toโ€‘date limit, regardless of how quickly the worker
+            // actually starts.
             _nextPollUtc = now.AddSeconds(1);
 
-            Activity activity = Detect();
-            if (activity != null && activity.Key == "__keep_previous__") return;
-            string key = activity?.Key ?? string.Empty;
-            if (!string.Equals(key, _candidateKey, StringComparison.Ordinal))
-            {
-                _candidateKey = key;
-                _candidateSinceUtc = now;
-                _stableContext = null;
+            // Never allow overlapping detection passes.
+            if (Interlocked.CompareExchange(ref _inFlight, 1, 0) != 0)
                 return;
-            }
-            if (now - _candidateSinceUtc >= TimeSpan.FromSeconds(StableSeconds))
-                _stableContext = activity?.Context;
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    Activity activity = Detect();
+                    if (activity != null && activity.Key == "__keep_previous__")
+                        return;
+
+                    string key = activity?.Key ?? string.Empty;
+                    if (!string.Equals(key, _candidateKey, StringComparison.Ordinal))
+                    {
+                        _candidateKey = key;
+                        _candidateSinceUtc = now;
+                        _stableContext = null;
+                        return;
+                    }
+
+                    if (now - _candidateSinceUtc >= TimeSpan.FromSeconds(StableSeconds))
+                        _stableContext = activity?.Context;
+                }
+                catch
+                {
+                    // Swallow any background exception โ€“ a single stray error must
+                    // not crash the process or leave the guard permanently set.
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _inFlight, 0);
+                }
+            });
         }
 
         public static string Context()
