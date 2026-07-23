@@ -100,6 +100,7 @@ namespace LilithMod
         private int _vkPushToTalk = -1;
         private bool _speechListening;
         private bool _speechWakeWordCapture;
+        private bool _panelFocused;
         private string _lastAppliedPartial;
         private bool _userTypedWhileListening;
         private string _pendingSpeechCommand;
@@ -207,13 +208,15 @@ namespace LilithMod
             }
 
             // Poll globally so close and submit work even if focus did not land.
-            if (IsPanelVisible() && WindowFocus.IsKeyDown(VkEscape))
+            // Skipped while the panel is passive (wake word) so keys pressed in
+            // whatever the user is working on cannot close or submit it.
+            if (IsPanelVisible() && _panelFocused && WindowFocus.IsKeyDown(VkEscape))
             {
                 if (_speechListening) StopListening(false);
                 HidePanel();
             }
 
-            if (IsPanelVisible()
+            if (IsPanelVisible() && _panelFocused
                 && (WindowFocus.IsKeyDown(VkReturn) || WindowFocus.IsKeyDown(VkNumpadEnter)))
             {
                 OnPlayerSubmit(_inputField != null ? _inputField.text : null);
@@ -801,7 +804,9 @@ namespace LilithMod
             }
         }
 
-        private void ShowPanel()
+        // takeFocus=false shows the panel without stealing keyboard focus (wake
+        // word may be a false trigger); clicking the panel opts in to typing.
+        private void ShowPanel(bool takeFocus = true)
         {
             if (_canvasGroup == null) return;
 
@@ -811,13 +816,15 @@ namespace LilithMod
             if (_inputField != null)
                 _inputField.text = "";
 
-            FocusInputField();
+            if (takeFocus) FocusInputField();
         }
 
         // Re-takes OS focus and re-arms the text field. Used both when opening the panel and
         // when the user clicks back onto it after focus went elsewhere.
         private void FocusInputField()
         {
+            _panelFocused = true;
+
             // Strip WS_EX_NOACTIVATE/TRANSPARENT and foreground the window so keystrokes
             // (and IME composition) actually reach the input field. Reverted in HidePanel.
             WindowFocus.EnableTyping();
@@ -834,6 +841,7 @@ namespace LilithMod
 
         private void HidePanel()
         {
+            _panelFocused = false;
             if (_canvasGroup == null) return;
             _canvasGroup.alpha = 0;
             _canvasGroup.interactable = false;
@@ -2571,15 +2579,15 @@ namespace LilithMod
             _speechWakeWordCapture = wakeWord;
             _lastAppliedPartial = null;
             _userTypedWhileListening = false;
-            ShowPanel();
+            // Push-to-talk focuses the field so the recognised text can be corrected
+            // by typing; a wake word stays unfocused so an accidental trigger cannot
+            // interrupt whatever the user is doing.
+            ShowPanel(!wakeWord);
             if (_inputField != null)
             {
                 _inputField.text = string.Empty;
                 _inputField.caretPosition = 0;
             }
-            // Focus the field so the recognised text can be corrected, or replaced by
-            // typing, without needing a click first.
-            FocusInputField();
             if (_placeholderText != null) _placeholderText.text = "Listening~";
             if (wakeWord) return;
 
@@ -2762,7 +2770,7 @@ namespace LilithMod
             string displayText = command.WakeWord
                 ? PrefixWakeWord(command.Text)
                 : command.Text;
-            ShowPanel();
+            ShowPanel(!command.WakeWord);
             _inputField.text = displayText;
             _inputField.caretPosition = displayText.Length;
             _pendingSpeechCommand = command.Text;
