@@ -626,14 +626,17 @@ namespace LilithMod
             int generation = ++_apiKeyValidationGeneration;
             if (string.IsNullOrWhiteSpace(key))
             {
-                _apiKeyValidation = ApiKeyValidationState.Missing;
+                // Local OpenAI-compatible servers work without a key.
+                _apiKeyValidation = LilithModPlugin.ApiKeyRequired
+                    ? ApiKeyValidationState.Missing
+                    : ApiKeyValidationState.Valid;
                 return;
             }
 
             // Custom OpenAI-compatible services may not expose DeepSeek's models
             // endpoint. Keep their existing non-empty-key behaviour unchanged.
             string baseUrl = LilithModPlugin.CfgBaseUrl.Value ?? string.Empty;
-            if (baseUrl.IndexOf("api.deepseek.com", StringComparison.OrdinalIgnoreCase) < 0)
+            if (!LilithModPlugin.ApiKeyRequired)
             {
                 _apiKeyValidation = ApiKeyValidationState.Valid;
                 return;
@@ -1096,8 +1099,9 @@ namespace LilithMod
                 synthesis ? "[Voice] Vocal synthesis selected." : "[Voice] Native Chinese voice selected.");
         }
 
-        /// <summary>Chat is useless without a key, so the binding reflects that.</summary>
+        /// <summary>A key is only demanded for endpoints that require one.</summary>
         private static bool HasApiKey =>
+            !LilithModPlugin.ApiKeyRequired ||
             !string.IsNullOrWhiteSpace(LilithModPlugin.CfgApiKey.Value);
 
         private bool HasValidApiKey =>

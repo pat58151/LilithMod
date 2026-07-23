@@ -1232,7 +1232,7 @@ namespace LilithMod
             List<Message> messages, string ambientPrompt, CancellationToken token,
             Action<Utterance> onStreamedLine)
         {
-            if (string.IsNullOrWhiteSpace(ApiKey))
+            if (!HasApiKey)
                 throw new InvalidOperationException("API key is not configured.");
 
             // Request JSON while retaining fallback parsing for compatible providers.
@@ -1373,7 +1373,7 @@ namespace LilithMod
             string source, CancellationToken token)
         {
             var instance = _instance;
-            if (instance == null || string.IsNullOrWhiteSpace(ApiKey) ||
+            if (instance == null || !HasApiKey ||
                 string.IsNullOrWhiteSpace(source))
                 return null;
 
@@ -1390,7 +1390,7 @@ namespace LilithMod
             string systemPrompt, string userPrompt, int maxTokens, CancellationToken token,
             bool jsonResponse = false)
         {
-            if (string.IsNullOrWhiteSpace(ApiKey))
+            if (!HasApiKey)
                 throw new InvalidOperationException("DeepSeek API key is not configured.");
 
             var payload = new JObject
@@ -1437,7 +1437,8 @@ namespace LilithMod
                 string jsonPayload = JsonConvert.SerializeObject(requestPayload);
                 using (var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl.TrimEnd('/')}/chat/completions"))
                 {
-                    request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {ApiKey}");
+                    if (!string.IsNullOrWhiteSpace(ApiKey))
+                        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {ApiKey}");
                     request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
                     var callTimer = System.Diagnostics.Stopwatch.StartNew();
@@ -1481,7 +1482,8 @@ namespace LilithMod
             using (var request = new HttpRequestMessage(
                 HttpMethod.Post, $"{BaseUrl.TrimEnd('/')}/chat/completions"))
             {
-                request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {ApiKey}");
+                if (!string.IsNullOrWhiteSpace(ApiKey))
+                    request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {ApiKey}");
                 request.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
                 var timer = System.Diagnostics.Stopwatch.StartNew();
@@ -2538,6 +2540,7 @@ namespace LilithMod
         }
 
         private static bool HasApiKey =>
+            !LilithModPlugin.ApiKeyRequired ||
             !string.IsNullOrWhiteSpace(LilithModPlugin.CfgApiKey.Value);
 
         private static float _nextApiKeyWarning;

@@ -2,6 +2,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;
+using System;
 using System.IO;
 using System.Reflection;
 
@@ -18,6 +19,11 @@ namespace LilithMod
         internal static ConfigEntry<string> CfgBaseUrl;
         internal static ConfigEntry<string> CfgApiKey;
         internal static ConfigEntry<string> CfgModel;
+
+        /// <summary>DeepSeek needs a key; local OpenAI-compatible servers work without one.</summary>
+        internal static bool ApiKeyRequired =>
+            (CfgBaseUrl?.Value ?? string.Empty)
+                .IndexOf("api.deepseek.com", StringComparison.OrdinalIgnoreCase) >= 0;
         internal static ConfigEntry<string> CfgSystemPrompt;
         internal static ConfigEntry<string> CfgSearXngEndpoints;
         internal static ConfigEntry<int> CfgMaxHistoryTurns;
@@ -130,7 +136,9 @@ namespace LilithMod
             CfgBaseUrl = Config.Bind("LLM", "BaseUrl", "https://api.deepseek.com/v1",
                 "OpenAI-compatible API base URL. Works with DeepSeek, OpenAI, OpenRouter, Ollama.");
             CfgApiKey = Config.Bind("LLM", "ApiKey", "",
-                "Your API key. Required. Never share this file after filling it in.");
+                "Your API key. Required for DeepSeek; leave empty for local "
+                + "OpenAI-compatible servers (Ollama, LM Studio, vLLM). "
+                + "Never share this file after filling it in.");
             CfgModel = Config.Bind("LLM", "Model", "deepseek-v4-flash", "Model name.");
             CfgSearXngEndpoints = Config.Bind("LiveInformation", "SearXngEndpoints",
                 "https://metacat.online,https://nyc1.sx.ggtyler.dev,https://ooglester.com," +
