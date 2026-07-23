@@ -27,6 +27,12 @@ namespace LilithMod
         private float _nextProbe;
         private Task<bool> _probe;
         private bool _reported;
+        private int _failedProbes;
+
+        /// <summary>Consecutive failed probes before the service reads as down.
+        /// Inference blocks the service's accept loop, so one miss means busy,
+        /// not gone.</summary>
+        private const int FailedProbesForOutage = 3;
 
         /// <summary>
         /// Records that the service answered a real request, from whichever thread saw
@@ -70,10 +76,28 @@ namespace LilithMod
                 try { available = _probe.Result; }
                 catch { }
                 _probe = null;
-                ApplyAvailability(available);
+                if (available)
+                {
+                    _failedProbes = 0;
+                    ApplyAvailability(true);
+                }
+                else if (TtsClient.SynthesisInFlight)
+                {
+                    // The service is mid-inference; the miss proves nothing.
+                    _failedProbes = 0;
+                }
+                else if (++_failedProbes >= FailedProbesForOutage)
+                {
+                    ApplyAvailability(false);
+                }
             }
 
             if (Time.unscaledTime < _nextProbe || _probe != null) return;
+            if (TtsClient.SynthesisInFlight)
+            {
+                _nextProbe = Time.unscaledTime + 2f;
+                return;
+            }
             _nextProbe = Time.unscaledTime + 2f;
             _probe = Task.Run(ProbeAsync);
         }

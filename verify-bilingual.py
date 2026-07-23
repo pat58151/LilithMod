@@ -393,8 +393,10 @@ check("SetSettingsInteractive(settingsTyping)" in settings,
       "Settings must only capture the desktop while a text field is focused")
 check("OrderMeRows(view);" in settings and "view._yourNameInputField" in settings and
       "view._calendarView" in settings and "view._noteNotificationToggle" in settings and
-      '"view notes"' in settings and "notesRow, helpRow" in settings,
-      "The Me tab must keep name, birthday, API key, note controls, and Help in order")
+      '"view notes"' in settings and
+      "notesRow, useLocalAiRow, localAiRow, helpRow" in settings,
+      "The Me tab must keep name, birthday, API key, note controls, the local AI "
+      "rows, and Help in order")
 check("MapRow(_speechFolderLabel, TraySettingView.TabControls)" in settings and
       "OrderControlsRows(view);" in settings and
       "speechFolderRow.SetSiblingIndex(pushToTalkRow.GetSiblingIndex() + 1)" in settings,

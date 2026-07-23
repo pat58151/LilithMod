@@ -17,6 +17,16 @@ namespace LilithMod
         private readonly HttpClient _httpClient;
         private readonly VoiceConfigData _cfg;
 
+        private static int _inFlight;
+
+        /// <summary>
+        /// True while a real synthesis request is running. GPT-SoVITS blocks its
+        /// event loop during inference, so the availability probe must not read
+        /// a busy service as an outage.
+        /// </summary>
+        internal static bool SynthesisInFlight =>
+            System.Threading.Volatile.Read(ref _inFlight) > 0;
+
         /// <summary>Snapshot of VoiceConfig values captured at construction time.</summary>
         private sealed class VoiceConfigData
         {
@@ -82,41 +92,52 @@ namespace LilithMod
             // Cache hits returned above, so this only ever times real synthesis.
             var timer = System.Diagnostics.Stopwatch.StartNew();
 
-            using (var request = new HttpRequestMessage(HttpMethod.Post, _cfg.Endpoint))
+            System.Threading.Interlocked.Increment(ref _inFlight);
+            try
             {
-                request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                using (var response = await _httpClient.SendAsync(request, token))
+                using (var request = new HttpRequestMessage(HttpMethod.Post, _cfg.Endpoint))
                 {
-                    if (!response.IsSuccessStatusCode)
+                    request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                    using (var response = await _httpClient.SendAsync(request, token))
                     {
-                        string errorBody = await response.Content.ReadAsStringAsync();
-                        string message = errorBody;
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            string errorBody = await response.Content.ReadAsStringAsync();
+                            string message = errorBody;
+                            try
+                            {
+                                var errJson = JObject.Parse(errorBody);
+                                var msg = errJson["message"]?.ToString();
+                                if (!string.IsNullOrEmpty(msg))
+                                    message = msg;
+                            }
+                            catch
+                            {
+                                // Use raw body as the message.
+                            }
+                            throw new TtsException($"TTS service returned {(int)response.StatusCode}: {message}");
+                        }
+
+                        byte[] audio = await response.Content.ReadAsByteArrayAsync();
+                        timer.Stop();
+                        ReportLatency(text, effectiveLanguage, audio.Length, timer.ElapsedMilliseconds);
+                        // A finished synthesis is stronger availability evidence
+                        // than any socket probe.
+                        VoiceServiceMonitor.NoteServiceAnswered();
                         try
                         {
-                            var errJson = JObject.Parse(errorBody);
-                            var msg = errJson["message"]?.ToString();
-                            if (!string.IsNullOrEmpty(msg))
-                                message = msg;
+                            Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
+                            File.WriteAllBytes(cachePath, audio);
                         }
-                        catch
-                        {
-                            // Use raw body as the message.
-                        }
-                        throw new TtsException($"TTS service returned {(int)response.StatusCode}: {message}");
+                        catch (IOException) { }
+                        return audio;
                     }
-
-                    byte[] audio = await response.Content.ReadAsByteArrayAsync();
-                    timer.Stop();
-                    ReportLatency(text, effectiveLanguage, audio.Length, timer.ElapsedMilliseconds);
-                    try
-                    {
-                        Directory.CreateDirectory(Path.GetDirectoryName(cachePath));
-                        File.WriteAllBytes(cachePath, audio);
-                    }
-                    catch (IOException) { }
-                    return audio;
                 }
+            }
+            finally
+            {
+                System.Threading.Interlocked.Decrement(ref _inFlight);
             }
         }
 

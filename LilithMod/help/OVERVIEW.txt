@@ -7,7 +7,8 @@ answers in her own character, speaks aloud through a local voice model, and
 occasionally leaves you a handwritten note.
 
 Everything runs against services on your own machine except the language model,
-which needs an API key you supply.
+which needs either an API key you supply or a local model server you host
+yourself (SETUP step 2).
 
 
 -------------------------------------------------------------------------------
@@ -30,7 +31,7 @@ transcript is discarded rather than overwriting your words.
   SETUP
 -------------------------------------------------------------------------------
 
-1. API KEY - required for everything below.
+1. API KEY - required unless you use local AI (step 2).
 
    Settings / Me / DeepSeek API Key. Paste a key and it saves itself.
 
@@ -41,7 +42,26 @@ transcript is discarded rather than overwriting your words.
    The key is stored in BepInEx\config\LilithMod.cfg on this machine only. It
    is never sent anywhere except to the API you configured.
 
-2. VOICE - optional. She works silently without it.
+2. LOCAL AI - optional. Runs the language model on your own machine instead.
+
+   Settings / Me / Configure Local AI opens a small file with two settings:
+   the address of any OpenAI-compatible server, and a model name.
+
+       Ollama:    http://localhost:11434/v1
+       LM Studio: http://localhost:1234/v1
+       llama.cpp: http://localhost:8080/v1
+       vLLM:      http://localhost:8000/v1
+
+   The Use Local AI toggle above it switches between that server and the API
+   key without clearing either. While it is on, no API key is needed, the key
+   row greys out with "Overridden by local AI endpoint", and what you type
+   never leaves this machine.
+
+   Edits to the file apply the next time the settings window opens. The model
+   must follow structured replies: instruct-tuned models of about 7B or
+   larger work; very small or base models tend to fail.
+
+3. VOICE - optional. She works silently without it.
 
    Settings / Sound / Open Vocal Synth Folder, then follow README.txt. It
    explains how to install the local speech synthesiser and point the mod at a
@@ -51,7 +71,7 @@ transcript is discarded rather than overwriting your words.
    greys out and shows its offline status. Speech resumes when the service
    returns; Chinese voice is used only when you select Chinese.
 
-3. SPEECH INPUT - optional. F8 only.
+4. SPEECH INPUT - optional. F8 only.
 
    Settings / Me / Open Speech Input Folder, then follow README.txt.
 
@@ -81,7 +101,9 @@ and can answer questions about the weather or look something up.
 Only five kinds of information do, and only while the related feature is used.
 
   What you type or say    Sent to the DeepSeek API, with the recent
-                          conversation, so she can answer.
+                          conversation, so she can answer. With Use Local AI
+                          on it goes to your local server instead and never
+                          leaves this machine.
 
   Asking about weather    Your public IP address goes to ip-api.com, which
                           returns your rough location, and those coordinates go
@@ -144,10 +166,18 @@ The game looks completely unmodded
     restarting only the game does not clear it.
 
 She is silent but the text appears
-    The voice service is not running. See SETUP step 2.
+    The voice service is not running. See SETUP step 3.
 
 F7 or F8 do nothing
-    Almost always a missing API key. See SETUP step 1.
+    Almost always a missing API key. See SETUP step 1. With Use Local AI on
+    they work without a key.
+
+She keeps saying things like "The words won't come. Some kind of
+interference." or "It's like my voice is lost in static."
+    Those are stock fallback lines, not real replies: a reply was requested
+    and the language model could not be reached. On an API key, check the key
+    and your connection. On Use Local AI, the local server is probably not
+    running or has no model loaded. The log records the actual error.
 
 Her voice takes many seconds per line
     Expected is about two to three seconds. Much longer than that is a known

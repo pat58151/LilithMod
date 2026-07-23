@@ -11,6 +11,7 @@ do, in the order most people want them.
 | [Starting it all](#4-starting-it-all-by-itself) | not doing this by hand | 1 minute |
 
 Only the first is required. With none of the rest she still chats in text.
+A local model server can stand in for the API key — see the end of step 1.
 
 ---
 
@@ -32,8 +33,23 @@ sent to nothing but the API. Keys are checked when used, not when saved, so a
 typo shows up as a failed reply rather than an error on paste — re-paste it
 without surrounding spaces.
 
-**Using a different provider.** `[LLM] BaseUrl` and `Model` in that same config
-file take any OpenAI-compatible endpoint. The default is
+**Local AI instead of a key.** She can think with a model on your own machine
+through any OpenAI-compatible server — Ollama, LM Studio, llama.cpp, vLLM. In
+game: **Settings / Me / Use Local AI** switches it on, and **Configure Local
+AI** opens a two-line file naming the server and model:
+
+```
+BaseUrl = http://localhost:11434/v1
+Model = qwen2.5:7b
+```
+
+No API key is needed while it is on, and chat never leaves your machine. Use
+an instruct-tuned model of roughly 7B or larger; smaller or base models tend
+to break her reply format. The toggle keeps both setups — switching back to
+the key clears nothing.
+
+**Using a different hosted provider.** `[LLM] BaseUrl` and `Model` in that
+same config file take any OpenAI-compatible endpoint. The default is
 `https://api.deepseek.com/v1` with `deepseek-v4-flash`.
 
 ---
@@ -182,7 +198,8 @@ come back.
 | | |
 |---|---|
 | **The game looks entirely unmodded** | Fully exit the game *and* Steam, restart Steam, launch again. Starting `Lilith.exe` directly while Steam is closed leaves Steam disabling the mod on every later launch. |
-| **F7 does nothing** | No API key, or a zero balance. |
+| **F7 does nothing** | No API key, or a zero balance — unless Use Local AI is on. |
+| **She repeats stock lines about static or interference** | Not real replies: the language model could not be reached. Check the key and balance, or — with Use Local AI on — that the local server is running with a model loaded. |
 | **She replies but says nothing aloud** | Expected until section 2 is done. |
 | **First launch seems frozen** | BepInEx is generating interop assemblies from the game. Let it finish — force-quitting can break the next launch too. |
 | **Nothing loaded, no log** | `winhttp.dll` must sit directly beside `Lilith.exe`. |

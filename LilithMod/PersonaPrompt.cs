@@ -114,6 +114,7 @@ namespace LilithMod
                 "When they explicitly correct or replace a stable fact about themselves, use {\"type\":\"update_memory\",\"key\":\"stable category\",\"statement\":\"one factual English sentence\",\"topics\":[\"their wording\",\"English aliases\"],\"replaces\":\"old fact and aliases\",\"confidence\":1.0}. " +
                 "Never change memory from a guess, temporary feeling, hypothetical, or statement about Lilith. " +
                 "Omit action for every other request and when the requested time is ambiguous. " +
+                "An action never replaces your reply: always include the lines array, with the action beside it in the same JSON object. " +
                 (LilithModPlugin.CfgAllowOpenApps != null && LilithModPlugin.CfgAllowOpenApps.Value
                     ? "When the player explicitly asks to open or launch an app, also add one top-level action: " +
                       "{\"type\":\"open_app\",\"app\":\"<name>\"}, using an allowed name exactly as written. " +

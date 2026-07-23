@@ -28,9 +28,9 @@ namespace LilithMod
     public partial class LlmChatController : MonoBehaviour
     {
         // ========== Configuration (populated from LilithModPlugin statics) ==========
-        private static string BaseUrl => LilithModPlugin.CfgBaseUrl.Value;
+        private static string BaseUrl => LilithModPlugin.EffectiveBaseUrl;
         private static string ApiKey => LilithModPlugin.CfgApiKey.Value;
-        private static string Model => LilithModPlugin.CfgModel.Value;
+        private static string Model => LilithModPlugin.EffectiveModel;
         private static int MaxHistoryTurns => LilithModPlugin.CfgMaxHistoryTurns.Value;
         private static int TimeoutSeconds => LilithModPlugin.CfgTimeoutSeconds.Value;
         private static string Hotkey => LilithModPlugin.CfgHotkey.Value;
@@ -1296,8 +1296,13 @@ namespace LilithMod
             if (ReplyUsesRequestedDisplayLanguage(reply, displayLanguage))
                 return reply;
 
-            LilithModPlugin.Logger.LogWarning(
-                $"[LlmChat] Model used the wrong shown language; requesting {displayLanguage} correction.");
+            // Small local models often answer an action request with the bare
+            // action object and no lines; that needs a different correction than
+            // a language mistake.
+            bool actionOnly = ReplyIsActionOnly(reply);
+            LilithModPlugin.Logger.LogWarning(actionOnly
+                ? "[LlmChat] Model sent an action without dialogue lines; requesting a full reply."
+                : $"[LlmChat] Model used the wrong shown language; requesting {displayLanguage} correction.");
             // Diagnostics retain the rejected reply for language-check debugging.
             if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)
                 LilithModPlugin.Logger.LogInfo(
@@ -1310,11 +1315,18 @@ namespace LilithMod
             correctionMessages.Add(JObject.FromObject(new
             {
                 role = "user",
-                content = "Correct only the language error. Return the same meaning and JSON structure, but every shown field must be English only. Keep every spoken field unchanged."
+                content = actionOnly
+                    ? "Keep that action exactly as sent, but your reply must be one JSON object " +
+                      "holding both a lines array and the action: " +
+                      "{\"lines\":[{\"spoken\":\"...\",\"shown\":\"...\"}],\"action\":{...}}. " +
+                      "Add one short line acknowledging the request."
+                    : "Correct only the language error. Return the same meaning and JSON structure, but every shown field must be English only. Keep every spoken field unchanged."
             }));
             reply = await SendCompletionAsync(correctionPayload, token);
             if (!ReplyUsesRequestedDisplayLanguage(reply, displayLanguage))
-                throw new InvalidOperationException("DeepSeek repeatedly returned Japanese text for the English subtitle field.");
+                throw new InvalidOperationException(actionOnly
+                    ? "The model repeatedly omitted dialogue lines from its reply."
+                    : "The model repeatedly returned the wrong language for the shown subtitle field.");
             return reply;
         }
 
@@ -1326,20 +1338,38 @@ namespace LilithMod
                    !ContainsCjk(shown);
         }
 
+        private static string StripCodeFence(string reply)
+        {
+            string trimmed = reply.Trim();
+            if (trimmed.StartsWith("```"))
+            {
+                int firstBreak = trimmed.IndexOf('\n');
+                int lastFence = trimmed.LastIndexOf("```", StringComparison.Ordinal);
+                if (firstBreak > 0 && lastFence > firstBreak)
+                    trimmed = trimmed.Substring(firstBreak + 1, lastFence - firstBreak - 1).Trim();
+            }
+            return trimmed;
+        }
+
+        /// <summary>A reply that is just the action object, with no dialogue lines.</summary>
+        private static bool ReplyIsActionOnly(string reply)
+        {
+            if (string.IsNullOrWhiteSpace(reply)) return false;
+            try
+            {
+                if (!(JToken.Parse(StripCodeFence(reply)) is JObject obj)) return false;
+                bool hasLines = obj["lines"] is JArray lines && lines.Count > 0;
+                return !hasLines && (obj["type"] != null || obj["action"] != null);
+            }
+            catch { return false; }
+        }
+
         private static bool ReplyUsesRequestedDisplayLanguage(string reply, string displayLanguage)
         {
             if (string.IsNullOrWhiteSpace(reply)) return false;
             try
             {
-                string trimmed = reply.Trim();
-                if (trimmed.StartsWith("```"))
-                {
-                    int firstBreak = trimmed.IndexOf('\n');
-                    int lastFence = trimmed.LastIndexOf("```", StringComparison.Ordinal);
-                    if (firstBreak > 0 && lastFence > firstBreak)
-                        trimmed = trimmed.Substring(firstBreak + 1, lastFence - firstBreak - 1).Trim();
-                }
-                JToken root = JToken.Parse(trimmed);
+                JToken root = JToken.Parse(StripCodeFence(reply));
                 JArray lines = root as JArray;
                 if (lines == null && root is JObject obj)
                     lines = obj["lines"] as JArray ?? obj.Properties()
@@ -2551,7 +2581,7 @@ namespace LilithMod
             if (Time.unscaledTime < _nextApiKeyWarning) return;
             _nextApiKeyWarning = Time.unscaledTime + 60f;
             LilithModPlugin.Logger.LogWarning(
-                "[LlmChat] No DeepSeek API key set; chat keys are disabled. "
+                "[LlmChat] No API key set for the configured provider; chat keys are disabled. "
                 + "Add one under Settings / Me.");
         }
 
