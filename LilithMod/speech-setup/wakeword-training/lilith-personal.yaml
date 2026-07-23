@@ -31,15 +31,17 @@ feature_data_files:
   "user_negative": "./data/user_negative_features.npy"
 
 batch_n_per_class:
-  "ACAV100M_sample": 1024
+  "ACAV100M_sample": 256
   "adversarial_negative": 50
-  "positive": 50
-  # Small file, deliberately oversampled: false triggers on the one voice the
-  # mic hears all day are the expensive kind.
-  "user_negative": 32
+  "positive": 100
+  # Weigh the developer's ordinary speech heavily: at 8 the trained model
+  # still scored 0.98+ on phrases from this very set ("a little", "let's
+  # look"), false-triggering ~38/hour during normal conversation; 50 only
+  # halved the trigger rate.
+  "user_negative": 150
 
 model_type: "dnn"
 layer_size: 32
-steps: 25000
-max_negative_weight: 1500
-target_false_positives_per_hour: 0.2
+steps: 50000
+max_negative_weight: 200
+target_false_positives_per_hour: 1.0

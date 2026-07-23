@@ -31,13 +31,16 @@ false_positive_validation_data_path: "./data/validation_set_features.npy"
 feature_data_files:
   "ACAV100M_sample": "./data/openwakeword_features_ACAV100M_2000_hrs_16bit.npy"
 
+# Rebalanced 2026-07-23: the 1024/50 negative-dominant batch with
+# max_negative_weight 1500 crushed recall - the trained model peaked at
+# median 0.105 on its own held-out positives (10% detection at 0.8).
 batch_n_per_class:
-  "ACAV100M_sample": 1024
+  "ACAV100M_sample": 256
   "adversarial_negative": 50
-  "positive": 50
+  "positive": 100
 
 model_type: "dnn"
 layer_size: 32
-steps: 25000
-max_negative_weight: 1500
-target_false_positives_per_hour: 0.2
+steps: 50000
+max_negative_weight: 200
+target_false_positives_per_hour: 1.0
