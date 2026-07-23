@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using TMPro;
 using UI.Common;
+using UI.Common.Calendar;
 using UI.TraySetting;
 using UnityEngine;
 using UnityEngine.UI;
@@ -25,10 +26,7 @@ namespace LilithMod
         private TMP_Text _voiceFolderLabel;
         private TMP_Text _speechFolderLabel;
         private TMP_Text _helpLabel;
-        private TMP_Text _localAiLabel;
-        private ButtonToggle _useLocalAiToggle;
-        private TMP_Text _useLocalAiLabel;
-        private bool? _lastLocalAiConfigured;
+        private TMP_Text _aiServiceLabel;
         private bool _apiKeyOverridden;
         private TMP_Text _deepSeekLabel;
         private TMP_Text _hotkeyLabel;
@@ -74,9 +72,12 @@ namespace LilithMod
         private TMP_Text _pushToTalkStatusText;
         private TMP_Text _wakeWordStatusText;
         private TMP_Text _deepSeekStatusText;
+        private GameObject _birthdayPanel;
+        private CalendarSwitchBtn _birthdaySwitch;
         private enum ApiKeyValidationState { Missing, Checking, Valid, Invalid, Unavailable }
         private ApiKeyValidationState _apiKeyValidation = ApiKeyValidationState.Missing;
         private string _apiKeyValidationInput;
+        private string _apiKeyValidationBaseUrl;
         private int _apiKeyValidationGeneration;
         private static readonly HttpClient ApiKeyValidationClient = new HttpClient
         {
@@ -107,6 +108,7 @@ namespace LilithMod
                 RefreshWakeWordAvailability();
                 RefreshChatAvailability();
                 RefreshLabels();
+                RefreshBirthdayWeekdayLabels();
             }
 
             // Tooltips follow the cursor every frame.
@@ -120,12 +122,10 @@ namespace LilithMod
                 _settingsVisible = settingsVisible;
                 if (settingsVisible)
                 {
-                    // Picks up edits made through Configure Local AI in Notepad.
+                    // Picks up edits made through Configure AI Service in Notepad.
                     // Rebind fields afterwards so a stale UI value cannot stomp
                     // the freshly reloaded config on the next sync tick.
                     LilithModPlugin.ReloadConfig();
-                    if (_useLocalAiToggle != null)
-                        _useLocalAiToggle.SetValue(LilithModPlugin.LocalAiEnabled, false);
                     if (_deepSeekKey != null)
                         _deepSeekKey.text = LilithModPlugin.CfgApiKey.Value ?? string.Empty;
                     if (_hotkeyField != null)
@@ -136,6 +136,10 @@ namespace LilithMod
                     RefreshCurrentTabLayout();
                 }
             }
+            bool birthdayExpanded = settingsVisible && _birthdaySwitch != null &&
+                _birthdaySwitch.IsExpanded;
+            ToggleActionRowButton(_aiServiceLabel, !birthdayExpanded);
+            ToggleActionRowButton(_helpLabel, !birthdayExpanded);
             bool capturingHotkey = settingsVisible && _hotkeyField != null && _hotkeyField.isFocused;
             bool capturingPushToTalk =
                 settingsVisible && _pushToTalkKeyField != null && _pushToTalkKeyField.isFocused;
@@ -176,16 +180,16 @@ namespace LilithMod
                 actionRow, "LilithSpeechFolder",
                 Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
                     new System.Action(OpenSpeechFolder)));
-            _localAiLabel = view.CloneActionRow(
-                actionRow, "LilithLocalAi",
+            _aiServiceLabel = view.CloneActionRow(
+                actionRow, "LilithAiService",
                 Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
-                    new System.Action(OpenLocalAiConfig)));
+                    new System.Action(OpenAiServiceConfig)));
             _helpLabel = view.CloneActionRow(
                 actionRow, "LilithHelp",
                 Il2CppInterop.Runtime.DelegateSupport.ConvertDelegate<Il2CppSystem.Action>(
                     new System.Action(OpenHelp)));
-            Transform localAiRow = view.GetRowOf(_localAiLabel.transform);
-            if (localAiRow != null) localAiRow.gameObject.SetActive(true);
+            Transform aiServiceRow = view.GetRowOf(_aiServiceLabel.transform);
+            if (aiServiceRow != null) aiServiceRow.gameObject.SetActive(true);
             Transform helpRow = view.GetRowOf(_helpLabel.transform);
             if (helpRow != null) helpRow.gameObject.SetActive(true);
             Transform speechFolderRow = view.GetRowOf(_speechFolderLabel.transform);
@@ -241,7 +245,6 @@ namespace LilithMod
             }
 
             BuildAppRows(view);
-            BuildUseLocalAiRow(view);
 
             _deepSeekLabel = deepSeekLabel;
             _hotkeyLabel = hotkeyLabel;
@@ -261,11 +264,11 @@ namespace LilithMod
                 // language this game ships, and the file it opens is English anyway.
                 SetWrappedLabel(_helpLabel, "<u>Help</u>");
             }
-            if (_localAiLabel != null)
+            if (_aiServiceLabel != null)
             {
-                _localAiLabel.richText = true;
+                _aiServiceLabel.richText = true;
                 // English like Help: the file it opens is an English config anyway.
-                SetWrappedLabel(_localAiLabel, "<u>Configure\nLocal AI</u>");
+                SetWrappedLabel(_aiServiceLabel, "<u>Configure\nAI Service</u>");
             }
             // Reapply localization to rebuilt rows.
             _labelLanguage = null;
@@ -295,9 +298,9 @@ namespace LilithMod
             {
                 view.MapRow(_speechFolderLabel, TraySettingView.TabControls);
             }
-            if (_localAiLabel != null)
+            if (_aiServiceLabel != null)
             {
-                view.MapRow(_localAiLabel, TraySettingView.TabMe);
+                view.MapRow(_aiServiceLabel, TraySettingView.TabMe);
             }
             if (_helpLabel != null)
             {
@@ -321,6 +324,7 @@ namespace LilithMod
             ConfigureNativeVoiceSelector(view);
             OrderMeRows(view);
             OrderControlsRows(view);
+            ConfigureBirthdayCalendar(view);
 
             // New rows are added after the native tab pass. Re-select the active tab
             // to hide foreign rows, then rebuild so the new rows do not stack.
@@ -345,18 +349,16 @@ namespace LilithMod
                 ? null : view.GetRowOf(view._noteNotificationToggle.transform);
             Transform notesRow = FindRowByText(view,
                 "view notes", "ノートを見る", "查看便签", "查看笔记");
-            Transform useLocalAiRow = _useLocalAiToggle == null
-                ? null : view.GetRowOf(_useLocalAiToggle.transform);
-            Transform localAiRow = _localAiLabel == null
-                ? null : view.GetRowOf(_localAiLabel.transform);
+            Transform aiServiceRow = _aiServiceLabel == null
+                ? null : view.GetRowOf(_aiServiceLabel.transform);
             Transform helpRow = _helpLabel == null
                 ? null : view.GetRowOf(_helpLabel.transform);
 
             Transform previous = null;
             foreach (Transform row in new[]
             {
-                nameRow, birthdayRow, apiRow, notificationRow,
-                notesRow, useLocalAiRow, localAiRow, helpRow
+                apiRow, notificationRow, notesRow, nameRow, birthdayRow,
+                aiServiceRow, helpRow
             })
             {
                 if (row == null) continue;
@@ -397,54 +399,6 @@ namespace LilithMod
                 }
             }
             return null;
-        }
-
-        /// <summary>Builds the Use Local AI toggle, above Configure Local AI.</summary>
-        private void BuildUseLocalAiRow(TraySettingView view)
-        {
-            Transform lockRow = view.GetRowOf(view._closeMovementToggle.transform);
-            if (lockRow == null)
-            {
-                LilithModPlugin.Logger.LogWarning("[Settings] Could not find the Lock Move row to clone the local AI toggle.");
-                return;
-            }
-            GameObject rowObj = UnityEngine.Object.Instantiate(lockRow.gameObject, lockRow.parent);
-            rowObj.name = "LilithUseLocalAi";
-
-            _useLocalAiToggle = rowObj.GetComponentInChildren<ButtonToggle>(true);
-            if (_useLocalAiToggle != null)
-            {
-                _useLocalAiToggle.SetValue(LilithModPlugin.LocalAiEnabled, false);
-            }
-            else
-            {
-                LilithModPlugin.Logger.LogWarning("[Settings] Cloned local AI row has no ButtonToggle component.");
-            }
-
-            TMP_Text[] texts = rowObj.GetComponentsInChildren<TMP_Text>(true);
-            for (int i = 0; i < texts.Length; i++)
-            {
-                TMP_Text candidate = texts[i];
-                if (candidate == null) continue;
-                if (_useLocalAiToggle != null &&
-                    candidate.transform.IsChildOf(_useLocalAiToggle.transform)) continue;
-                _useLocalAiLabel = candidate;
-                break;
-            }
-            if (_useLocalAiLabel == null && texts.Length > 0)
-                _useLocalAiLabel = texts[0];
-            if (_useLocalAiLabel != null)
-            {
-                TraySettingView.StripLabelLocalizer(_useLocalAiLabel);
-                // English like the rows around it; the file it governs is English.
-                SetWrappedLabel(_useLocalAiLabel, "Use Local AI");
-            }
-
-            rowObj.SetActive(true);
-            if (_useLocalAiToggle != null)
-                view.MapRow(_useLocalAiToggle, TraySettingView.TabMe);
-            // Fresh clone; restyle for the configured state on the next tick.
-            _lastLocalAiConfigured = null;
         }
 
         /// <summary>Builds the app-launch and wake-word settings rows.</summary>
@@ -603,7 +557,10 @@ namespace LilithMod
             // DeepSeek key survives a stay on a local endpoint.
             if (LilithModPlugin.ApiKeyRequired &&
                 deepSeek != LilithModPlugin.CfgApiKey.Value) LilithModPlugin.CfgApiKey.Value = deepSeek;
-            if (!string.Equals(deepSeek, _apiKeyValidationInput, StringComparison.Ordinal))
+            string validationBaseUrl = LilithModPlugin.EffectiveBaseUrl ?? string.Empty;
+            if (!string.Equals(deepSeek, _apiKeyValidationInput, StringComparison.Ordinal) ||
+                !string.Equals(validationBaseUrl, _apiKeyValidationBaseUrl,
+                    StringComparison.OrdinalIgnoreCase))
                 ScheduleApiKeyValidation(deepSeek);
             string hotkey = _hotkeyField?.text?.Trim() ?? string.Empty;
             if (WindowFocus.VirtualKeyFromName(hotkey) > 0 &&
@@ -654,13 +611,6 @@ namespace LilithMod
 
             // Polled rather than listener-driven: the native UnityEvent was severed on
             // the clone, so this is what carries a click through to the config.
-            if (_useLocalAiToggle != null &&
-                _useLocalAiToggle.IsOn != LilithModPlugin.LocalAiEnabled)
-            {
-                LilithModPlugin.SetLocalAiEnabled(_useLocalAiToggle.IsOn);
-                LilithModPlugin.Logger.LogInfo(
-                    "[Settings] Use local AI set to " + _useLocalAiToggle.IsOn + ".");
-            }
             if (_allowOpenAppsToggle != null &&
                 _allowOpenAppsToggle.IsOn != LilithModPlugin.CfgAllowOpenApps.Value)
             {
@@ -724,6 +674,8 @@ namespace LilithMod
         private async void ScheduleApiKeyValidation(string key)
         {
             _apiKeyValidationInput = key ?? string.Empty;
+            string baseUrl = LilithModPlugin.EffectiveBaseUrl ?? string.Empty;
+            _apiKeyValidationBaseUrl = baseUrl;
             int generation = ++_apiKeyValidationGeneration;
             if (string.IsNullOrWhiteSpace(key))
             {
@@ -734,9 +686,8 @@ namespace LilithMod
                 return;
             }
 
-            // Custom OpenAI-compatible services may not expose DeepSeek's models
-            // endpoint. Keep their existing non-empty-key behaviour unchanged.
-            string baseUrl = LilithModPlugin.EffectiveBaseUrl ?? string.Empty;
+            // Local OpenAI-compatible servers may not expose a models endpoint.
+            // Keep their existing non-empty-key behaviour unchanged.
             if (!LilithModPlugin.ApiKeyRequired)
             {
                 _apiKeyValidation = ApiKeyValidationState.Valid;
@@ -747,27 +698,42 @@ namespace LilithMod
             await Task.Delay(700);
             if (generation != _apiKeyValidationGeneration) return;
 
-            ApiKeyValidationState result = await ValidateDeepSeekApiKeyAsync(key, baseUrl);
+            ApiKeyValidationState result = await ValidateApiKeyAsync(key, baseUrl);
             if (generation == _apiKeyValidationGeneration &&
-                string.Equals(key, _apiKeyValidationInput, StringComparison.Ordinal))
+                string.Equals(key, _apiKeyValidationInput, StringComparison.Ordinal) &&
+                string.Equals(baseUrl, _apiKeyValidationBaseUrl,
+                    StringComparison.OrdinalIgnoreCase))
                 _apiKeyValidation = result;
         }
 
-        private static async Task<ApiKeyValidationState> ValidateDeepSeekApiKeyAsync(
+        private static async Task<ApiKeyValidationState> ValidateApiKeyAsync(
             string key, string baseUrl)
         {
             try
             {
-                var configured = new Uri(baseUrl);
-                var endpoint = new UriBuilder(configured.Scheme, configured.Host, configured.Port, "models").Uri;
+                // Keep the base path: OpenRouter, Groq, Gemini, and Anthropic all
+                // serve /models under it, not at the host root.
+                var endpoint = new Uri(baseUrl.TrimEnd('/') + "/models");
                 using (var request = new HttpRequestMessage(HttpMethod.Get, endpoint))
                 {
-                    request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + key);
+                    if (baseUrl.IndexOf("api.anthropic.com", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        // Anthropic's native Models API requires its native headers.
+                        // Its OpenAI-compatible chat endpoint accepts Bearer auth,
+                        // but /v1/models does not use that compatibility behavior.
+                        request.Headers.TryAddWithoutValidation("x-api-key", key);
+                        request.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
+                    }
+                    else
+                    {
+                        request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + key);
+                    }
                     using (HttpResponseMessage response = await ApiKeyValidationClient.SendAsync(request))
                     {
                         if (response.IsSuccessStatusCode) return ApiKeyValidationState.Valid;
-                        if (response.StatusCode == HttpStatusCode.Unauthorized ||
-                            response.StatusCode == HttpStatusCode.Forbidden)
+                        // Only 401 proves the credential was rejected. A valid key
+                        // can receive 403 when model listing is not permitted.
+                        if (response.StatusCode == HttpStatusCode.Unauthorized)
                             return ApiKeyValidationState.Invalid;
                         return ApiKeyValidationState.Unavailable;
                     }
@@ -859,6 +825,14 @@ namespace LilithMod
             {
                 field.contentType = type;
                 field.ForceLabelUpdate();
+                // TMP resets horizontal scrolling when the content type changes.
+                // Keep the useful key suffix visible for both revealed and masked
+                // states instead of jumping between the beginning and the end.
+                int end = field.text?.Length ?? 0;
+                field.caretPosition = end;
+                field.selectionAnchorPosition = end;
+                field.selectionFocusPosition = end;
+                field.ForceLabelUpdate();
             }
             if (eye != null)
                 eye.gameObject.SetActive(hasKey && !overridden);
@@ -892,22 +866,34 @@ namespace LilithMod
             // key text stops before it instead of running underneath.
             const float eyeInset = 6f;
             const float eyeWidth = 28f;
-            const float textInset = eyeInset + eyeWidth + 4f;
+            const float textInset = eyeInset + eyeWidth + 34f;
+
+            // Shrink the actual masked viewport. A TMP margin alone changes text
+            // layout but does not stop long keys from drawing under sibling UI.
+            if (field.textViewport != null)
+            {
+                Vector2 offsetMax = field.textViewport.offsetMax;
+                field.textViewport.offsetMax = new Vector2(-textInset, offsetMax.y);
+                if (field.textViewport.GetComponent<RectMask2D>() == null)
+                    field.textViewport.gameObject.AddComponent<RectMask2D>();
+            }
 
             if (field.placeholder is TMP_Text placeholder)
             {
                 placeholder.text = "Place your API Key";
                 placeholder.enableWordWrapping = false;
-                placeholder.overflowMode = TextOverflowModes.Overflow;
+                placeholder.overflowMode = TextOverflowModes.Masking;
                 Vector4 placeholderMargin = placeholder.margin;
                 placeholder.margin = new Vector4(placeholderMargin.x, placeholderMargin.y,
-                    textInset, placeholderMargin.w);
+                    4f, placeholderMargin.w);
             }
             if (field.textComponent != null)
             {
+                field.textComponent.enableWordWrapping = false;
+                field.textComponent.overflowMode = TextOverflowModes.Masking;
                 Vector4 textMargin = field.textComponent.margin;
                 field.textComponent.margin = new Vector4(textMargin.x, textMargin.y,
-                    textInset, textMargin.w);
+                    4f, textMargin.w);
             }
 
             var eyeObject = new GameObject("ApiKeyEye");
@@ -928,6 +914,35 @@ namespace LilithMod
             eye.targetGraphic = image;
             eye.graphic = null;
             eye.isOn = false;
+        }
+
+        private void ConfigureBirthdayCalendar(TraySettingView view)
+        {
+            CalendarView calendar = view?._calendarView;
+            _birthdaySwitch = calendar?._calendarSwitchBtn;
+            _birthdayPanel = _birthdaySwitch?._calendarPanel;
+        }
+
+        private void RefreshBirthdayWeekdayLabels()
+        {
+            if (_birthdayPanel == null) return;
+            foreach (TMP_Text text in _birthdayPanel.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (text == null) continue;
+                text.enableWordWrapping = false;
+                text.overflowMode = TextOverflowModes.Overflow;
+            }
+        }
+
+        private static void ToggleActionRowButton(TMP_Text label, bool interactable)
+        {
+            if (label == null) return;
+
+            var button = label.GetComponentInParent<Button>();
+            if (button != null)
+            {
+                button.interactable = interactable;
+            }
         }
 
         /// <summary>
@@ -1225,8 +1240,11 @@ namespace LilithMod
             !LilithModPlugin.ApiKeyRequired ||
             !string.IsNullOrWhiteSpace(LilithModPlugin.CfgApiKey.Value);
 
+        // Unavailable fails open: some providers (Anthropic) reject Bearer on
+        // /models even for a valid key, so unverifiable must not block chat.
         private bool HasValidApiKey =>
-            HasApiKey && _apiKeyValidation == ApiKeyValidationState.Valid;
+            HasApiKey && (_apiKeyValidation == ApiKeyValidationState.Valid ||
+                          _apiKeyValidation == ApiKeyValidationState.Unavailable);
 
         private string ApiKeyRequirementText =>
             _apiKeyValidation == ApiKeyValidationState.Invalid
@@ -1235,7 +1253,7 @@ namespace LilithMod
                     ? "Checking API key"
                     : _apiKeyValidation == ApiKeyValidationState.Unavailable
                         ? "API key validation unavailable"
-                        : "DeepSeek API key required";
+                        : LilithModPlugin.ProviderName + " API key required";
 
         /// <summary>
         /// All three are load-bearing: the listener carries the audio, the model
@@ -1252,19 +1270,12 @@ namespace LilithMod
             if (_deepSeekStatusText != null)
             {
                 _deepSeekStatusText.text = overridden
-                    ? "Overridden by local AI endpoint"
-                    : "DeepSeek API key invalid";
+                    ? "Not needed for local endpoint"
+                    : LilithModPlugin.ProviderName + " API key invalid";
                 _deepSeekStatusText.gameObject.SetActive(
                     overridden || _apiKeyValidation == ApiKeyValidationState.Invalid);
             }
             RefreshApiKeyOverride(overridden);
-            // The toggle is inert until the file names an endpoint.
-            bool localConfigured = LilithModPlugin.LocalAiConfigured;
-            if (_lastLocalAiConfigured != localConfigured)
-            {
-                _lastLocalAiConfigured = localConfigured;
-                StyleToggleRow(_useLocalAiToggle, _useLocalAiLabel, localConfigured);
-            }
             bool available = HasValidApiKey;
             if (_chatStatusText != null)
             {
@@ -1491,9 +1502,9 @@ namespace LilithMod
             bool ja = language == "ja";
             bool zh = language == "zh";
 
-            // Left in English like Help: it is a product name plus "API Key", which
-            // is what the service itself calls it in every language.
-            SetWrappedLabel(_deepSeekLabel, "DeepSeek\nAPI Key");
+            // Left in English like Help: "API Key" is what every service calls it
+            // in every language.
+            SetWrappedLabel(_deepSeekLabel, "API Key");
             SetWrappedLabel(_hotkeyLabel,
                 ja ? "チャットを開く" : zh ? "打开聊天" : "Open chat");
             SetWrappedLabel(_pushToTalkLabel,
@@ -1585,15 +1596,15 @@ namespace LilithMod
             }
         }
 
-        /// <summary>Opens the local AI file in Notepad; edits apply on the next settings open.</summary>
-        private static void OpenLocalAiConfig()
+        /// <summary>Opens the AI service file in Notepad; edits apply on the next settings open.</summary>
+        private static void OpenAiServiceConfig()
         {
             try
             {
-                string file = LilithModPlugin.EnsureLocalAiFile();
+                string file = LilithModPlugin.EnsureAiServiceFile();
                 if (string.IsNullOrEmpty(file))
                 {
-                    LilithModPlugin.Logger.LogWarning("[Settings] Local AI file unavailable.");
+                    LilithModPlugin.Logger.LogWarning("[Settings] AI service file unavailable.");
                     return;
                 }
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo

@@ -24,6 +24,17 @@ namespace LilithMod
         private const uint SW_SHOW = 5;
         private const uint WS_EX_TRANSPARENT = 0x00000020;
 
+        // SetWindowPos constants
+        private static readonly IntPtr HWND_TOP = IntPtr.Zero;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_SHOWWINDOW = 0x0040;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(
+            IntPtr hWnd, IntPtr hWndInsertAfter,
+            int X, int Y, int cx, int cy, uint uFlags);
+
         /// <summary>Returns true on the up-to-down transition.</summary>
         public static bool IsKeyDown(int vKey)
         {
@@ -121,7 +132,7 @@ namespace LilithMod
                     s_originalExStyle = WindowsNativeAPI.GetWindowLongPtrSafe(hWnd, GWL_EXSTYLE);
 
                 long current = (long)WindowsNativeAPI.GetWindowLongPtrSafe(hWnd, GWL_EXSTYLE);
-                long newStyle = current & ~(long)WS_EX_NOACTIVATE;
+                long newStyle = current & ~((long)WS_EX_NOACTIVATE | (long)WS_EX_TRANSPARENT);
                 WindowsNativeAPI.SetWindowLongPtrSafe(hWnd, GWL_EXSTYLE, (IntPtr)newStyle);
 
                 // An ALT tap satisfies Windows foreground activation rules.
@@ -132,6 +143,10 @@ namespace LilithMod
                     WindowsNativeAPI.ShowWindow(hWnd, SW_SHOW);
                     WindowsNativeAPI.SetForegroundWindow(hWnd);
                 }
+
+                // Bring window to top of Z-order for click priority.
+                SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
             }
             catch (Exception ex)
             {
@@ -189,6 +204,9 @@ namespace LilithMod
                         WindowsNativeAPI.ShowWindow(hWnd, SW_SHOW);
                         fg = WindowsNativeAPI.SetForegroundWindow(hWnd);
                     }
+                    // Bring window to top of Z-order for click priority.
+                    SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
                 }
 
                 if (LilithModPlugin.CfgLogDiagnostics != null && LilithModPlugin.CfgLogDiagnostics.Value)

@@ -394,9 +394,10 @@ check("SetSettingsInteractive(settingsTyping)" in settings,
 check("OrderMeRows(view);" in settings and "view._yourNameInputField" in settings and
       "view._calendarView" in settings and "view._noteNotificationToggle" in settings and
       '"view notes"' in settings and
-      "notesRow, useLocalAiRow, localAiRow, helpRow" in settings,
-      "The Me tab must keep name, birthday, API key, note controls, the local AI "
-      "rows, and Help in order")
+      "notesRow, nameRow, birthdayRow," in settings and
+      "aiServiceRow, helpRow" in settings,
+      "The Me tab must keep the API and note controls together, with name and "
+      "birthday above AI service and Help")
 check("MapRow(_speechFolderLabel, TraySettingView.TabControls)" in settings and
       "OrderControlsRows(view);" in settings and
       "speechFolderRow.SetSiblingIndex(pushToTalkRow.GetSiblingIndex() + 1)" in settings,
@@ -483,7 +484,7 @@ check("SpeechInputService" in speech_input and "push-to-talk.alive" in speech_in
       "a bar that waits forever for a transcript nobody is writing")
 check("PollWakeWordListening" in chat and "wake-listening.active" in chat and
       'wake_ui = output.parent / "wake-listening.active"' in ptt and
-      "StartListening(true)" in chat and "WAKE_THRESHOLD = 0.80" in ptt and
+      "StartListening(true)" in chat and "WAKE_THRESHOLD = 0.90" in ptt and
       "_lastWakeListeningToken" in chat and "File.ReadAllText(_wakeListeningPath)" in chat,
       "Wake-word capture must expose the same visible transcript UI as push-to-talk")
 check("SpeechInputPrompt" in chat and
@@ -513,13 +514,36 @@ check("BuildInlineStatus" in settings and
       "API key and speech service required" in settings and
       "Wake-word model unavailable" in settings,
       "Unavailable chat, push-to-talk, and wake-word controls need inline reasons")
-check("ValidateDeepSeekApiKeyAsync" in settings and
-      'new UriBuilder(configured.Scheme, configured.Host, configured.Port, "models")' in settings and
+check("ValidateApiKeyAsync" in settings and
+      'new Uri(baseUrl.TrimEnd(\'/\') + "/models")' in settings and
+      'request.Headers.TryAddWithoutValidation("x-api-key", key)' in settings and
+      'request.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01")' in settings and
+      "_apiKeyValidationBaseUrl" in settings and
+      "response.StatusCode == HttpStatusCode.Unauthorized" in settings and
+      "response.StatusCode == HttpStatusCode.Forbidden" not in settings and
       "Valid API key required" in settings and
       "Valid API Key and speech service required" in settings and
-      "DeepSeek API key invalid" in settings and
+      'ProviderName + " API key invalid"' in settings and
       "LilithDeepSeekStatus" in settings,
-      "Changed DeepSeek keys must be validated before dependent controls are enabled")
+      "Changed API keys must be validated before dependent controls are enabled")
+check("ConfigureBirthdayCalendar(view)" in settings and
+      "_birthdaySwitch = calendar?._calendarSwitchBtn" in settings and
+      "canvas.overrideSorting = true" in settings and
+      "row.gameObject.AddComponent<GraphicRaycaster>()" in settings and
+      "_birthdayPanel.AddComponent<Image>()" in settings and
+      "hitSurface.raycastTarget = true" in settings and
+      "birthdayExpanded" in settings and
+      "capturingHotkey || capturingPushToTalk || birthdayExpanded" in settings,
+      "The birthday calendar must own its draw order and clicks without changing its layout")
+check("RefreshBirthdayWeekdayLabels" in settings and
+      'case "Sunday": value = "Su"' in settings and
+      "text.enableWordWrapping = false" in settings,
+      "English calendar weekday headers must fit their two-character columns")
+check("field.textViewport.offsetMax" in settings and
+      "TextOverflowModes.Masking" in settings and
+      "GetComponent<RectMask2D>()" in settings and
+      "field.selectionFocusPosition = end" in settings,
+      "Long API keys must be clipped before the reveal control")
 check("OpenSpeechFolder" in settings and
       'MapRow(_speechFolderLabel, TraySettingView.TabControls)' in settings,
       "The speech setup folder must be reachable from Controls")

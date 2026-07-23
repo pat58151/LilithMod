@@ -17,14 +17,15 @@ A local model server can stand in for the API key — see the end of step 1.
 
 ## 1. The API key
 
-She thinks with DeepSeek's language model, which is a paid API. It is
-inexpensive but not free, and the key is yours, not bundled.
+She thinks with an OpenAI-compatible language model API. The default is
+DeepSeek, which is a paid API. It is inexpensive but not free, and the key is
+yours, not bundled.
 
 1. Sign up at [platform.deepseek.com](https://platform.deepseek.com).
 2. Add credit. It is prepaid — with a zero balance every reply fails.
 3. Open **API keys**, create one, and copy it. The full key is usually shown
    only at creation.
-4. In game: **Settings / Me / DeepSeek API Key**. Paste it. It saves itself.
+4. In game: **Settings / Me / API Key**. Paste it. It saves itself.
 
 Press F7 and type something. If she answers, you are done.
 
@@ -33,24 +34,22 @@ sent to nothing but the API. Keys are checked when used, not when saved, so a
 typo shows up as a failed reply rather than an error on paste — re-paste it
 without surrounding spaces.
 
-**Local AI instead of a key.** She can think with a model on your own machine
-through any OpenAI-compatible server — Ollama, LM Studio, llama.cpp, vLLM. In
-game: **Settings / Me / Use Local AI** switches it on, and **Configure Local
-AI** opens a two-line file naming the server and model:
+**Choosing a different AI service.** In game: **Settings / Me / Configure AI
+Service** opens a two-line file naming the endpoint and model. It comes
+pre-filled with DeepSeek (`https://api.deepseek.com/v1`, `deepseek-v4-flash`)
+and takes any OpenAI-compatible endpoint — hosted (OpenAI, OpenRouter, Groq,
+Mistral, xAI, Gemini, Together, Moonshot, Qwen) or local (Ollama, LM Studio,
+llama.cpp, vLLM):
 
 ```
 BaseUrl = http://localhost:11434/v1
 Model = qwen2.5:7b
 ```
 
-No API key is needed while it is on, and chat never leaves your machine. Use
-an instruct-tuned model of roughly 7B or larger; smaller or base models tend
-to break her reply format. The toggle keeps both setups — switching back to
-the key clears nothing.
-
-**Using a different hosted provider.** `[LLM] BaseUrl` and `Model` in that
-same config file take any OpenAI-compatible endpoint. The default is
-`https://api.deepseek.com/v1` with `deepseek-v4-flash`.
+Hosted services need their key in **Settings / Me / API Key**. Local servers
+need no key, and chat never leaves your machine. Use an instruct-tuned model
+of roughly 7B or larger; smaller or base models tend to break her reply
+format.
 
 ---
 
@@ -198,8 +197,8 @@ come back.
 | | |
 |---|---|
 | **The game looks entirely unmodded** | Fully exit the game *and* Steam, restart Steam, launch again. Starting `Lilith.exe` directly while Steam is closed leaves Steam disabling the mod on every later launch. |
-| **F7 does nothing** | No API key, or a zero balance — unless Use Local AI is on. |
-| **She repeats stock lines about static or interference** | Not real replies: the language model could not be reached. Check the key and balance, or — with Use Local AI on — that the local server is running with a model loaded. |
+| **F7 does nothing** | No API key, or a zero balance — unless a local server is configured. |
+| **She repeats stock lines about static or interference** | Not real replies: the language model could not be reached. Check the key and balance, or — on a local server — that it is running with a model loaded. |
 | **She replies but says nothing aloud** | Expected until section 2 is done. |
 | **First launch seems frozen** | BepInEx is generating interop assemblies from the game. Let it finish — force-quitting can break the next launch too. |
 | **Nothing loaded, no log** | `winhttp.dll` must sit directly beside `Lilith.exe`. |

@@ -21,23 +21,47 @@ namespace LilithMod
         internal static ConfigEntry<string> CfgApiKey;
         internal static ConfigEntry<string> CfgModel;
 
-        // Local AI lives in its own two-line file so users editing it never see
-        // the rest of the config. A filled BaseUrl there overrides the main one.
-        internal static string LocalAiBaseUrl { get; private set; } = "";
-        internal static string LocalAiModel { get; private set; } = "";
-        internal static bool LocalAiEnabled { get; private set; } = true;
+        // The AI service lives in its own small file so users editing it never
+        // see the rest of the config. A filled BaseUrl there overrides the main
+        // one; this file is the primary way to choose the LLM service.
+        internal static string AiServiceBaseUrl { get; private set; } = "";
+        internal static string AiServiceModel { get; private set; } = "";
 
-        /// <summary>A local endpoint exists in the file, whether or not it is on.</summary>
-        internal static bool LocalAiConfigured => !string.IsNullOrWhiteSpace(LocalAiBaseUrl);
+        private const string DefaultBaseUrl = "https://api.deepseek.com/v1";
+        private const string DefaultModel = "deepseek-v4-flash";
 
-        private static bool LocalAiActive => LocalAiEnabled && LocalAiConfigured;
+        /// <summary>The service file names an endpoint.</summary>
+        internal static bool AiServiceConfigured => !string.IsNullOrWhiteSpace(AiServiceBaseUrl);
 
         internal static string EffectiveBaseUrl =>
-            LocalAiActive ? LocalAiBaseUrl : CfgBaseUrl?.Value;
+            AiServiceConfigured ? AiServiceBaseUrl : CfgBaseUrl?.Value;
 
         internal static string EffectiveModel =>
-            LocalAiActive && !string.IsNullOrWhiteSpace(LocalAiModel)
-                ? LocalAiModel : CfgModel?.Value;
+            AiServiceConfigured && !string.IsNullOrWhiteSpace(AiServiceModel)
+                ? AiServiceModel : CfgModel?.Value;
+
+        /// <summary>Display name of the configured provider, for status rows.</summary>
+        internal static string ProviderName
+        {
+            get
+            {
+                if (!Uri.TryCreate((EffectiveBaseUrl ?? "").Trim(),
+                        UriKind.Absolute, out var uri)) return "API";
+                string host = uri.Host.ToLowerInvariant();
+                if (host.Contains("deepseek")) return "DeepSeek";
+                if (host.Contains("openai")) return "OpenAI";
+                if (host.Contains("openrouter")) return "OpenRouter";
+                if (host.Contains("groq")) return "Groq";
+                if (host.Contains("mistral")) return "Mistral";
+                if (host.Contains("x.ai")) return "xAI";
+                if (host.Contains("googleapis")) return "Gemini";
+                if (host.Contains("together")) return "Together";
+                if (host.Contains("moonshot")) return "Moonshot";
+                if (host.Contains("dashscope") || host.Contains("aliyuncs")) return "Qwen";
+                if (host.Contains("anthropic")) return "Anthropic";
+                return uri.Host;
+            }
+        }
 
         /// <summary>Hosted providers need a key; local OpenAI-compatible servers work without one.</summary>
         internal static bool ApiKeyRequired => !IsLocalUrl(EffectiveBaseUrl);
@@ -57,100 +81,116 @@ namespace LilithMod
                     int.TryParse(host.Split('.')[1], out int oct) && oct >= 16 && oct <= 31);
         }
 
-        internal static string LocalAiConfigPath
+        internal static string AiServiceConfigPath
         {
             get
             {
                 string dir = Path.GetDirectoryName(_instance?.Config.ConfigFilePath ?? "");
-                return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "LilithMod.LocalAI.cfg");
+                return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "LilithMod.AI.cfg");
             }
         }
 
-        /// <summary>Creates the local AI file with its template when missing.</summary>
-        internal static string EnsureLocalAiFile()
+        /// <summary>Creates the AI service file with its template when missing.</summary>
+        internal static string EnsureAiServiceFile()
         {
-            string path = LocalAiConfigPath;
+            string path = AiServiceConfigPath;
             if (path == null) return null;
             if (!File.Exists(path))
-                File.WriteAllText(path,
-                    "# Lilith local AI setup.\r\n" +
-                    "# BaseUrl: any OpenAI-compatible server.\r\n" +
-                    "#   Ollama:    http://localhost:11434/v1\r\n" +
-                    "#   LM Studio: http://localhost:1234/v1\r\n" +
-                    "#   llama.cpp: http://localhost:8080/v1\r\n" +
-                    "#   vLLM:      http://localhost:8000/v1\r\n" +
-                    "# Model: a model that server hosts, e.g. qwen2.5:7b\r\n" +
-                    "# Leave BaseUrl empty to use the hosted provider from the main config.\r\n" +
-                    "# Enabled: false switches back to the hosted provider without clearing these values.\r\n" +
-                    "\r\n" +
-                    "BaseUrl = \r\n" +
-                    "Model = \r\n" +
-                    "Enabled = true\r\n");
+                File.WriteAllText(path, BuildAiServiceTemplate(DefaultBaseUrl, DefaultModel, null));
             return path;
         }
 
-        /// <summary>Reads the local AI file; a blank BaseUrl means DeepSeek.</summary>
-        internal static void LoadLocalAiConfig()
+        private static string BuildAiServiceTemplate(string baseUrl, string model, string extraComment)
         {
-            string baseUrl = "", model = "";
-            // A file without the line stays enabled, matching older installs.
-            bool enabled = true;
-            try
-            {
-                string path = LocalAiConfigPath;
-                if (path != null && File.Exists(path))
-                {
-                    foreach (string raw in File.ReadAllLines(path))
-                    {
-                        string line = raw.Trim();
-                        if (line.Length == 0 || line.StartsWith("#")) continue;
-                        int eq = line.IndexOf('=');
-                        if (eq < 0) continue;
-                        string key = line.Substring(0, eq).Trim();
-                        string val = line.Substring(eq + 1).Trim();
-                        if (key.Equals("BaseUrl", StringComparison.OrdinalIgnoreCase)) baseUrl = val;
-                        else if (key.Equals("Model", StringComparison.OrdinalIgnoreCase)) model = val;
-                        else if (key.Equals("Enabled", StringComparison.OrdinalIgnoreCase) &&
-                                 bool.TryParse(val, out bool parsed)) enabled = parsed;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger?.LogWarning("[Config] Local AI file unreadable: " + ex.Message);
-            }
-            LocalAiBaseUrl = baseUrl;
-            LocalAiModel = model;
-            LocalAiEnabled = enabled;
+            return
+                "# Lilith AI service. This file chooses which LLM she talks to.\r\n" +
+                "# BaseUrl: any OpenAI-compatible endpoint, hosted or local.\r\n" +
+                "#   DeepSeek:   https://api.deepseek.com/v1\r\n" +
+                "#   Anthropic:  https://api.anthropic.com/v1\r\n" +
+                "#   OpenAI:     https://api.openai.com/v1\r\n" +
+                "#   OpenRouter: https://openrouter.ai/api/v1\r\n" +
+                "#   Groq:       https://api.groq.com/openai/v1\r\n" +
+                "#   Gemini:     https://generativelanguage.googleapis.com/v1beta/openai\r\n" +
+                "#   Ollama:     http://localhost:11434/v1   (local, no key)\r\n" +
+                "#   LM Studio:  http://localhost:1234/v1\r\n" +
+                "#   llama.cpp:  http://localhost:8080/v1\r\n" +
+                "#   vLLM:       http://localhost:8000/v1\r\n" +
+                "# Model: a model that endpoint hosts, e.g. deepseek-v4-flash, qwen2.5:7b\r\n" +
+                "# Hosted endpoints need their API key pasted in Settings / Me. Local\r\n" +
+                "# servers need no key.\r\n" +
+                (extraComment == null ? "" : "# " + extraComment + "\r\n") +
+                "\r\n" +
+                "BaseUrl = " + baseUrl + "\r\n" +
+                "Model = " + model + "\r\n";
         }
 
-        /// <summary>Flips the Enabled line in the local AI file and applies it.</summary>
-        internal static void SetLocalAiEnabled(bool enabled)
+        /// <summary>Reads the AI service file; a blank BaseUrl means the main config.</summary>
+        internal static void LoadAiServiceConfig()
         {
-            LocalAiEnabled = enabled;
+            MigrateLegacyLocalAiFile();
+            string baseUrl = "", model = "";
             try
             {
-                string path = EnsureLocalAiFile();
-                if (path == null) return;
-                var lines = new List<string>(File.ReadAllLines(path));
-                string setting = "Enabled = " + (enabled ? "true" : "false");
-                bool found = false;
-                for (int i = 0; i < lines.Count; i++)
-                {
-                    string trimmed = lines[i].TrimStart();
-                    if (trimmed.StartsWith("#") ||
-                        !trimmed.StartsWith("Enabled", StringComparison.OrdinalIgnoreCase) ||
-                        lines[i].IndexOf('=') < 0) continue;
-                    lines[i] = setting;
-                    found = true;
-                    break;
-                }
-                if (!found) lines.Add(setting);
-                File.WriteAllLines(path, lines);
+                string path = AiServiceConfigPath;
+                if (path != null && File.Exists(path))
+                    ParseServiceFile(path, out baseUrl, out model, out _);
             }
             catch (Exception ex)
             {
-                Logger?.LogWarning("[Config] Could not save the local AI toggle: " + ex.Message);
+                Logger?.LogWarning("[Config] AI service file unreadable: " + ex.Message);
+            }
+            AiServiceBaseUrl = baseUrl;
+            AiServiceModel = model;
+        }
+
+        private static void ParseServiceFile(
+            string path, out string baseUrl, out string model, out bool enabled)
+        {
+            baseUrl = ""; model = ""; enabled = true;
+            foreach (string raw in File.ReadAllLines(path))
+            {
+                string line = raw.Trim();
+                if (line.Length == 0 || line.StartsWith("#")) continue;
+                int eq = line.IndexOf('=');
+                if (eq < 0) continue;
+                string key = line.Substring(0, eq).Trim();
+                string val = line.Substring(eq + 1).Trim();
+                if (key.Equals("BaseUrl", StringComparison.OrdinalIgnoreCase)) baseUrl = val;
+                else if (key.Equals("Model", StringComparison.OrdinalIgnoreCase)) model = val;
+                else if (key.Equals("Enabled", StringComparison.OrdinalIgnoreCase) &&
+                         bool.TryParse(val, out bool parsed)) enabled = parsed;
+            }
+        }
+
+        /// <summary>
+        /// Converts an old LilithMod.LocalAI.cfg into the AI service file once. A
+        /// disabled or empty override meant DeepSeek, so those migrate to the
+        /// defaults with the old endpoint preserved in a comment.
+        /// </summary>
+        private static void MigrateLegacyLocalAiFile()
+        {
+            try
+            {
+                string newPath = AiServiceConfigPath;
+                if (newPath == null || File.Exists(newPath)) return;
+                string oldPath = Path.Combine(
+                    Path.GetDirectoryName(newPath), "LilithMod.LocalAI.cfg");
+                if (!File.Exists(oldPath)) return;
+                ParseServiceFile(oldPath, out string baseUrl, out string model, out bool enabled);
+                bool keep = enabled && !string.IsNullOrWhiteSpace(baseUrl);
+                string extra = keep || string.IsNullOrWhiteSpace(baseUrl)
+                    ? null
+                    : "Endpoint kept from the old local AI file (was disabled): " + baseUrl;
+                File.WriteAllText(newPath, BuildAiServiceTemplate(
+                    keep ? baseUrl : DefaultBaseUrl,
+                    keep && !string.IsNullOrWhiteSpace(model) ? model : DefaultModel,
+                    extra));
+                File.Delete(oldPath);
+                Logger?.LogInfo("[Config] Migrated LilithMod.LocalAI.cfg to LilithMod.AI.cfg.");
+            }
+            catch (Exception ex)
+            {
+                Logger?.LogWarning("[Config] Local AI migration failed: " + ex.Message);
             }
         }
 
@@ -161,7 +201,7 @@ namespace LilithMod
         {
             try { _instance?.Config.Reload(); }
             catch (Exception ex) { Logger?.LogWarning("[Config] Reload failed: " + ex.Message); }
-            LoadLocalAiConfig();
+            LoadAiServiceConfig();
         }
         internal static ConfigEntry<string> CfgSystemPrompt;
         internal static ConfigEntry<string> CfgSearXngEndpoints;
@@ -272,16 +312,17 @@ namespace LilithMod
             Logger = Log;
             Log.LogInfo("[LilithMod] Loaded.");
 
-            CfgBaseUrl = Config.Bind("LLM", "BaseUrl", "https://api.deepseek.com/v1",
-                "OpenAI-compatible API base URL. Works with DeepSeek, OpenAI, OpenRouter, "
+            CfgBaseUrl = Config.Bind("LLM", "BaseUrl", DefaultBaseUrl,
+                "Fallback OpenAI-compatible API base URL, used when LilithMod.AI.cfg "
+                + "leaves BaseUrl empty. Works with DeepSeek, OpenAI, OpenRouter, "
                 + "Groq, Mistral, xAI, Gemini (OpenAI endpoint), Together, Moonshot, Qwen, "
                 + "and local servers (Ollama, LM Studio, vLLM, llama.cpp).");
             CfgApiKey = Config.Bind("LLM", "ApiKey", "",
                 "Your API key for the provider at BaseUrl. Required for hosted providers; "
                 + "leave empty for local OpenAI-compatible servers (Ollama, LM Studio, vLLM). "
                 + "Never share this file after filling it in.");
-            CfgModel = Config.Bind("LLM", "Model", "deepseek-v4-flash", "Model name.");
-            LoadLocalAiConfig();
+            CfgModel = Config.Bind("LLM", "Model", DefaultModel, "Model name.");
+            LoadAiServiceConfig();
             CfgSearXngEndpoints = Config.Bind("LiveInformation", "SearXngEndpoints",
                 "https://metacat.online,https://nyc1.sx.ggtyler.dev,https://ooglester.com," +
                 "https://search.080609.xyz,https://search.canine.tools,https://search.catboy.house," +

@@ -1242,9 +1242,10 @@ namespace LilithMod
                 ["messages"] = JArray.FromObject(
                     messages.ConvertAll(m => new { role = m.Role, content = m.Content })),
                 ["stream"] = onStreamedLine != null,
-                ["max_tokens"] = 256,
-                ["response_format"] = JObject.FromObject(new { type = "json_object" })
+                ["max_tokens"] = 256
             };
+            if (SupportsJsonObjectFormat)
+                payload["response_format"] = JObject.FromObject(new { type = "json_object" });
 
             if (!string.IsNullOrWhiteSpace(ambientPrompt))
             {
@@ -1421,7 +1422,7 @@ namespace LilithMod
             bool jsonResponse = false)
         {
             if (!HasApiKey)
-                throw new InvalidOperationException("DeepSeek API key is not configured.");
+                throw new InvalidOperationException("API key is not configured.");
 
             var payload = new JObject
             {
@@ -1434,12 +1435,20 @@ namespace LilithMod
                 ["stream"] = false,
                 ["max_tokens"] = maxTokens
             };
-            if (jsonResponse)
+            if (jsonResponse && SupportsJsonObjectFormat)
                 payload["response_format"] = JObject.FromObject(new { type = "json_object" });
             if (BaseUrl.IndexOf("api.deepseek.com", StringComparison.OrdinalIgnoreCase) >= 0)
                 payload["thinking"] = JObject.FromObject(new { type = "disabled" });
             return await SendCompletionAsync(payload, token);
         }
+
+        /// <summary>
+        /// Anthropic's OpenAI-compatible layer rejects response_format json_object
+        /// (json_schema only). The prompt demands JSON anyway, and the fallback
+        /// parser covers providers that ignore the hint.
+        /// </summary>
+        private static bool SupportsJsonObjectFormat =>
+            BaseUrl.IndexOf("api.anthropic.com", StringComparison.OrdinalIgnoreCase) < 0;
 
         private async Task<string> SendCompletionAsync(JObject payload, CancellationToken token)
         {
@@ -1501,7 +1510,7 @@ namespace LilithMod
             }
 
             throw new InvalidOperationException(
-                $"DeepSeek returned empty content after 3 attempts "
+                $"{LilithModPlugin.ProviderName} returned empty content after 3 attempts "
                 + $"(finish={lastFinishReason}, completion_tokens={lastCompletionTokens}).");
         }
 
@@ -1550,7 +1559,7 @@ namespace LilithMod
                     string content = parser.Content;
                     if (string.IsNullOrWhiteSpace(content))
                         throw new InvalidOperationException(
-                            $"DeepSeek returned empty streamed content (finish={finishReason ?? "missing"}).");
+                            $"{LilithModPlugin.ProviderName} returned empty streamed content (finish={finishReason ?? "missing"}).");
                     if (LilithModPlugin.CfgLogDiagnostics != null &&
                         LilithModPlugin.CfgLogDiagnostics.Value)
                         LilithModPlugin.Logger.LogInfo(
