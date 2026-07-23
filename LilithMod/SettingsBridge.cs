@@ -109,6 +109,7 @@ namespace LilithMod
                 RefreshChatAvailability();
                 RefreshLabels();
                 RefreshBirthdayWeekdayLabels();
+                LilithModPlugin.LoadAiServiceConfig();
             }
 
             // Tooltips follow the cursor every frame.
