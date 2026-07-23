@@ -1,0 +1,207 @@
+# Setup
+
+The installer puts the mod in place and stops there. Four things it does not
+do, in the order most people want them.
+
+| | needed for | roughly |
+|---|---|---|
+| [API key](#1-the-api-key) | anything at all | 5 minutes |
+| [Her voice](#2-her-voice) | hearing her speak | an hour, mostly downloading |
+| [Speaking to her](#3-speaking-to-her) | F8 | 20 minutes |
+| [Starting it all](#4-starting-it-all-by-itself) | not doing this by hand | 1 minute |
+
+Only the first is required. With none of the rest she still chats in text.
+A local model server can stand in for the API key — see the end of step 1.
+
+---
+
+## 1. The API key
+
+She thinks with an OpenAI-compatible language model API. The default is
+DeepSeek, which is a paid API. It is inexpensive but not free, and the key is
+yours, not bundled.
+
+1. Sign up at [platform.deepseek.com](https://platform.deepseek.com).
+2. Add credit. It is prepaid — with a zero balance every reply fails.
+3. Open **API keys**, create one, and copy it. The full key is usually shown
+   only at creation.
+4. In game: **Settings / Me / API Key**. Paste it. It saves itself.
+
+Press F7 and type something. If she answers, you are done.
+
+The key is written to `BepInEx\config\LilithMod.cfg` in the game folder and is
+sent to nothing but the API. Keys are checked when used, not when saved, so a
+typo shows up as a failed reply rather than an error on paste — re-paste it
+without surrounding spaces.
+
+**Choosing a different AI service.** In game: **Settings / Me / Configure AI
+Service** opens a two-line file naming the endpoint and model. It comes
+pre-filled with DeepSeek (`https://api.deepseek.com/v1`, `deepseek-v4-flash`)
+and takes any OpenAI-compatible endpoint — hosted (OpenAI, OpenRouter, Groq,
+Mistral, xAI, Gemini, Together, Moonshot, Qwen) or local (Ollama, LM Studio,
+llama.cpp, vLLM):
+
+```
+BaseUrl = http://localhost:11434/v1
+Model = qwen2.5:7b
+```
+
+Hosted services need their key in **Settings / Me / API Key**. Local servers
+need no key, and chat never leaves your machine. Use an instruct-tuned model
+of roughly 7B or larger; smaller or base models tend to break her reply
+format.
+
+---
+
+## 2. Her voice
+
+Out of the box she writes but does not speak. Her voice comes from
+[GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) running on your own
+machine — nothing is uploaded, and a GPU makes it much faster but is not
+required. Budget about 2 GB.
+
+**The installer can do steps 1 and 5 for you**: tick *voice synthesis base*
+during setup and it downloads GPT-SoVITS, a Python runtime and the pretrained
+base models into `%LOCALAPPDATA%\LilithMod`, wired so the server starts with
+the game. You still do steps 2–4 — the base deliberately includes no voice. The
+same script can be run by hand later:
+`voice-setup\install-voice-synth.ps1` in the plugin folder.
+
+**No voice model is included, and that is the good part.** She has no fixed
+voice — she has whichever one you give her. Train her from an hour of audio you
+like, or pick up a model someone has already shared. The Lilith on your desktop
+can sound like nobody else's.
+
+1. **Install GPT-SoVITS.** Take the Windows integrated package from its
+   releases page — the one that bundles its own Python. Unpack it anywhere.
+2. **Get a voice.** Two files, a GPT weight (`.ckpt`) and a SoVITS weight
+   (`.pth`). Train your own with the UI it ships (an hour of clean
+   single-speaker audio is plenty, ten minutes is usable), use a shared model
+   whose licence permits it, or start with its base pretrained model just to
+   confirm the plumbing works.
+3. **Prepare reference audio.** A 3–10 second WAV, one speaker, no music, calm
+   and level — it sets the emotional colour of everything she says — plus its
+   exact transcript, punctuation included. *A poor reference is the most common
+   cause of bad output. Replace it before touching anything else.*
+4. **Configure the mod.** In game, **Settings / Sound / Open Vocal Synth
+Folder**. Copy `voice-config.example.ini` to `voice-config.ini` and fill in
+   the weights, reference WAV and transcript. `SpokenLanguage` and
+   `SubtitleLanguage` are independent. Choose the language used by your voice
+   model and the subtitle language you want to read.
+5. **Start the server**, from the GPT-SoVITS folder:
+
+   ```
+   set PYTHONIOENCODING=utf-8
+   runtime\python.exe api_v2.py -a 127.0.0.1 -p 9880 -c GPT_SoVITS\configs\tts_infer.yaml
+   ```
+
+   The UTF-8 line is not optional. Without it Japanese text crashes the server
+   with an encoding error reported as a misleading `400 tts failed`. If you
+   cloned this repository, `start-tts.ps1` does all of the above for you.
+
+6. **Turn it on:** **Settings / Sound**, select *Vocal Synthesis*.
+
+Greyed out means the server is not answering. The mod re-checks every two
+seconds and enables the option by itself — start the server and wait rather
+than restarting the game.
+
+Loading the model takes ~40 seconds, and the first line after that is slow.
+After that, two to five seconds for a short line. Lines she has said before are
+instant because synthesised audio is cached; her chat replies are new text
+every time and always pay full cost.
+
+The full config reference and a longer troubleshooting list are in that same
+folder, in `README.txt`.
+
+> **Changed weights and still hear the old voice?** Change `CacheIdentity`. The
+> cache is keyed by it, so audio is reused until you do.
+
+---
+
+## 3. Speaking to her
+
+F8 listens, and submits about 1.5 seconds after you stop. Transcription is
+local — no audio leaves the machine.
+
+**The installer can do all of this**: tick *speech input* during setup and skip
+this section. By hand, run the same script from the plugin folder (or from a
+repository clone):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File speech-setup\install-speech-input.ps1
+```
+
+That builds a Python 3.12 environment under `%LOCALAPPDATA%\LilithMod` — no
+system Python needed — and puts the launcher in place so the listener starts
+with the game. To run the listener by hand instead:
+
+```powershell
+python runtime\push_to_talk.py `
+  --output  "<game>\BepInEx\plugins\LilithMod\speech-command.txt" `
+  --trigger "<game>\BepInEx\plugins\LilithMod\push-to-talk.active"
+```
+
+The first run downloads a speech model and takes a few minutes. `Speech
+listener ready` means it is working. The **Push to talk** setting is greyed out
+whenever this process is not running and returns within seconds of it starting.
+
+**On a GPU:** NVIDIA users add `--device cuda --compute-type float16`.
+faster-whisper is CUDA-only, so on AMD use `--backend transformers` if you have
+a working ROCm PyTorch, or accept CPU — a few seconds per sentence.
+
+**If it mishears her name**, pass it with `--vocabulary`. More knobs, and the
+rest of the troubleshooting, are in `speech-setup\README.txt` in the plugin
+folder.
+
+---
+
+## 4. Starting it all by itself
+
+If either installer box was ticked, this already works: the mod finds the
+launcher in `%LOCALAPPDATA%\LilithMod` and starts the services with the game.
+
+From a repository clone, `runtime\start-lilith.ps1` brings up the voice server,
+the speech listener and the game together, each hidden, with output going to
+logs in the plugin folder.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File runtime\install-startup.ps1
+```
+
+That adds a desktop shortcut and a sign-in entry that starts the services and
+launches the game through Steam.
+
+---
+
+## Uninstall
+
+The installer has an uninstaller. By hand, delete from the game folder:
+
+```
+BepInEx\
+winhttp.dll
+doorstop_config.ini
+.doorstop_version
+```
+
+The game returns to normal — the mod only reads its files and adds its own.
+
+`BepInEx\plugins\LilithMod\` holds her memory, her notes and the voice cache.
+Those are the only irreplaceable things here; copy them out first if you might
+come back.
+
+---
+
+## When something is wrong
+
+| | |
+|---|---|
+| **The game looks entirely unmodded** | Fully exit the game *and* Steam, restart Steam, launch again. Starting `Lilith.exe` directly while Steam is closed leaves Steam disabling the mod on every later launch. |
+| **F7 does nothing** | No API key, or a zero balance — unless a local server is configured. |
+| **She repeats stock lines about static or interference** | Not real replies: the language model could not be reached. Check the key and balance, or — on a local server — that it is running with a model loaded. |
+| **She replies but says nothing aloud** | Expected until section 2 is done. |
+| **First launch seems frozen** | BepInEx is generating interop assemblies from the game. Let it finish — force-quitting can break the next launch too. |
+| **Nothing loaded, no log** | `winhttp.dll` must sit directly beside `Lilith.exe`. |
+
+Logs are `BepInEx\LogOutput.log`. It is overwritten on every launch, so copy it
+before restarting.
