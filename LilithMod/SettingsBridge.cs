@@ -47,6 +47,10 @@ namespace LilithMod
         private int _pendingOpacityDialogueDirection;
         private float _opacityDialogueAt;
         private const float OpacityDialogueDelay = 0.45f;
+        // Keep her from remarking on every slider nudge: once she comments, stay
+        // quiet about opacity for this long however much the slider moves.
+        private const float OpacityDialogueCooldown = 30f;
+        private float _opacityDialogueCooldownUntil = -600f;
         private bool _settingsInteractive;
         private bool _settingsVisible;
         private bool _deepSeekRevealed;
@@ -1494,6 +1498,9 @@ namespace LilithMod
 
             bool lower = _pendingOpacityDialogueDirection < 0;
             _pendingOpacityDialogueDirection = 0;
+            // Still within the cooldown from the last remark: drop this one silently.
+            if (Time.unscaledTime < _opacityDialogueCooldownUntil) return;
+            _opacityDialogueCooldownUntil = Time.unscaledTime + OpacityDialogueCooldown;
             LlmChatController.ShowFixedDialogue(
                 OpacityDialogueText(lower, PersonaPrompt.CurrentVoiceLanguage()),
                 OpacityDialogueText(lower, PersonaPrompt.CurrentDisplayLanguage()));
