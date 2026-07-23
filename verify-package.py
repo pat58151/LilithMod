@@ -97,7 +97,9 @@ with tempfile.TemporaryDirectory(prefix="lilithmod-clean-") as room:
             (r"\.tsv$", "the game's script inventory"),
             (r"\.cfg$", "a config file, which is where the API key lives"),
             (r"\.(log|pdb)$", "build or run debris")):
-        offenders = [n for n in lower if re.search(pattern, n)]
+        # The pre-seeded BepInEx.cfg (console off) is ours and holds no key.
+        offenders = [n for n in lower if re.search(pattern, n)
+                     and n != "bepinex/config/bepinex.cfg"]
         check(not offenders, f"Archive contains {why}: {offenders[:3]}")
 
     # -- 5. No trace of the machine it was built on -----------------------------
