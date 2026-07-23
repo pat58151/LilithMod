@@ -12,7 +12,7 @@ tools.
 
 | Component | Version |
 |---|---|
-| LilithMod | 1.0.2 |
+| LilithMod | 1.0.5 |
 | Game | 1.0.1 |
 | Runtime | BepInEx 6 IL2CPP |
 | Target framework | .NET Standard 2.1 |
@@ -34,7 +34,7 @@ tools.
 ## Requirements
 
 - Windows with PowerShell 5.1 or newer
-- .NET 8 SDK
+- .NET 9 SDK
 - Python 3.10 or newer
 - An installed copy of the game
 - BepInEx 6 IL2CPP installed in the game directory
@@ -71,9 +71,8 @@ Normal builds write to `LilithMod\bin`.
 To deploy a local build, close the game and run:
 
 ```powershell
-dotnet build LilithMod\LilithMod.csproj -c Release
-Copy-Item LilithMod\bin\Release\*.dll `
-  "$env:LILITH_GAME_DIR\BepInEx\plugins\LilithMod" -Force
+$pluginOut = "$env:LILITH_GAME_DIR\BepInEx\plugins\LilithMod"
+dotnet build LilithMod\LilithMod.csproj -c Release -p:OutputPath="$pluginOut\"
 ```
 
 The local deploy build includes the dialogue catalogue. Public builds must not
