@@ -111,11 +111,11 @@ namespace LilithMod
                 "#   OpenRouter: https://openrouter.ai/api/v1\r\n" +
                 "#   Groq:       https://api.groq.com/openai/v1\r\n" +
                 "#   Gemini:     https://generativelanguage.googleapis.com/v1beta/openai\r\n" +
-                "#   Ollama:     http://localhost:11434/v1   (local, no key)\r\n" +
+                "#   Ollama:     http://localhost:11434/v1\r\n" +
                 "#   LM Studio:  http://localhost:1234/v1\r\n" +
                 "#   llama.cpp:  http://localhost:8080/v1\r\n" +
                 "#   vLLM:       http://localhost:8000/v1\r\n" +
-                "# Model: a model that endpoint hosts, e.g. deepseek-v4-flash, qwen2.5:7b\r\n" +
+                "# Model: a model that endpoint hosts, e.g. deepseek-v4-flash\r\n" +
                 "# Hosted endpoints need their API key pasted in Settings / Me. Local\r\n" +
                 "# servers need no key.\r\n" +
                 (extraComment == null ? "" : "# " + extraComment + "\r\n") +
