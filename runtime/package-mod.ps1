@@ -128,6 +128,16 @@ try {
         throw "doorstop_config.ini has no 'ignore_disable_switch = true' after the rewrite. Steam will skip the mod."
     }
 
+    # Bleeding-edge BepInEx defaults the log console to ON; a visible console on
+    # every launch reads as a bug to end users. Pre-seed the config with it off;
+    # BepInEx keeps existing values and fills in the rest on first run.
+    $bepinexConfigDir = Join-Path $staging "BepInEx\config"
+    New-Item -ItemType Directory -Path $bepinexConfigDir -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $bepinexConfigDir "BepInEx.cfg") -Encoding utf8 -Value @"
+[Logging.Console]
+Enabled = false
+"@
+
     Copy-Item (Join-Path $PSScriptRoot "INSTALL.txt") (Join-Path $staging "INSTALL.txt") -Force
 
     if (-not $OutputZip) {

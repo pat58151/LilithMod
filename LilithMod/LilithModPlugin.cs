@@ -234,7 +234,7 @@ namespace LilithMod
             CfgVoiceSynthesisPreferred = Config.Bind("Voice", "VocalSynthesisPreferred",
                 CfgReplaceGameVoice.Value,
                 "Saved user preference. Service outages temporarily fall back to native voice without changing this value.");
-            CfgLilithOpacity = Config.Bind("Display", "LilithOpacity", 0.6f,
+            CfgLilithOpacity = Config.Bind("Display", "LilithOpacity", 1.0f,
                 "Lilith character opacity from 0.2 to 1.0. Click-through uses the game's built-in setting.");
             CfgMusicVolume = Config.Bind("Sound", "MusicVolume", 1.0f,
                 "Scales the game's music from 0 to 1, including tracks from the "

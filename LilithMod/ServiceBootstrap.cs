@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Sockets;
@@ -46,16 +46,23 @@ namespace LilithMod
                     return;
                 }
 
+                // Spawn the launcher detached via WMI so services are not children of the game
+                // process. Steam waits on the entire process tree, so a direct spawn would
+                // block game exit indefinitely if the services stay running.
+                string innerCmd = $"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"{launcher}\" -ServicesOnly";
+                string safeCmd = innerCmd.Replace("'", "''");
+                string script = "Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = '" + safeCmd + "' } | Out-Null";
+                string encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
-                    Arguments = "-NoProfile -ExecutionPolicy Bypass -File \"" + launcher + "\" -ServicesOnly",
+                    Arguments = "-NoProfile -EncodedCommand " + encoded,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 });
                 StartedServices = true;
                 LilithModPlugin.Logger.LogInfo(
-                    "[Services] Starting missing voice or speech services: " + launcher);
+                    "[Services] Starting missing voice or speech services: " + launcher + " (detached)");
             }
             catch (Exception ex)
             {
