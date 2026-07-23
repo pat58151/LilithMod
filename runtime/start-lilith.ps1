@@ -4,7 +4,8 @@ param(
     # is asked rather than a path assumed.
     [string]$GameFolder = "",
     [string]$ProjectFolder = "",
-    [switch]$ServicesOnly
+    [switch]$ServicesOnly,
+    [switch]$VoiceOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -62,6 +63,7 @@ $voiceConfig = Join-Path $voiceFolder "voice-config.ini"
 $voiceExample = Join-Path $voiceFolder "voice-config.example.ini"
 $gameExe = Join-Path $GameFolder "Lilith.exe"
 $languageState = Join-Path $pluginFolder "tts-language.txt"
+$voiceReady = Join-Path $pluginFolder "voice-service.ready"
 $startupLog = Join-Path $pluginFolder "service-startup.log"
 
 New-Item -ItemType Directory -Path $pluginFolder -Force | Out-Null
@@ -112,6 +114,7 @@ if (-not (Test-Path $voiceConfig) -and (Test-Path $voiceExample)) {
     Copy-Item -LiteralPath $voiceExample -Destination $voiceConfig
 }
 
+if ($VoiceOnly) {
 try {
     $voiceEnabled = (Read-IniSetting "Voice" "Enabled" "false") -ieq "true"
     if ($voiceEnabled) {
@@ -176,12 +179,16 @@ try {
             $bodyBytes = [Text.Encoding]::UTF8.GetBytes($body)
             Invoke-WebRequest -UseBasicParsing -Uri ($origin + "/tts") -Method Post -ContentType "application/json; charset=utf-8" -Body $bodyBytes -TimeoutSec 180 | Out-Null
             [IO.File]::WriteAllText($languageState, $identity, [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($voiceReady, $identity, [Text.UTF8Encoding]::new($false))
             Write-StartupLog "GPT-SoVITS ready. language=$language identity=$identity"
         }
     }
 }
 catch {
+    Remove-Item -LiteralPath $voiceReady -Force -ErrorAction SilentlyContinue
     Write-StartupLog ("Vocal synthesis startup failed: " + $_.Exception.Message)
+}
+exit
 }
 
 try {
@@ -225,6 +232,16 @@ try {
 catch {
     Write-StartupLog ("Push-to-talk startup failed: " + $_.Exception.Message)
 }
+
+# Voice initialization is deliberately detached. Speech input is usable first,
+# and the game can open while GPT-SoVITS loads its weights and warms the model.
+# The ready marker is recreated only after warm-up completes, so the in-game
+# setting stays unavailable during this window.
+Remove-Item -LiteralPath $voiceReady -Force -ErrorAction SilentlyContinue
+$voiceArguments =
+    "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" " +
+    "-GameFolder `"$GameFolder`" -ProjectFolder `"$ProjectFolder`" -VoiceOnly"
+Start-Process powershell.exe -ArgumentList $voiceArguments -WindowStyle Hidden
 
 if (-not $ServicesOnly) {
     # Never start a second copy. The game is single-instance, so a second process

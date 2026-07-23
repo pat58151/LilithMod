@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -91,6 +92,9 @@ namespace LilithMod
                 !Uri.TryCreate(VoiceConfig.Endpoint, UriKind.Absolute, out Uri endpoint) ||
                 (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
                 return false;
+
+            string plugin = Path.GetDirectoryName(typeof(VoiceServiceMonitor).Assembly.Location) ?? ".";
+            if (!File.Exists(Path.Combine(plugin, "voice-service.ready"))) return false;
 
             try
             {

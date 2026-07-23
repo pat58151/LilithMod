@@ -83,7 +83,7 @@ namespace LilithMod
                     "Where-Object { $_.CommandLine -match 'api_v2\\.py|push_to_talk\\.py' } | " +
                     "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }\n" +
                     "foreach ($f in @('push-to-talk.active','push-to-talk.alive','voice-output.active'," +
-                    "'speech-setup\\wake-word.on')) { Remove-Item -LiteralPath (Join-Path '" +
+                    "'voice-service.ready','speech-setup\\wake-word.on')) { Remove-Item -LiteralPath (Join-Path '" +
                     plugin.Replace("'", "''") + "' $f) -Force -ErrorAction SilentlyContinue }";
 
                 // -EncodedCommand sidesteps nested-quote escaping entirely. The

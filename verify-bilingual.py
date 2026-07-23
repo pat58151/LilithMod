@@ -410,6 +410,11 @@ check("s_beganKeyboardInput" in window_focus,
 check("WindowStyle Hidden" in launcher and "/set_gpt_weights" in launcher and
       "/set_sovits_weights" in launcher and "service-startup.log" in launcher,
       "The hidden launcher must select, warm, and log all voice services")
+check("[switch]$VoiceOnly" in launcher and "-VoiceOnly" in launcher and
+      launcher.index("Push-to-talk listener started.") < launcher.index("$voiceArguments") and
+      launcher.index("$voiceArguments") < launcher.index("Game start requested through Steam.") and
+      "voice-service.ready" in launcher and "voice-service.ready" in voice_monitor,
+      "Speech and the game must start before detached voice warm-up reports ready")
 check("SpeechListenerReachable" in service_bootstrap and
       "voiceReady && speechReady" in service_bootstrap and
       "Startup shortcut exists, but a required service" in service_bootstrap,
