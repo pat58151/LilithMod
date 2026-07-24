@@ -16,7 +16,7 @@ into one system.
 
 ## Talk naturally
 
-| | |
+| Feature | Description |
 |---|---|
 | **Free chat** | Press F7 and say anything. Lilith responds in character, with subtitles matching your game language. |
 | **Local voice recognition** | Press F8 and speak instead of typing. Speech recognition runs entirely on your computer. Your microphone audio is not uploaded. |
@@ -28,7 +28,7 @@ into one system.
 
 ## Give your Lilith a voice
 
-| | |
+| Feature | Description |
 |---|---|
 | **Spoken dialogue** | Lilith can speak her responses aloud while subtitles appear in-game. |
 | **A voice chosen by you** | No generated voice is bundled with the mod. Choose or train the voice she uses, making your installation personal. |
@@ -38,7 +38,7 @@ Voice output is optional. The complete text-chat experience works without it.
 
 ## A memory that continues across sessions
 
-| | |
+| Feature | Description |
 |---|---|
 | **Conversation history** | Lilith remembers recent discussions instead of treating every message as a new encounter. |
 | **Long-term memories** | Important moments can be preserved and recalled much later. |
@@ -62,7 +62,7 @@ read window contents, documents, messages, or browser pages.
 
 ## More than reactive dialogue
 
-| | |
+| Feature | Description |
 |---|---|
 | **Spontaneous conversations** | Lilith can decide to speak first. What she says is created for the current moment rather than selected from a fixed list. |
 | **Handwritten notes** | After enough meaningful interaction, she may leave a personal note in the in-game inbox. |
@@ -72,10 +72,10 @@ read window contents, documents, messages, or browser pages.
 
 ## Quality of life
 
-| | |
-|---|---|
-| **Opacity adjustment** | Set Lilith's opacity to your preferred level so she does not obstruct your game or work. |
-| **Music volume adjustment** | Adjust the volume of music opened through *Put on some music*. |
+- **Opacity adjustment.** Set Lilith's opacity to your preferred level so she does
+  not obstruct your game or work.
+- **Music volume adjustment.** Adjust the volume of music opened through *Put on
+  some music*.
 
 ## Privacy
 
