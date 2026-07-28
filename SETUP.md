@@ -46,6 +46,16 @@ BaseUrl = http://localhost:11434/v1
 Model = qwen2.5:7b
 ```
 
+For Gemini:
+
+```
+BaseUrl = https://generativelanguage.googleapis.com/v1beta/openai
+Model = gemini-3.6-flash
+```
+
+The native Gemini roots ending in `/v1` or `/v1beta` are accepted too and are
+automatically routed through the OpenAI-compatible endpoint.
+
 Hosted services need their key in **Settings / Me / API Key**. Local servers
 need no key, and chat never leaves your machine. Use an instruct-tuned model
 of roughly 7B or larger; smaller or base models tend to break her reply
