@@ -1,5 +1,7 @@
 # LilithMod
 
+[Report bugs or request support through GitHub Issues](https://github.com/pat58151/LilithMod/issues/new)
+
 An unofficial expansion for *The NOexistenceN of Lilith*.
 
 It turns Lilith into a persistent companion who can listen, speak, remember past
