@@ -97,7 +97,8 @@ can sound like nobody else's.
 Folder**. Copy `voice-config.example.ini` to `voice-config.ini` and fill in
    the weights, reference WAV and transcript. `SpokenLanguage` and
    `SubtitleLanguage` are independent. Choose the language used by your voice
-   model and the subtitle language you want to read.
+   model. `SubtitleLanguage` defaults to `auto`, which follows the in-game
+   language setting; an explicit `ja`, `en`, or `zh` pins the subtitle language.
 5. **Start the server**, from the GPT-SoVITS folder:
 
    ```
