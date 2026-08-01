@@ -34,7 +34,7 @@ sent to nothing but the API. Keys are checked when used, not when saved, so a
 typo shows up as a failed reply rather than an error on paste — re-paste it
 without surrounding spaces.
 
-**Choosing a different AI service.** In game: **Settings / Me / Configure AI
+**Choosing a different AI service.** In game: **Settings / Other / Configure AI
 Service** opens a two-line file naming the endpoint and model. It comes
 pre-filled with DeepSeek (`https://api.deepseek.com/v1`, `deepseek-v4-flash`)
 and takes any OpenAI-compatible endpoint — hosted (OpenAI, OpenRouter, Groq,
@@ -110,11 +110,13 @@ Folder**. Copy `voice-config.example.ini` to `voice-config.ini` and fill in
    with an encoding error reported as a misleading `400 tts failed`. If you
    cloned this repository, `start-tts.ps1` does all of the above for you.
 
-6. **Turn it on:** **Settings / Sound**, select *Vocal Synthesis*.
+6. **Nothing to turn on.** Synthesis is used as soon as the server answers.
 
-Greyed out means the server is not answering. The mod re-checks every two
-seconds and enables the option by itself — start the server and wait rather
-than restarting the game.
+While the server is not answering she keeps the game's own voice. The mod
+re-checks every two seconds and switches over by itself — start the server and
+wait rather than restarting the game. To keep the native voice permanently, set
+`VocalSynthesisPreferred = false` under `[Voice]` in
+`BepInEx\config\LilithMod.cfg`.
 
 Loading the model takes ~40 seconds, and the first line after that is slow.
 After that, two to five seconds for a short line. Lines she has said before are
@@ -153,8 +155,8 @@ python runtime\push_to_talk.py `
 ```
 
 The first run downloads a speech model and takes a few minutes. `Speech
-listener ready` means it is working. The **Push to talk** setting is greyed out
-whenever this process is not running and returns within seconds of it starting.
+listener ready` means it is working. F8 does nothing while this process is not
+running, and starts working within seconds of it starting.
 
 **On a GPU:** NVIDIA users add `--device cuda --compute-type float16`.
 faster-whisper is CUDA-only, so on AMD use `--backend transformers` if you have
