@@ -35,6 +35,7 @@ into one system.
 | **Spoken dialogue** | Lilith can speak her responses aloud while subtitles appear in-game. |
 | **A voice chosen by you** | No generated voice is bundled with the mod. Choose or train the voice she uses, making your installation personal. |
 | **Original voice support** | The game's original voice remains available and is not replaced. |
+| **Offline game dialogue** | Cached scripted lines can still play while the local voice server is unavailable. Uncached lines remain silent with subtitles. |
 
 Voice output is optional. The complete text-chat experience works without it.
 

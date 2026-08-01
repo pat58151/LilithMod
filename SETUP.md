@@ -113,16 +113,16 @@ Folder**. Copy `voice-config.example.ini` to `voice-config.ini` and fill in
 6. **Turn it on:** **Settings / Language**, on the voice row, pick *Vocal
    Synthesis* instead of a game voice. It is picked by default.
 
-While the server is not answering she stays silent rather than falling back to
-the game's own voice — the pick stays on *Vocal Synthesis* and subtitles still
-appear. A game voice is something you choose, not something an outage chooses
-for you. The mod re-checks every two seconds and starts speaking by itself once
-the server responds — start it and wait rather than restarting the game.
+While the server is not answering, *Vocal Synthesis* turns grey and remains
+selected. Previously cached game lines still play. Uncached lines stay silent
+rather than falling back to the game's own voice, and subtitles still appear.
+Settings do not show a separate service warning. The mod re-checks every two
+seconds and resumes new synthesis once the server responds.
 
 Loading the model takes ~40 seconds, and the first line after that is slow.
-After that, two to five seconds for a short line. Lines she has said before are
-instant because synthesised audio is cached; her chat replies are new text
-every time and always pay full cost.
+After that, two to five seconds for a short line. Native game lines are cached
+because they repeat. Generated chat replies are never read from or written to
+the cache and always pay full synthesis cost.
 
 The full config reference and a longer troubleshooting list are in that same
 folder, in `README.txt`.
