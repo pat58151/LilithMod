@@ -211,7 +211,8 @@ come back.
 | | |
 |---|---|
 | **The game looks entirely unmodded** | Fully exit the game *and* Steam, restart Steam, launch again. Starting `Lilith.exe` directly while Steam is closed leaves Steam disabling the mod on every later launch. |
-| **F7 does nothing** | No API key, or a zero balance — unless a local server is configured. |
+| **F7 does nothing** | No API key, or a zero balance, unless a local server is configured. With no key the Chat key and Push to talk rows under Settings / Controls are greyed out, so the panel says which it is. |
+| **Push to talk is greyed out but Chat key is not** | The key is fine. The speech input service is not running, see section 3. |
 | **She repeats stock lines about static or interference** | Not real replies: the language model could not be reached. Check the key and balance, or — on a local server — that it is running with a model loaded. |
 | **She replies but says nothing aloud** | Expected until section 2 is done. |
 | **First launch seems frozen** | BepInEx is generating interop assemblies from the game. Let it finish — force-quitting can break the next launch too. |
