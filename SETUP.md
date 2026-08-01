@@ -93,7 +93,7 @@ can sound like nobody else's.
    and level — it sets the emotional colour of everything she says — plus its
    exact transcript, punctuation included. *A poor reference is the most common
    cause of bad output. Replace it before touching anything else.*
-4. **Configure the mod.** In game, **Settings / Sound / Open Vocal Synth
+4. **Configure the mod.** In game, **Settings / Lilith / Open Vocal Synthesis
 Folder**. Copy `voice-config.example.ini` to `voice-config.ini` and fill in
    the weights, reference WAV and transcript. `SpokenLanguage` and
    `SubtitleLanguage` are independent. Choose the language used by your voice
@@ -110,13 +110,14 @@ Folder**. Copy `voice-config.example.ini` to `voice-config.ini` and fill in
    with an encoding error reported as a misleading `400 tts failed`. If you
    cloned this repository, `start-tts.ps1` does all of the above for you.
 
-6. **Nothing to turn on.** Synthesis is used as soon as the server answers.
+6. **Turn it on:** **Settings / Language**, on the voice row, pick *Vocal
+   Synthesis* instead of a game voice. It is picked by default.
 
-While the server is not answering she keeps the game's own voice. The mod
-re-checks every two seconds and switches over by itself — start the server and
-wait rather than restarting the game. To keep the native voice permanently, set
-`VocalSynthesisPreferred = false` under `[Voice]` in
-`BepInEx\config\LilithMod.cfg`.
+While the server is not answering she stays silent rather than falling back to
+the game's own voice — the pick stays on *Vocal Synthesis* and subtitles still
+appear. A game voice is something you choose, not something an outage chooses
+for you. The mod re-checks every two seconds and starts speaking by itself once
+the server responds — start it and wait rather than restarting the game.
 
 Loading the model takes ~40 seconds, and the first line after that is slow.
 After that, two to five seconds for a short line. Lines she has said before are

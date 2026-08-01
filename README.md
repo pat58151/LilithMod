@@ -94,7 +94,7 @@ conversation leaves your machine.
 
 ## Requirements
 
-- *The NOexistenceN of Lilith* v1.0.1
+- *The NOexistenceN of Lilith* v1.0.2
 - Windows
 - An AI key for generated conversations
 
