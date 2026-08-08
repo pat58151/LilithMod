@@ -61,6 +61,28 @@ need no key, and chat never leaves your machine. Use an instruct-tuned model
 of roughly 7B or larger; smaller or base models tend to break her reply
 format.
 
+**Running the AI on another PC.** Point `BaseUrl` at that machine's address on
+your network instead of `localhost`:
+
+```
+BaseUrl = http://192.168.1.14:1234/v1
+Model = qwen2.5:7b
+```
+
+Two things on the serving PC:
+
+- The server must listen on the network, not only on itself. In LM Studio this
+  is *Serve on Local Network* in the server settings. Ollama needs
+  `OLLAMA_HOST=0.0.0.0`.
+- Windows Firewall must allow the port. Confirm the game PC can reach it by
+  opening `http://<address>:<port>/v1/models` in a browser there.
+
+Home network addresses (`192.168.x`, `10.x`, `172.16-31.x`), Tailscale, IPv6
+local addresses, `.local` names and plain machine names are all recognised as
+local servers and asked for replies the way a local server expects. Before
+1.0.22 only `localhost` was, so a network address failed every reply with a
+complaint about `response_format.type`; update if you see that.
+
 ---
 
 ## 2. Her voice
