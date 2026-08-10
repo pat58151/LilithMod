@@ -42,8 +42,8 @@ Mistral, xAI, Gemini, Together, Moonshot, Qwen) or local (Ollama, LM Studio,
 llama.cpp, vLLM):
 
 ```
-BaseUrl = http://localhost:11434/v1
-Model = qwen2.5:7b
+BaseUrl = http://localhost:8080/v1
+Model = qwen3.5:9b
 ```
 
 For Gemini:
@@ -66,7 +66,7 @@ your network instead of `localhost`:
 
 ```
 BaseUrl = http://192.168.1.14:1234/v1
-Model = qwen2.5:7b
+Model = qwen3.5:9b
 ```
 
 Two things on the serving PC:
