@@ -35,7 +35,8 @@ typo shows up as a failed reply rather than an error on paste — re-paste it
 without surrounding spaces.
 
 **Choosing a different AI service.** In game: **Settings / Other / Configure AI
-Service** opens a two-line file naming the endpoint and model. It comes
+Service** opens a small file naming the endpoint, model, and optional local
+SearXNG server. It comes
 pre-filled with DeepSeek (`https://api.deepseek.com/v1`, `deepseek-v4-flash`)
 and takes any OpenAI-compatible endpoint — hosted (OpenAI, OpenRouter, Groq,
 Mistral, xAI, Gemini, Together, Moonshot, Qwen) or local (Ollama, LM Studio,
@@ -88,6 +89,16 @@ local addresses, `.local` names and plain machine names are all recognised as
 local servers and asked for replies the way a local server expects. Before
 1.0.22 only `localhost` was, so a network address failed every reply with a
 complaint about `response_format.type`; update if you see that.
+
+**Using local web search.** Run SearXNG locally, then add its address to the
+same AI service file:
+
+```
+SearXngUrl = http://127.0.0.1:8080
+```
+
+The mod prefers this endpoint when it is available. Public SearXNG instances
+remain as fallbacks. Leave the value blank to use public instances only.
 
 ---
 

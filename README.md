@@ -71,7 +71,7 @@ read window contents, documents, messages, or browser pages.
 | **Handwritten notes** | After enough meaningful interaction, she may leave a personal note in the in-game inbox. |
 | **Music interaction** | Play a track from the music folder and Lilith knows that you selected it. The mod also adds a separate music-volume control. |
 | **Weather information** | Ask about the weather and she can retrieve current information. |
-| **Web search** | She can look up recent information when a conversation requires it. |
+| **Web search** | She can look up recent information through public SearXNG instances or an optional local server. |
 
 ## Quality of life
 
