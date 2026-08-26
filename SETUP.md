@@ -179,6 +179,13 @@ folder, in `README.txt`.
 > cache is keyed by it, so audio is reused until you do. The next start removes
 > the clips the old key left behind, and the new voice is synthesized on demand.
 
+To clear the caches by hand, close the game and run
+`clear-voice-cache.ps1` from the plugin folder's `voice-setup` folder.
+`-Scope audio` drops synthesized game lines, `-Scope once` drops prepared Super
+Lilith rewrites, `-Scope text` drops learned translations and name
+pronunciations, and the default `all` drops every one. Game lines are
+synthesized again the next time they come up.
+
 ---
 
 ## 3. Speaking to her
