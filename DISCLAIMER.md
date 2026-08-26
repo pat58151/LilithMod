@@ -13,6 +13,11 @@ licenses and terms. No voice model or copyrighted training audio is licensed or
 distributed by this project. Users are responsible for ensuring that anything
 they add or connect is used lawfully and with the necessary permission.
 
+LilithMod sends your conversation to the AI service you configure, and, with
+Super Lilith enabled, the game's own dialogue text and screenshots of your
+screen. What is sent, and how to turn each part off, is listed under "What she
+sends out" in SETUP.md.
+
 LilithMod may stop working after game or dependency updates. Use it at your own
 risk. The project authors are not responsible for lost data, damaged saves,
 account action, service charges, or other harm resulting from its use.

@@ -163,11 +163,21 @@ After that, two to five seconds for a short line. Native game lines are cached
 because they repeat. Generated chat replies are never read from or written to
 the cache and always pay full synthesis cost.
 
+Super Lilith prepares each rewritten line and its voice for the next appearance.
+That generated voice is removed after it plays once. The original native voice
+cache remains available when Super Lilith is turned off.
+
+**Settings / Lilith / Super Lilith** controls AI rewrites of the game's native
+dialogue. Default notes are always rewritten when an AI service is configured.
+Both use the game's original text as a fallback. Rewrites keep approximately the
+same length as the original line.
+
 The full config reference and a longer troubleshooting list are in that same
 folder, in `README.txt`.
 
 > **Changed weights and still hear the old voice?** Change `CacheIdentity`. The
-> cache is keyed by it, so audio is reused until you do.
+> cache is keyed by it, so audio is reused until you do. The next start removes
+> the clips the old key left behind, and the new voice is synthesized on demand.
 
 ---
 
@@ -223,6 +233,33 @@ powershell -ExecutionPolicy Bypass -File runtime\install-startup.ps1
 
 That adds a desktop shortcut and a sign-in entry that starts the services and
 launches the game through Steam.
+
+---
+
+## What she sends out
+
+Everything here goes to the AI service you set up in step 1. Point it at a local
+server and none of it leaves your PC. Point it at a hosted one and it goes to
+that company under their terms.
+
+- What you type or say to her, and the recent conversation.
+- Her persona, and the notes she keeps about you.
+- **Super Lilith** (*Settings / Lilith / Super Lilith*, on by default): the
+  game's own dialogue lines and default note text, sent so she can rewrite
+  them. Turn it off and the original game text is used instead.
+- **Screenshots of your whole screen**, only with Super Lilith on *and*
+  `MultiModal = true` in the AI service file. One rides along when your message
+  could be about what is in front of you, and with a share of her own remarks
+  (20% by default). With `MultiModal = false`, the default, no screenshot is
+  ever captured or sent. To keep a vision model but stop the screenshots, set
+  `ScreenSight = false` under `[Companion]` in
+  `BepInEx\config\LilithMod.cfg`, or lower `ScreenSightChance`.
+- What she searches for when she looks something up. That goes to SearXNG:
+  public instances, unless you set `SearXngUrl` to your own.
+
+Your API key goes to the AI endpoint and nowhere else. Her voice and your
+speech recognition run on your own PC. Asking about the weather sends your
+approximate location to `ip-api.com` and `open-meteo.com`.
 
 ---
 
