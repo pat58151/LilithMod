@@ -63,11 +63,12 @@ of roughly 7B or larger; smaller or base models tend to break her reply
 format.
 
 **Thinking models.** A local server may enable thinking by default for models
-such as Qwen3. The mod removes the reasoning block from replies and notes, so it
-no longer reaches her words. Thinking still spends the request timeout and the
-mod's 256-token reply limit before any visible text, which looks like no reply.
-If replies stay empty, use a non-thinking model, disable thinking in the server,
-or start a current llama.cpp `llama-server` with `--reasoning off`.
+such as Qwen3. The mod handles them: it asks a local server to answer without
+thinking, removes any reasoning block from her replies and notes, and raises the
+reply budget once it sees a model think, so the scratchpad no longer eats the
+words. Thinking still costs seconds per reply. For the fastest replies use a
+non-thinking model, disable thinking in the server, or start a current llama.cpp
+`llama-server` with `--reasoning off`.
 
 **Running the AI on another PC.** Point `BaseUrl` at that machine's address on
 your network instead of `localhost`:
