@@ -139,11 +139,11 @@ Folder**. Copy `voice-config.example.ini` to `voice-config.ini` and fill in
    the weights, reference WAV and transcript. `SpokenLanguage` and
    `SubtitleLanguage` are independent. Choose the language used by your voice
    model. `SubtitleLanguage` defaults to `auto`, which follows the in-game
-   language setting; an explicit `ja`, `en`, `zh`, or `ru` pins the subtitle
-   language. `ru` is subtitles only, because GPT-SoVITS has no Russian voice:
-   she keeps speaking your `SpokenLanguage` while her replies, notes and
-   subtitles are written in Russian. The game's own menus stay in the game's
-   language, which has no Russian.
+   language setting; an explicit `ja`, `en`, `zh`, `ru`, or `th` pins the
+   subtitle language. `ru` and `th` are subtitles only, because GPT-SoVITS has
+   no Russian or Thai voice: she keeps speaking your `SpokenLanguage` while her
+   replies, notes and subtitles are written in that language. The game's own
+   menus stay in the game's language, which has neither.
 5. **Start the server**, from the GPT-SoVITS folder:
 
    ```
