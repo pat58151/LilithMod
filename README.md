@@ -35,7 +35,7 @@ into one system.
 | **Spoken dialogue** | Lilith can speak her responses aloud while subtitles appear in-game. |
 | **A voice chosen by you** | No generated voice is bundled with the mod. Choose or train the voice she uses, making your installation personal. |
 | **Original voice support** | The game's original voice remains available and is not replaced. |
-| **Offline game dialogue** | Cached scripted lines can still play while the local voice server is unavailable. Uncached lines remain silent with subtitles. |
+| **Offline game dialogue** | Cached scripted lines can play while the local voice server is starting, warming up, or unavailable. Uncached lines remain silent with subtitles when the server is unavailable. |
 
 Voice output is optional. The complete text-chat experience works without it.
 
@@ -64,6 +64,11 @@ She can recognise the name of the active game or application, but she does not
 read window contents, documents, messages, or browser pages.
 
 ## More than reactive dialogue
+
+Touch and drag reactions ask for one or two short sentences and keep at most
+three sentence groups for playback, preventing one interaction from becoming
+a long burst of speech. This limit does not apply to normal conversations or
+native dialogue rewrites.
 
 | Feature | Description |
 |---|---|
