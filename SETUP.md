@@ -1,216 +1,212 @@
 # Setup
 
-The installer puts the mod in place and stops there. Four things it does not
-do, in the order most people want them.
+The installer only installs the mod. This guide covers the rest.
 
-| | needed for | roughly |
+| Step | Needed for | Time |
 |---|---|---|
-| [API key](#1-the-api-key) | anything at all | 5 minutes |
-| [Her voice](#2-her-voice) | hearing her speak | an hour, mostly downloading |
-| [Speaking to her](#3-speaking-to-her) | F8 | 20 minutes |
-| [Starting it all](#4-starting-it-all-by-itself) | not doing this by hand | 1 minute |
+| [1. AI service](#1-ai-service) | everything | 5 minutes |
+| [2. Her voice](#2-her-voice) | hearing her speak | about an hour, mostly downloads |
+| [3. Speech input](#3-speech-input) | F8 | 20 minutes |
+| [4. Auto start](#4-auto-start) | starting services with the game | 1 minute |
 
-Only the first is required. With none of the rest she still chats in text.
-A local model server can stand in for the API key — see the end of step 1.
+Only step 1 is required. Without the others she still chats in text.
 
 ---
 
-## 1. The API key
+## 1. AI service
 
-She thinks with an OpenAI-compatible language model API. The default is
-DeepSeek, which is a paid API. It is inexpensive but not free, and the key is
-yours, not bundled.
+The mod needs an AI service that uses the OpenAI API format. The default is
+DeepSeek. It is paid but cheap. You bring your own key. You can also use a
+local AI instead; see [Other AI services](#other-ai-services).
 
 1. Sign up at [platform.deepseek.com](https://platform.deepseek.com).
-2. Add credit. It is prepaid — with a zero balance every reply fails.
-3. Open **API keys**, create one, and copy it. The full key is usually shown
-   only at creation.
-4. In game: **Settings / Me / API Key**. Paste it. It saves itself.
+2. Add credit. It is prepaid. With a zero balance every reply fails.
+3. Open **API keys**, create a key, and copy it. The full key is usually shown
+   only once.
+4. In game, open **Settings / Me / API Key** and paste it. It saves
+   automatically.
 
 Press F7 and type something. If she answers, you are done.
 
-The key is written to `BepInEx\config\LilithMod.cfg` in the game folder and is
-sent to nothing but the API. Keys are checked when used, not when saved, so a
-typo shows up as a failed reply rather than an error on paste — re-paste it
-without surrounding spaces.
+The key is saved in `BepInEx\config\LilithMod.cfg` in the game folder. It is
+sent only to the AI service. The key is not checked when you paste it. A wrong
+key shows up as a failed reply. If that happens, paste it again without spaces.
 
-**Choosing a different AI service.** In game: **Settings / Other / Configure AI
-Service** opens a small file naming the endpoint, model, and optional local
-SearXNG server. It comes
-pre-filled with DeepSeek (`https://api.deepseek.com/v1`, `deepseek-v4-flash`)
-and takes any OpenAI-compatible endpoint — hosted (OpenAI, OpenRouter, Groq,
-Mistral, xAI, Gemini, Together, Moonshot, Qwen) or local (Ollama, LM Studio,
-llama.cpp, vLLM):
+### Other AI services
+
+In game, **Settings / Other / Configure AI Service** opens a file with the
+endpoint, the model, and an optional SearXNG server. It starts with DeepSeek
+(`https://api.deepseek.com/v1`, `deepseek-v4-flash`).
+
+Any service that uses the OpenAI API format works:
+
+- Hosted: OpenAI, OpenRouter, Groq, Mistral, xAI, Gemini, Together, Moonshot,
+  Qwen.
+- Local: Ollama, LM Studio, llama.cpp, vLLM.
+
+Local example:
 
 ```
 BaseUrl = http://localhost:8080/v1
 Model = qwen3.5:9b
 ```
 
-For Gemini:
+Gemini example:
 
 ```
 BaseUrl = https://generativelanguage.googleapis.com/v1beta/openai
 Model = gemini-3.6-flash
 ```
 
-The native Gemini roots ending in `/v1` or `/v1beta` are accepted too and are
-automatically routed through the OpenAI-compatible endpoint.
+Gemini URLs ending in `/v1` or `/v1beta` also work. The mod redirects them.
 
 Hosted services need their key in **Settings / Me / API Key**. Local servers
-need no key, and chat never leaves your machine. Use an instruct-tuned model
-of roughly 7B or larger; smaller or base models tend to break her reply
-format.
+need no key, and chat stays on your PC. Use an instruct model of about 7B or
+larger. Smaller models and base models often break her reply format.
 
-**Thinking models.** A local server may enable thinking by default for models
-such as Qwen3. The mod handles them: it asks a local server to answer without
-thinking, removes any reasoning block from her replies and notes, and raises the
-reply budget once it sees a model think, so the scratchpad no longer eats the
-words. Thinking still costs seconds per reply. For the fastest replies use a
-non-thinking model, disable thinking in the server, or start a current llama.cpp
-`llama-server` with `--reasoning off`.
+**Thinking models.** Some local servers turn on thinking by default, for
+example for Qwen3. The mod asks local servers not to think, removes thinking
+text from replies and notes, and allows longer replies once it sees a model
+think. Thinking still adds seconds to each reply. For faster replies, use a
+model without thinking, turn it off in the server, or start `llama-server`
+with `--reasoning off`.
 
-**Running the AI on another PC.** Point `BaseUrl` at that machine's address on
-your network instead of `localhost`:
+**AI on another PC.** Set `BaseUrl` to that PC's network address:
 
 ```
 BaseUrl = http://192.168.1.14:1234/v1
 Model = qwen3.5:9b
 ```
 
-Two things on the serving PC:
+On the PC running the AI:
 
-- The server must listen on the network, not only on itself. In LM Studio this
-  is *Serve on Local Network* in the server settings. Ollama needs
-  `OLLAMA_HOST=0.0.0.0`.
-- Windows Firewall must allow the port. Confirm the game PC can reach it by
-  opening `http://<address>:<port>/v1/models` in a browser there.
+- The server must accept network connections. In LM Studio, turn on *Serve on
+  Local Network*. For Ollama, set `OLLAMA_HOST=0.0.0.0`.
+- Windows Firewall must allow the port. To test, open
+  `http://<address>:<port>/v1/models` in a browser on the game PC.
 
-Home network addresses (`192.168.x`, `10.x`, `172.16-31.x`), Tailscale, IPv6
-local addresses, `.local` names and plain machine names are all recognised as
-local servers and asked for replies the way a local server expects. Before
-1.0.22 only `localhost` was, so a network address failed every reply with a
-complaint about `response_format.type`; update if you see that.
+The mod treats these as local servers: home network addresses (`192.168.x`,
+`10.x`, `172.16-31.x`), Tailscale, local IPv6 addresses, `.local` names, and
+plain PC names. If replies fail with an error about `response_format.type`,
+update the mod.
 
-**Using local web search.** Run SearXNG locally, then add its address to the
-same AI service file:
+**Local web search.** Run SearXNG yourself and add its address to the same
+file:
 
 ```
 SearXngUrl = http://127.0.0.1:8080
 ```
 
-The mod prefers this endpoint when it is available. Public SearXNG instances
-remain as fallbacks. Leave the value blank to use public instances only.
+The mod uses this server first and falls back to public SearXNG servers. Leave
+it blank to use public servers only.
 
 ---
 
 ## 2. Her voice
 
-Out of the box she writes but does not speak. Her voice comes from
-[GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) running on your own
-machine — nothing is uploaded, and a GPU makes it much faster but is not
-required. Budget about 2 GB.
+By default she does not speak. Her voice comes from
+[GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS), which runs on your PC.
+Nothing is uploaded. A GPU makes it much faster but is not required. It needs
+about 2 GB of disk space.
 
-**The installer can do steps 1 and 5 for you**: tick *voice synthesis base*
-during setup and it downloads GPT-SoVITS, a Python runtime and the pretrained
-base models into `%LOCALAPPDATA%\LilithMod`, wired so the server starts with
-the game. You still do steps 2–4 — the base deliberately includes no voice. The
-same script can be run by hand later:
-`voice-setup\install-voice-synth.ps1` in the plugin folder.
+**The installer can do steps 1 and 5.** Tick *voice synthesis base* during
+setup. It downloads GPT-SoVITS, Python, and the base models into
+`%LOCALAPPDATA%\LilithMod`, and sets the server to start with the game. You
+still do steps 2 to 4, because no voice is included. To run the same script
+later, use `voice-setup\install-voice-synth.ps1` in the plugin folder.
 
-**No voice model is included, and that is the good part.** She has no fixed
-voice — she has whichever one you give her. Train her from an hour of audio you
-like, or pick up a model someone has already shared. The Lilith on your desktop
-can sound like nobody else's.
+No voice model is included. You pick her voice. Train one from audio you
+like, or use a model someone has shared.
 
-1. **Install GPT-SoVITS.** Take the Windows integrated package from its
-   releases page — the one that bundles its own Python. Unpack it anywhere.
-2. **Get a voice.** Two files, a GPT weight (`.ckpt`) and a SoVITS weight
-   (`.pth`). Train your own with the UI it ships (an hour of clean
-   single-speaker audio is plenty, ten minutes is usable), use a shared model
-   whose licence permits it, or start with its base pretrained model just to
-   confirm the plumbing works.
-3. **Prepare reference audio.** A 3–10 second WAV, one speaker, no music, calm
-   and level — it sets the emotional colour of everything she says — plus its
-   exact transcript, punctuation included. *A poor reference is the most common
-   cause of bad output. Replace it before touching anything else.*
-4. **Configure the mod.** In game, **Settings / Lilith / Open Vocal Synthesis
-Folder**. Copy `voice-config.example.ini` to `voice-config.ini` and fill in
-   the weights, reference WAV and transcript. `SpokenLanguage` and
-   `SubtitleLanguage` are independent. Choose the language used by your voice
-   model. `SubtitleLanguage` defaults to `auto`, which follows the in-game
-   language setting; an explicit `ja`, `en`, `zh`, `ru`, `th`, or `pt` pins the
-   subtitle language. `ru`, `th`, and `pt` are subtitles only, because
-   GPT-SoVITS has no Russian, Thai, or Portuguese voice: she keeps speaking your
-   `SpokenLanguage` while her replies, notes and subtitles are written in that
-   language. With the game itself set to Russian, Thai, or Portuguese, `auto`
-   follows it, so pinning is only needed to differ from the game.
-5. **Start the server**, from the GPT-SoVITS folder:
+1. **Install GPT-SoVITS.** Download the Windows package that includes Python
+   from its releases page. Unzip it anywhere.
+2. **Get a voice.** You need two files: a GPT weight (`.ckpt`) and a SoVITS
+   weight (`.pth`). Options:
+   - Train your own in the GPT-SoVITS UI. One hour of clean audio from one
+     speaker is plenty. Ten minutes works.
+   - Use a shared model whose license allows it.
+   - Use the base model to test that everything works.
+3. **Prepare reference audio.** One WAV file, 3 to 10 seconds, one speaker, no
+   music, calm tone. Write down its exact transcript with punctuation. The tone
+   of this clip sets the tone of everything she says. *A bad reference clip is
+   the most common cause of bad output. Replace it before changing anything
+   else.*
+4. **Configure the mod.** In game, open **Settings / Lilith / Open Vocal
+   Synthesis Folder**. Copy `voice-config.example.ini` to `voice-config.ini`.
+   Fill in the weights, the reference WAV, and its transcript.
+   - `SpokenLanguage`: the language of your voice model.
+   - `SubtitleLanguage`: `auto` by default, which follows the game's language.
+     Set `ja`, `en`, `zh`, `ru`, `th`, or `pt` to force one.
+   - `ru`, `th`, and `pt` are subtitle only. GPT-SoVITS cannot speak them. She
+     speaks your `SpokenLanguage` and writes replies, notes, and subtitles in
+     the subtitle language.
+5. **Start the server** from the GPT-SoVITS folder:
 
    ```
    set PYTHONIOENCODING=utf-8
    runtime\python.exe api_v2.py -a 127.0.0.1 -p 9880 -c GPT_SoVITS\configs\tts_infer.yaml
    ```
 
-   The UTF-8 line is not optional. Without it Japanese text crashes the server
-   with an encoding error reported as a misleading `400 tts failed`. If you
-   cloned this repository, `start-tts.ps1` does all of the above for you.
+   Do not skip the first line. Without it, Japanese text crashes the server
+   with a misleading `400 tts failed` error. If you cloned this repository,
+   `start-tts.ps1` does this step for you.
 
-6. **Turn it on:** **Settings / Language**, on the voice row, pick *Vocal
-   Synthesis* instead of a game voice. It is picked by default.
+6. **Turn it on.** In **Settings / Language**, on the voice row, pick *Vocal
+   Synthesis*. It is selected by default.
 
-While the server is not answering, *Vocal Synthesis* turns grey and remains
-selected. Previously cached game lines still play. Uncached lines stay silent
-rather than falling back to the game's own voice, and subtitles still appear.
-Settings do not show a separate service warning. The mod re-checks every two
-seconds and resumes new synthesis once the server responds.
+### How the voice behaves
 
-Loading the model takes ~40 seconds, and the first line after that is slow.
-After that, two to five seconds for a short line. Native game lines are cached
-because they repeat. Generated chat replies are never read from or written to
-the cache and always pay full synthesis cost.
+- **Server down.** *Vocal Synthesis* turns grey but stays selected. Cached game
+  lines still play. Other lines show subtitles with no voice. The mod checks
+  the server every two seconds and resumes when it answers.
+- **Speed.** Loading the model takes about 40 seconds. The first line after
+  that is slow. After that, a short line takes 2 to 5 seconds.
+- **Cache.** Game lines are cached because they repeat. Chat replies are never
+  cached.
+- **Super Lilith.** **Settings / Lilith / Super Lilith** turns on AI rewrites
+  of the game's own dialogue. Each rewritten line and its voice are prepared
+  ahead of time and deleted after playing once. Rewrites stay about the same
+  length as the original line. If a rewrite fails, the original text is used.
+- **Notes.** Default notes are always rewritten when an AI service is set up.
 
-Super Lilith prepares each rewritten line and its voice for the next appearance.
-That generated voice is removed after it plays once. The original native voice
-cache remains available when Super Lilith is turned off.
+The full config reference and more troubleshooting are in `README.txt` in the
+same folder.
 
-**Settings / Lilith / Super Lilith** controls AI rewrites of the game's native
-dialogue. Default notes are always rewritten when an AI service is configured.
-Both use the game's original text as a fallback. Rewrites keep approximately the
-same length as the original line.
+> **Changed the weights but still hear the old voice?** Change
+> `CacheIdentity`. The cache uses it as its key, so old audio is reused until
+> you change it. On the next start the old clips are deleted and new ones are
+> made as needed.
 
-The full config reference and a longer troubleshooting list are in that same
-folder, in `README.txt`.
+**Clearing the cache by hand.** Close the game. Run `clear-voice-cache.ps1` in
+the plugin folder's `voice-setup` folder. Options:
 
-> **Changed weights and still hear the old voice?** Change `CacheIdentity`. The
-> cache is keyed by it, so audio is reused until you do. The next start removes
-> the clips the old key left behind, and the new voice is synthesized on demand.
-
-To clear the caches by hand, close the game and run
-`clear-voice-cache.ps1` from the plugin folder's `voice-setup` folder.
-`-Scope audio` drops synthesized game lines, `-Scope once` drops prepared Super
-Lilith rewrites, `-Scope text` drops learned translations and name
-pronunciations, and the default `all` drops every one. Game lines are
-synthesized again the next time they come up.
+- `-Scope audio`: cached game lines.
+- `-Scope once`: prepared Super Lilith rewrites.
+- `-Scope text`: learned translations and name pronunciations.
+- `-Scope all` (default): all of the above.
 
 ---
 
-## 3. Speaking to her
+## 3. Speech input
 
-F8 listens, and submits about 1.5 seconds after you stop. Transcription is
-local — no audio leaves the machine.
+Press F8 and speak. Your speech is sent about 1.5 seconds after you stop.
+Recognition runs on your PC. No audio leaves it.
 
-**The installer can do all of this**: tick *speech input* during setup and skip
-this section. By hand, run the same script from the plugin folder (or from a
-repository clone):
+After speech input is installed, **Settings / Me / Enable Push to talk**
+pauses or resumes the listener. It does not affect the voice server. The switch
+is disabled until speech input is installed.
+
+**The installer can do this.** Tick *speech input* during setup and skip the
+rest of this section. To install by hand, run this from the plugin folder or a
+repository clone:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File speech-setup\install-speech-input.ps1
 ```
 
-That builds a Python 3.12 environment under `%LOCALAPPDATA%\LilithMod` — no
-system Python needed — and puts the launcher in place so the listener starts
-with the game. To run the listener by hand instead:
+It creates a Python 3.12 environment in `%LOCALAPPDATA%\LilithMod`. You do not
+need Python installed. The listener then starts with the game. To run the
+listener by hand:
 
 ```powershell
 python runtime\push_to_talk.py `
@@ -218,84 +214,87 @@ python runtime\push_to_talk.py `
   --trigger "<game>\BepInEx\plugins\LilithMod\push-to-talk.active"
 ```
 
-The first run downloads a speech model and takes a few minutes. `Speech
-listener ready` means it is working. F8 does nothing while this process is not
-running, and starts working within seconds of it starting.
+The first run downloads a speech model and takes a few minutes. When you see
+`Speech listener ready`, it works. F8 does nothing while the listener is not
+running.
 
-**On a GPU:** NVIDIA users add `--device cuda --compute-type float16`.
-faster-whisper is CUDA-only, so on AMD use `--backend transformers` if you have
-a working ROCm PyTorch, or accept CPU — a few seconds per sentence.
+**GPU.**
 
-**If it mishears her name**, pass it with `--vocabulary`. More knobs, and the
-rest of the troubleshooting, are in `speech-setup\README.txt` in the plugin
-folder.
+- NVIDIA: add `--device cuda --compute-type float16`.
+- AMD: faster-whisper supports only NVIDIA. Use `--backend transformers` if you
+  have ROCm PyTorch working. Otherwise it runs on the CPU at a few seconds per
+  sentence.
+
+**It mishears her name.** Add the name with `--vocabulary`. More options and
+troubleshooting are in `speech-setup\README.txt` in the plugin folder.
 
 ---
 
-## 4. Starting it all by itself
+## 4. Auto start
 
-If either installer box was ticked, this already works: the mod finds the
+If you ticked either installer box, this already works. The mod finds the
 launcher in `%LOCALAPPDATA%\LilithMod` and starts the services with the game.
 
-From a repository clone, `runtime\start-lilith.ps1` brings up the voice server,
-the speech listener and the game together, each hidden, with output going to
-logs in the plugin folder.
+From a repository clone, `runtime\start-lilith.ps1` starts the voice server,
+the speech listener, and the game. Each runs hidden and writes logs to the
+plugin folder. To start them at sign-in:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File runtime\install-startup.ps1
 ```
 
-That adds a desktop shortcut and a sign-in entry that starts the services and
-launches the game through Steam.
+This adds a desktop shortcut and a sign-in entry. Both start the services and
+launch the game through Steam.
 
 ---
 
-## Changing who she is
+## Changing her personality
 
-Her personality lives in `BepInEx\config\LilithPersona.txt`, written the first
-time the mod runs. Edit it and the change applies on her next reply, with no
-restart. Lines starting with `#` are ignored.
+Her personality is in `BepInEx\config\LilithPersona.txt`. The mod creates it on
+first run. Edits apply on her next reply. No restart needed. Lines starting
+with `#` are ignored.
 
-Delete the file to restore the default persona. The mod writes it again on the
-next start.
+To restore the default, delete the file. The mod recreates it on next start.
 
-The file sets who she is and what she remembers, nothing else. Her language,
-reply format, and the actions she can take stay in the mod, because an edit
-there stops her replying at all. A custom persona is unsupported: if she starts
-behaving strangely, delete the file before reporting anything.
+The file sets who she is and what she remembers. Her language, reply format,
+and actions are fixed in the mod, because editing them would stop her replies.
+Custom personas are not supported. If she acts strangely, delete the file
+before reporting a bug.
 
 ---
 
 ## What she sends out
 
-Everything here goes to the AI service you set up in step 1. Point it at a local
-server and none of it leaves your PC. Point it at a hosted one and it goes to
-that company under their terms.
+All of this goes to the AI service from step 1. With a local server, none of it
+leaves your PC. With a hosted service, it goes to that company under its terms.
 
-- What you type or say to her, and the recent conversation.
-- Her persona, and the notes she keeps about you.
+- What you type or say, and the recent conversation.
+- Her persona, and her notes about you.
 - **Super Lilith** (*Settings / Lilith / Super Lilith*, off by default): the
-  game's own dialogue lines and default note text, sent so she can rewrite
-  them. Turn it off and the original game text is used instead.
-- **Screenshots of your whole screen**, only with Super Lilith on *and*
-  `MultiModal = true` in the AI service file. One rides along when your message
-  could be about what is in front of you, and with a share of her own remarks
-  (20% by default). With `MultiModal = false`, the default, no screenshot is
-  ever captured or sent. To keep a vision model but stop the screenshots, set
-  `ScreenSight = false` under `[Companion]` in
-  `BepInEx\config\LilithMod.cfg`, or lower `ScreenSightChance`.
-- What she searches for when she looks something up. That goes to SearXNG:
-  public instances, unless you set `SearXngUrl` to your own.
+  game's dialogue lines and default note text, so she can rewrite them. Turn
+  it off to use the original game text.
+- **Screenshots of your whole screen**, only when Super Lilith is on *and*
+  `MultiModal = true` in the AI service file. A screenshot is sent when your
+  message may be about your screen, and with some of her own remarks (20% by
+  default). With `MultiModal = false`, the default, no screenshot is taken. To
+  keep a vision model but stop screenshots, set `ScreenSight = false` under
+  `[Companion]` in `BepInEx\config\LilithMod.cfg`, or lower
+  `ScreenSightChance`.
+- Her web searches. These go to SearXNG: public servers, or your own if you set
+  `SearXngUrl`.
 
-Your API key goes to the AI endpoint and nowhere else. Her voice and your
-speech recognition run on your own PC. Asking about the weather sends your
-approximate location to `ip-api.com` and `open-meteo.com`.
+Other traffic:
+
+- Your API key goes only to the AI service.
+- Her voice and your speech recognition run on your PC.
+- Asking about the weather sends your approximate location to `ip-api.com` and
+  `open-meteo.com`.
 
 ---
 
 ## Uninstall
 
-The installer has an uninstaller. By hand, delete from the game folder:
+Use the uninstaller. To remove by hand, delete these from the game folder:
 
 ```
 BepInEx\
@@ -304,25 +303,24 @@ doorstop_config.ini
 .doorstop_version
 ```
 
-The game returns to normal. The mod only reads its files and adds its own.
+The game returns to normal.
 
-`BepInEx\plugins\LilithMod\` holds her memory, her notes and the voice cache.
-Those are the only irreplaceable things here; copy them out first if you might
-come back.
+`BepInEx\plugins\LilithMod\` holds her memory, her notes, and the voice cache.
+Copy it somewhere first if you might reinstall.
 
 ---
 
-## When something is wrong
+## Troubleshooting
 
-| | |
+| Problem | Fix |
 |---|---|
-| **The game looks entirely unmodded** | Fully exit the game *and* Steam, restart Steam, launch again. Starting `Lilith.exe` directly while Steam is closed leaves Steam disabling the mod on every later launch. |
-| **F7 does nothing** | No API key, or a zero balance, unless a local server is configured. With no key the Chat key and Push to talk rows under Settings / Controls are greyed out, so the panel says which it is. |
-| **Push to talk is greyed out but Chat key is not** | The key is fine. The speech input service is not running, see section 3. |
-| **She repeats stock lines about static or interference** | Not real replies: the language model could not be reached. Check the key and balance, or — on a local server — that it is running with a model loaded. |
-| **She replies but says nothing aloud** | Expected until section 2 is done. |
-| **First launch seems frozen** | BepInEx is generating interop assemblies from the game. Let it finish — force-quitting can break the next launch too. |
-| **Nothing loaded, no log** | `winhttp.dll` must sit directly beside `Lilith.exe`. |
+| **The game looks unmodded** | Close the game *and* Steam. Start Steam, then the game. Starting `Lilith.exe` directly while Steam is closed makes Steam disable the mod on later launches. |
+| **F7 does nothing** | No API key, or zero balance. (Not needed with a local server.) With no key, the Chat key and Push to talk rows under Settings / Controls are grey. |
+| **Push to talk is grey but Chat key is not** | The key is fine. The speech listener is not running, or **Settings / Me / Enable Push to talk** is off. See step 3. |
+| **She repeats lines about static or interference** | She could not reach the AI. Check the key and balance. On a local server, check it is running with a model loaded. |
+| **She replies but does not speak** | Normal until step 2 is done. |
+| **First launch looks frozen** | BepInEx is preparing files from the game. Wait. Force quitting can break the next launch too. |
+| **Nothing loads and there is no log** | `winhttp.dll` must be in the same folder as `Lilith.exe`. |
 
-Logs are `BepInEx\LogOutput.log`. It is overwritten on every launch, so copy it
-before restarting.
+The log is `BepInEx\LogOutput.log`. It is overwritten on each launch, so copy
+it before restarting.

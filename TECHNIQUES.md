@@ -1,17 +1,16 @@
 # Design techniques
 
-Lilith is built from small systems that each preserve the feeling of one
-continuous companion. These are the methods behind them, without the tuning
-values that belong to a particular build.
+The methods behind each system. Tuning values are left out because they change
+between builds.
 
-| function | techniques used |
+| System | Techniques |
 |---|---|
-| **Conversation and persona** | Structured persona prompting, live game-state context, multilingual style guidance, and a validated reply-and-action format. |
-| **Memory management** | Separate rolling memory for conversations and interactions, conversational correction and forgetting, local atomic persistence, backup recovery, and migration of older memory files. |
-| **Episodic memory** | Periodic LLM consolidation turns meaningful conversation stretches into sourced episodes and replaceable semantic facts. Importance, emotion, confidence, recency, and recall history guide what remains. |
-| **Memory retrieval** | Local feature vectors combine words, character fragments, topic and person matches, and a small multilingual synonym map. Relevant memories are retrieved without a hosted vector database or embedding API. |
-| **Speech input** | Local Whisper transcription, voice activity detection, room-noise calibration, voiced-region trimming, and rejection of common silence hallucinations. |
-| **Voice synthesis** | Local GPT-SoVITS synthesis, sentence chunking, reusable audio caching, background queueing, and subtitle-to-audio synchronization. A shared coordinator keeps native and synthetic voices exclusive. |
-| **Awareness and initiative** | Time, posture, sleep state, recent interactions, and memory are composed into dynamic context. Context gates and shared speech arbitration keep spontaneous remarks from interrupting other moments. |
-| **Foreground awareness** | Foreground process detection, local Steam manifest resolution, executable-name fallback, and stability filtering. Window titles and application contents are never read. |
-| **Live information** | Intent-gated retrieval of current conditions, the next day's forecast, and web results, with a preferred local SearXNG endpoint, public fallbacks, readable-page extraction, caching, and isolated untrusted context passed to the reply model. A forecast that comes back incomplete is dropped whole rather than reported as the wrong day. |
+| **Conversation and persona** | Structured persona prompt, live game state in the prompt, per-language style rules, and a checked reply-and-action format. |
+| **Memory storage** | Separate rolling memory for conversations and interactions, correcting and forgetting by asking in chat, atomic local saves, backup recovery, and migration of older memory files. |
+| **Episodic memory** | The AI periodically turns meaningful stretches of conversation into episodes with sources, plus facts that can be replaced. Importance, emotion, confidence, age, and past recalls decide what is kept. |
+| **Memory search** | Local feature vectors built from words, character fragments, topic and person matches, and a small multilingual synonym list. No hosted vector database or embedding API. |
+| **Speech input** | Local Whisper transcription, voice activity detection, room noise calibration, trimming to the voiced part, and filtering of common false transcripts from silence. |
+| **Voice output** | Local GPT-SoVITS, sentence splitting, audio caching, a background queue, and subtitle-to-audio sync. One coordinator makes sure the game voice and the generated voice never play at once. |
+| **Awareness and speaking first** | Time, posture, sleep state, recent interactions, and memory are combined into the prompt. Checks on the current situation, plus shared control of who is speaking, stop her remarks from interrupting other moments. |
+| **Foreground app** | Detects the foreground process, looks up the name in local Steam manifests, falls back to the executable name, and ignores brief switches. Window titles and app contents are never read. |
+| **Live information** | Weather, next-day forecast, and web search run only when the message asks for them. Uses your SearXNG server first with public fallbacks, extracts readable page text, caches results, and passes them to the AI marked as untrusted. An incomplete forecast is dropped instead of reported for the wrong day. |

@@ -1,138 +1,100 @@
 # LilithMod
 
-[Report bugs or request support through GitHub Issues](https://github.com/pat58151/LilithMod/issues/new)
+An unofficial mod for *The NOexistenceN of Lilith*. It lets you talk to Lilith
+by text or voice. She answers in character, remembers past conversations,
+reacts to what you do, and sometimes speaks first.
 
-An unofficial expansion for *The NOexistenceN of Lilith*.
-
-It turns Lilith into a persistent companion who can listen, speak, remember past
-conversations, react to your actions, and occasionally reach out on her own.
-
-This is more than a chat window. The mod connects conversation, voice, memory,
-game state, music, desktop awareness, weather, web search, and the in-game inbox
-into one system.
+[Report a bug or ask for help](https://github.com/pat58151/LilithMod/issues/new)
 
 ![Lilith in game](image/ui1.png)
 
-> Unofficial and fan-made. Not affiliated with or endorsed by the game's
-> developers or publishers. See the [Disclaimer](DISCLAIMER.md).
+> Fan-made. Not affiliated with or endorsed by the game's developers or
+> publishers. See the [Disclaimer](DISCLAIMER.md).
 
-## Talk naturally
+## Talking to her
 
-| Feature | Description |
-|---|---|
-| **Free chat** | Press F7 and say anything. Lilith responds in character, with subtitles matching your game language. |
-| **Local voice recognition** | Press F8 and speak instead of typing. Speech recognition runs entirely on your computer. Your microphone audio is not uploaded. |
-| **Hands-free wake word** | Say Lilith's name and she begins listening. No hotkey is required. |
-| **Multilingual conversations** | Talk in English, Japanese, or Chinese. Switch languages without losing the context of the conversation. |
+- **Chat.** Press F7 and type. Subtitles follow your game language.
+- **Speech input.** Press F8 and speak. Speech recognition runs on your PC.
+  Microphone audio is not uploaded.
+- **Wake word.** Say her name and she starts listening. No key needed.
+- **Languages.** English, Japanese, or Chinese. You can switch mid-conversation.
 
 ![Chatting with F7](image/f7.png)
 ![Speaking with F8](image/f8.png)
 
-## Give your Lilith a voice
+## Her voice
 
-| Feature | Description |
-|---|---|
-| **Spoken dialogue** | Lilith can speak her responses aloud while subtitles appear in-game. |
-| **A voice chosen by you** | No generated voice is bundled with the mod. Choose or train the voice she uses, making your installation personal. |
-| **Original voice support** | The game's original voice remains available and is not replaced. |
-| **Offline game dialogue** | Cached scripted lines can play while the local voice server is starting, warming up, or unavailable. Uncached lines remain silent with subtitles when the server is unavailable. |
+- She can speak her replies while subtitles show in game.
+- No voice is bundled. You choose or train the voice she uses.
+- The game's original voice stays available.
+- Cached game lines still play while the voice server is starting or down.
+  Uncached lines show subtitles only.
 
-Voice output is optional. The complete text-chat experience works without it.
+Voice is optional. Text chat works without it.
 
-## A memory that continues across sessions
+## Memory
 
-| Feature | Description |
-|---|---|
-| **Conversation history** | Lilith remembers recent discussions instead of treating every message as a new encounter. |
-| **Long-term memories** | Important moments can be preserved and recalled much later. |
-| **Cross-language recall** | A memory created in one supported language can still be recognised when you mention it in another. |
-| **Contextual recall** | Familiar names, interests, events, and subjects can naturally return in later conversations. |
+- She remembers recent conversations.
+- Important moments are saved as long-term memories and can come back later.
+- A memory made in one language can be recalled in another.
+- Memory is stored on your PC.
 
-Her memory is stored locally on your machine.
+## What she notices
 
-## Aware of her world
-
-Lilith's responses are influenced by what is happening around her:
-
-- The current time of day
+- Time of day
 - Whether she is active, resting, or asleep
-- Your interactions and touches
-- The game or application currently in the foreground
-- The music you chose to play
+- Your touches and other interactions
+- The name of the game or app in the foreground
+- Music you play through the game
 
-She can recognise the name of the active game or application, but she does not
-read window contents, documents, messages, or browser pages.
+She reads only the foreground app's name. She does not read window contents,
+documents, messages, or web pages.
 
-## More than reactive dialogue
+## Other features
 
-Touch and drag reactions ask for one or two short sentences and keep at most
-three sentence groups for playback, preventing one interaction from becoming
-a long burst of speech. This limit does not apply to normal conversations or
-native dialogue rewrites.
-
-| Feature | Description |
-|---|---|
-| **Spontaneous conversations** | Lilith can decide to speak first. What she says is created for the current moment rather than selected from a fixed list. |
-| **Handwritten notes** | After enough meaningful interaction, she may leave a personal note in the in-game inbox. |
-| **Music interaction** | Play a track from the music folder and Lilith knows that you selected it. The mod also adds a separate music-volume control. |
-| **Weather information** | Ask about the weather and she can retrieve current information. |
-| **Web search** | She can look up recent information through public SearXNG instances or an optional local server. |
-
-## Quality of life
-
-- **Opacity adjustment.** Set Lilith's opacity to your preferred level so she does
-  not obstruct your game or work.
-- **Music volume adjustment.** Adjust the volume of music opened through *Put on
-  some music*.
+- **Speaking first.** She sometimes starts a conversation. The line is written
+  for the moment, not picked from a list.
+- **Notes.** After enough time together she may leave a note in the in-game
+  inbox.
+- **Music.** She knows which track you picked from the music folder. The mod
+  adds a separate music volume control.
+- **Weather.** Ask and she looks up current conditions.
+- **Web search.** She can look things up through public SearXNG servers or your
+  own.
+- **Opacity.** Make her more see-through so she does not block your screen.
 
 ## Privacy
 
-- Voice recognition runs locally.
-- Microphone audio is not uploaded.
-- Memories remain on your computer.
-- Generated notes remain on your computer.
-- Custom voice files remain on your computer.
-- Desktop awareness reads only the active application name, not its contents.
+Voice recognition, memory, notes, and custom voice files stay on your PC.
 
-Text you send in chat is processed through an AI provider using your own API key,
-or through your own local AI. Point her at a local AI and no part of the
-conversation leaves your machine.
+Your chat goes to the AI service you set up, using your own API key. Use a
+local AI and the chat stays on your PC too. The full list of what is sent is in
+[What she sends out](SETUP.md#what-she-sends-out).
 
 ## Requirements
 
 - *The NOexistenceN of Lilith* v1.0.7
 - Windows
-- An AI key for generated conversations
+- An API key for an AI service, or a local AI
 
-Voice recognition, wake-word detection, and spoken responses are optional. Without
-them, Lilith still supports full text conversations, memory, awareness, notes, and
-the other integrated features.
+Voice output, speech input, and the wake word are optional.
 
-## Download and setup
+## Install
 
-The mod is free and distributed through a single installer.
+1. Download the latest `LilithMod-Setup-<version>.exe` from
+   [Releases](https://github.com/pat58151/LilithMod/releases).
+2. Run it and select your game folder. Tick the boxes if you want the voice and
+   speech input parts.
+3. Start the game through Steam.
 
-1. Download the latest `LilithMod-Setup-<version>.exe` from the
-   [Releases](https://github.com/pat58151/LilithMod/releases) page.
-2. Run it and point it at your game folder. It installs the mod and, if you tick
-   the boxes, the local voice and speech components.
-3. Launch the game through Steam.
+The mod only adds its own files. Uninstalling returns the game to normal.
 
-The mod only adds its own files and reads the game's. The game returns to normal
-when you uninstall.
+Next, follow the [Setup guide](SETUP.md) to connect an AI and set up her voice.
 
-The **[Setup guide](SETUP.md)** covers connecting an AI (hosted or local), her
-voice, speaking to her, and troubleshooting, in the order most people want them.
+## Docs
 
-## Documentation
-
-- **[Setup](SETUP.md)** get everything running.
-- **[Design techniques](TECHNIQUES.md)** the systems behind her, in more depth.
-- **[Disclaimer](DISCLAIMER.md)** what this is and is not.
-- **[License](LICENSE)** MIT, code only. Game assets and any voice model you add
-  are not covered.
-
----
-
-*LilithMod is an unofficial fan-made project and is not affiliated with the
-original developer or publisher of The NOexistenceN of Lilith.*
+- [Setup](SETUP.md): AI service, voice, speech input, troubleshooting.
+- [Design techniques](TECHNIQUES.md): how the systems work.
+- [Disclaimer](DISCLAIMER.md): what this project is and is not.
+- [License](LICENSE): MIT, code only. Game assets and voice models you add are
+  not covered.
