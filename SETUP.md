@@ -71,6 +71,13 @@ think. Thinking still adds seconds to each reply. For faster replies, use a
 model without thinking, turn it off in the server, or start `llama-server`
 with `--reasoning off`.
 
+**Reasoning level.** Set `ReasoningLevel` in `LilithMod.AI.cfg` to `Off`,
+`Low`, `Medium` or `High`. `Off` is the default: thinking off where the
+provider allows it. Higher levels make her think more and reply slower.
+The change applies without a restart. Only reasoning models use it. If the
+model refuses the setting, the mod stops sending it and logs a warning. For
+`High`, raise `TimeoutSeconds` in `LilithMod.cfg`.
+
 **AI on another PC.** Set `BaseUrl` to that PC's network address:
 
 ```
