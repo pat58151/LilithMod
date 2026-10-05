@@ -73,7 +73,7 @@ local AI and the chat stays on your PC too. The full list of what is sent is in
 
 ## Requirements
 
-- *The NOexistenceN of Lilith* v1.0.11
+- *The NOexistenceN of Lilith* v1.1.0
 - Windows
 - An API key for an AI service, or a local AI
 
