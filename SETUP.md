@@ -280,9 +280,9 @@ leaves your PC. With a hosted service, it goes to that company under its terms.
 - **Super Lilith** (*Settings / Lilith / Super Lilith*, off by default): the
   game's dialogue lines and default note text, so she can rewrite them. Turn
   it off to use the original game text.
-- **Screenshots of your whole screen**, only when Super Lilith is on *and*
-  `MultiModal = true` in the AI service file. A screenshot is sent when your
-  message may be about your screen, and with some of her own remarks (20% by
+- **Screenshots of your whole screen**, only when `MultiModal = true` in the
+  AI service file. A screenshot is sent when your message may be about your
+  screen. With Super Lilith on, some of her own remarks also carry one (20% by
   default). With `MultiModal = false`, the default, no screenshot is taken. To
   keep a vision model but stop screenshots, set `ScreenSight = false` under
   `[Companion]` in `BepInEx\config\LilithMod.cfg`, or lower

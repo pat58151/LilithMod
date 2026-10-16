@@ -13,9 +13,9 @@ terms. This project does not license or distribute any voice model or
 copyrighted training audio. You are responsible for making sure anything you
 add or connect is used legally and with permission.
 
-LilithMod sends your conversation to the AI service you set up. With Super
-Lilith on, it can also send the game's dialogue text and screenshots of your
-screen. The full list, and how to turn each part off, is under "What she sends
+LilithMod sends your conversation to the AI service you set up. With
+`MultiModal = true`, it can also send screenshots of your screen. With Super
+Lilith on, it can also send the game's dialogue text. The full list, and how to turn each part off, is under "What she sends
 out" in SETUP.md.
 
 Game or dependency updates may break LilithMod. Use it at your own risk. The
