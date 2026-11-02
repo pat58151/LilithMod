@@ -36,7 +36,7 @@ key shows up as a failed reply. If that happens, paste it again without spaces.
 
 In game, **Settings / Other / Configure AI Service** opens a file with the
 endpoint, the model, and an optional SearXNG server. It starts with DeepSeek
-(`https://api.deepseek.com/v1`, `deepseek-v4-flash`).
+(`https://api.deepseek.com/v1`, `deepseek-flash`).
 
 Any service that uses the OpenAI API format works:
 
