@@ -217,6 +217,7 @@ listener by hand:
 
 ```powershell
 python runtime\push_to_talk.py `
+  --backend faster-whisper --whisper-model large-v3 `
   --output  "<game>\BepInEx\plugins\LilithMod\speech-command.txt" `
   --trigger "<game>\BepInEx\plugins\LilithMod\push-to-talk.active"
 ```
@@ -281,21 +282,24 @@ leaves your PC. With a hosted service, it goes to that company under its terms.
   game's dialogue lines and default note text, so she can rewrite them. Turn
   it off to use the original game text.
 - **Screenshots of your whole screen**, only when `MultiModal = true` in the
-  AI service file. A screenshot is sent when your message may be about your
-  screen. With Super Lilith on, some of her own remarks also carry one (20% by
-  default). With `MultiModal = false`, the default, no screenshot is taken. To
+  AI service file. A screenshot is sent when the AI decides it needs to see
+  your screen to answer. With Super Lilith on, some of her own remarks also
+  carry one (20% by default). With `MultiModal = false`, the default, no
+  screenshot is taken. To
   keep a vision model but stop screenshots, set `ScreenSight = false` under
   `[Companion]` in `BepInEx\config\LilithMod.cfg`, or lower
   `ScreenSightChance`.
-- Her web searches. These go to SearXNG: public servers, or your own if you set
+- Her web searches, when the AI decides it needs one. The AI writes the search
+  terms. These go to SearXNG: public servers, or your own if you set
   `SearXngUrl`.
 
 Other traffic:
 
 - Your API key goes only to the AI service.
 - Her voice and your speech recognition run on your PC.
-- Asking about the weather sends your approximate location to `ip-api.com` and
-  `open-meteo.com`.
+- The weather check runs when the game starts and sends your approximate
+  location to `ip-api.com` and `open-meteo.com`. Setting your own `Latitude` and
+  `Longitude` under `[Weather]` in `LilithMod.cfg` skips `ip-api.com`.
 
 ---
 
